@@ -461,7 +461,7 @@ with t6:
         st.info('이 날짜의 섹터 파일이 없습니다(블록 9-섹터는 2026-10-29부터 만듭니다).')
     else:
         sec['이름'] = sec['종목'].map(short)
-        jd = sec['시범판정'].fillna('')
+        jd = sec['판정'].fillna('')
         names_of = lambda w: ', '.join(sec.loc[jd.str.contains(w), '이름']) or '없음'
         c = st.columns(4)
         c[0].metric('20주선 위 섹터', f"{int((sec['20주선_위'] == '위').sum())} / {len(sec)}",
@@ -470,7 +470,7 @@ with t6:
         c[2].metric('클로토 · 반전 후보', names_of('클로토 반전 후보'))
         c[3].metric('아트로포스 · 과열·꺾임', str(int(jd.str.contains('아트로포스').sum())) + '개',
                     help=names_of('아트로포스'))
-        st.caption('룰 v0 — 의장 승인 전 시범 판정입니다. 비교 기준은 TIGER 200. 판정은 충족 여부와 근거만이며 비중 결정은 의장이 합니다.')
+        st.caption('닉스 섹터 순환 룰 v1(2026-10-29 의장 승인). 비교 기준은 TIGER 200. 판정은 충족 여부와 근거만이며 비중 결정은 의장이 합니다.')
 
         if len(sec_tr):
             tr = sec_tr.merge(sec[['번호', '이름', 'RRG_사분면']], on='번호')
@@ -507,7 +507,7 @@ with t6:
                        '순서로 시계방향으로 돕니다. 침체 → 개선은 바닥 반전, 선도 → 약화는 꺾임의 첫 신호입니다. '
                        'RS = 섹터 ÷ TIGER 200, RS-Ratio = RS ÷ 26주 평균, RS-Momentum = RS-Ratio ÷ 4주 전 (원조 RRG 근사식).')
 
-        show = [k for k in ['번호', '이름', '모멘텀순위', '시범판정', '초과_1개월(%p)', '초과_3개월(%p)', '초과_6개월(%p)',
+        show = [k for k in ['번호', '이름', '모멘텀순위', '판정', '초과_1개월(%p)', '초과_3개월(%p)', '초과_6개월(%p)',
                             '초과_12개월(%p)', 'RRG_4주전', 'RRG_사분면', '20주선_위', '20주선_기울기', '52주고점대비(%)',
                             '3개월저점대비반등(%)', '일_RSI', '일_RSI_단순평균식', '주_RSI', '주_CCI', '주_STO_K',
                             '주_볼린저_%B', '주_20주_이격도', '주_일목_구름위치', '주_패턴'] if k in sec]
@@ -524,11 +524,11 @@ with t6:
                 {**{k: '{:+.1f}' for k in ex}, '일 RSI': '{:.1f}', '일 RSI(미래에셋식)': '{:.1f}', '주 RSI': '{:.1f}',
                  '주 CCI': '{:.0f}', '주 STO K': '{:.1f}', '주 %B': '{:.2f}', '20주 이격도': '{:.1f}'}, na_rep='—'),
             hide_index=True, width='stretch', height=38 * (len(tbl) + 1),
-            column_config={'시범판정': st.column_config.TextColumn(width='large'),
+            column_config={'판정': st.column_config.TextColumn(width='large'),
                            '주봉 패턴': st.column_config.TextColumn(width='large')})
         st.caption('모멘텀 순위 = 1·3·6개월 TIGER 200 대비 초과수익 순위의 평균. RSI는 와일더식(판정), 미래에셋식(단순평균) 병기. '
                    '7개 기준 전체는 같은 날짜 수집데이터의 _섹터.csv에 있습니다.')
-        with st.expander('판정 기준 (룰 v0, 승인 전)'):
+        with st.expander('판정 기준 (룰 v1, 2026-10-29 의장 승인)'):
             st.markdown(
                 '- **라케시스 추세 강함**: 사분면 선도 + 모멘텀 순위 상위 1/3 + 20주선 위·20주선 상승. 선도인데 20주선 아래면 "관찰".\n'
                 '- **클로토 반전 후보**: 52주 고점 대비 -20% 이하에서 반전 증거 3개 중 2개 이상(1개면 "관찰"). '

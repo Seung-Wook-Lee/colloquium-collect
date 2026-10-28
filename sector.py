@@ -1,8 +1,9 @@
-# 닉스 팀 섹터 순환 계산 — 블록 09_sector가 부른다 (2026-10-28 의장 요청, 룰 v0 승인 전 시범)
+# 닉스 팀 섹터 순환 계산 — 블록 09_sector가 부른다 (2026-10-28 의장 요청, 2026-10-29 의장 승인 룰 v1)
 #   한국 섹터 ETF를 TIGER 200과 비교한다.
 #   상대: 1·3·6·12개월 초과수익, 모멘텀 순위, 섹터 로테이션 사분면(RRG, 주봉 근사)
 #   절대: 20주선 위·기울기, 52주 고점 대비, 닉스 7개 기준(nyx.py)
-#   설명 원문: /mnt/project-files/종목분석/한국섹터ETF_순환분석_20261028/한국섹터ETF_순환분석_방법과_시범_20261028.txt
+#   룰 원문: 드라이브 페르소나 스토리/닉스_공통 6장 (로컬 /mnt/project-files/페르소나/닉스_공통.txt)
+#   기준값(-20%, 상위 1/3, 26주·4주)은 v1 가정치. 성적이 쌓이면 월 성적 회의에서 의장이 조정한다.
 import numpy as np
 import pandas as pd
 
@@ -36,7 +37,7 @@ def rrg(c, bw):
 
 
 def judge(r, n):
-    """룰 v0 (의장 승인 전). 판정은 충족 여부와 근거만, 비중 결정은 의장."""
+    """룰 v1 (2026-10-29 의장 승인, 원문 닉스_공통.txt 6장). 판정은 충족 여부와 근거만, 비중 결정은 의장."""
     out = []
     f = lambda k: pd.to_numeric(r.get(k), errors='coerce')
     o0, o1, o2 = f('주_MACD오실레이터'), f('주_MACD오실레이터_1봉전'), f('주_MACD오실레이터_2봉전')
@@ -118,5 +119,5 @@ def analyze(px, members, bench):
     # 모멘텀 순위: 1·3·6개월 초과수익 순위의 평균 (12개월은 상장 1년 안 된 ETF가 있어 뺀다)
     rk = pd.concat([df[f'초과_{lab}(%p)'].rank(ascending=False) for lab in ('1개월', '3개월', '6개월')], axis=1)
     df.insert(2, '모멘텀순위', rk.mean(axis=1).rank(method='min').astype(int))
-    df.insert(3, '시범판정', df.apply(lambda r: judge(r, len(df)), axis=1))
+    df.insert(3, '판정', df.apply(lambda r: judge(r, len(df)), axis=1))
     return df.sort_values('모멘텀순위'), pd.DataFrame(trail)
