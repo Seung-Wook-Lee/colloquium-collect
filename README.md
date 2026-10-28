@@ -27,4 +27,4 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 
 ## 실행
 - 손으로: Actions → 콜로키움 자료수집 → Run workflow
-- 매일 8시: `.github/workflows/collect.yml`의 `schedule` 두 줄 앞 `#`을 지우면 켜집니다 (의장님이 시작하라고 할 때).
+- 매일 아침 7시(한국): `.github/workflows/collect.yml`의 `schedule`로 자동 실행 (2026-10-28 켬, 8시 프리장 전에 끝나도록).
