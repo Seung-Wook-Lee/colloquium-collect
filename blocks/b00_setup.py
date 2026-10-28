@@ -4,7 +4,8 @@
 #              GitHub에서 돌 때: 드라이브 창구(drive.py)로 필요한 파일을 내려받아 work/ 폴더에 두고,
 #                                마지막 블록 10이 결과를 드라이브에 올린다.
 #              코랩에서 돌 때  : 드라이브를 연결해 그대로 읽고 쓴다.
-#   읽는 것  : 드라이브 콜로키움/포트폴리오/콜로키움100_유니버스_*.xlsx (가장 최신 파일)
+#   읽는 것  : 드라이브 콜로키움/포트폴리오/콜로키움100_유니버스_YYYYMMDD.csv (날짜가 가장 늦은 파일)
+#              (2026-10-28 의장: 표는 csv. 예전 .xlsx도 읽지만 같은 날짜면 csv가 먼저)
 #              드라이브 콜로키움 수집데이터/00_누적/ (가격 이력, 실적 저장본 등 이어 쓰는 파일 전부)
 #   키       : KIS_APP_KEY, KIS_APP_SECRET, FRED_KEY, DART_KEY, SEC_EMAIL (+ GitHub에서는 DRIVE_URL, DRIVE_TOKEN)
 #              GitHub에서는 Secrets(환경변수), 코랩에서는 코랩 Secrets. 값은 화면·파일에 남기지 않는다.
@@ -73,15 +74,25 @@ def _pull(dfolder, name, local):
     return True
 
 
+def _is_univ(name):
+    name = nfc(name)
+    return name.startswith('콜로키움100_유니버스_') and name.endswith(('.csv', '.xlsx'))
+
+
+def _univ_key(name):
+    # 날짜 순, 같은 날짜면 csv를 뒤로(= 선택)
+    stem, ext = os.path.splitext(nfc(name))
+    return stem, ext == '.csv'
+
+
 pulled = 0
 if not IN_COLAB:
     if not gdrive.ready():
         raise RuntimeError('DRIVE_URL·DRIVE_TOKEN 없음 (GitHub Secrets 확인)')
-    # 1) 콜로키움 100 엑셀: 가장 최신 것 하나만
-    names = sorted(f['name'] for f in gdrive.ls(f'{D_ROOT}/포트폴리오')
-                   if f['name'].startswith('콜로키움100_유니버스') and f['name'].endswith('.xlsx'))
+    # 1) 콜로키움 100 종목표: 가장 최신 것 하나만
+    names = sorted((f['name'] for f in gdrive.ls(f'{D_ROOT}/포트폴리오') if _is_univ(f['name'])), key=_univ_key)
     if not names:
-        raise FileNotFoundError('드라이브 콜로키움/포트폴리오에 콜로키움100_유니버스 엑셀이 없습니다')
+        raise FileNotFoundError('드라이브 콜로키움/포트폴리오에 콜로키움100_유니버스 csv가 없습니다')
     _pull(f'{D_ROOT}/포트폴리오', names[-1], f'{UNIV_DIR}/{names[-1]}')
     # 2) 00_누적 전부 (드라이브 수정 시각을 그대로 붙여 '며칠마다 새로 받기' 판단이 맞게)
     for f in gdrive.ls(f'{D_DATA}/00_누적'):
@@ -100,13 +111,15 @@ log(f'[준비] {NOW:%Y-%m-%d %H:%M} KST | 실행 {where} | 저장 폴더 {D_DATA
     + f'한투 키 {sum(bool(SEC[k]) for k in SEC if k.startswith("KIS"))}/2 | FRED 키 {"있음" if SEC["FRED_KEY"] else "없음"} | '
     f'DART 키 {"있음" if SEC["DART_KEY"] else "없음"} | SEC 이메일 {"있음" if SEC["SEC_EMAIL"] else "없음"}')
 
-# 유니버스: 포트폴리오 폴더의 최신 콜로키움 100 엑셀 (드라이브 한글 이름이 NFD일 수 있어 NFC로 맞춰 찾는다)
-cands = sorted(f for f in os.listdir(UNIV_DIR)
-               if nfc(f).startswith('콜로키움100_유니버스') and nfc(f).endswith('.xlsx'))
+# 유니버스: 포트폴리오 폴더의 최신 콜로키움 100 종목표 (드라이브 한글 이름이 NFD일 수 있어 NFC로 맞춰 찾는다)
+cands = sorted((f for f in os.listdir(UNIV_DIR) if _is_univ(f)), key=_univ_key)
 if not cands:
-    raise FileNotFoundError(f'포트폴리오 폴더에 콜로키움100_유니버스 엑셀이 없습니다: {os.listdir(UNIV_DIR)}')
+    raise FileNotFoundError(f'포트폴리오 폴더에 콜로키움100_유니버스 csv가 없습니다: {os.listdir(UNIV_DIR)}')
 UNIV_FILE = f'{UNIV_DIR}/{cands[-1]}'
-u = pd.read_excel(UNIV_FILE, sheet_name='유니버스', dtype={'코드': str})
+if UNIV_FILE.endswith('.csv'):
+    u = pd.read_csv(UNIV_FILE, dtype={'코드': str}, encoding='utf-8-sig')
+else:
+    u = pd.read_excel(UNIV_FILE, sheet_name='유니버스', dtype={'코드': str})
 u = u[u['yfinance 티커'].notna()].copy()
 u['yfinance 티커'] = u['yfinance 티커'].astype(str).str.strip()
 u['코드'] = u['코드'].astype(str).str.strip()
