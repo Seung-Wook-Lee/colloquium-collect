@@ -17,6 +17,7 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 8 | `blocks/b08_checklist.py` | 리오팀 체크리스트 1~32 | `_시장지표.csv` |
 | 9 | `blocks/b09_news.py` | 간밤 국제 뉴스(연합뉴스), 실적·경제지표 일정(DART·야후·FRED) | `_뉴스.csv`, `_일정.csv` |
 | 9 | `blocks/b09_nyx.py` (+ `nyx.py`) | 닉스 팀 7개 기준(지지·저항, 볼린저, RSI, CCI, 스토캐스틱 슬로우, 이격도, 일목)과 차트 패턴, 일봉·주봉 | `_닉스.csv` |
+| 9 | `blocks/b09_flow.py` | ETF 자금유입: 국내 ETF 30·미국 ETF 10 + 미국 섹터 비교용(SPDR 섹터 11, SPY·QQQ·SOXX·MAGS). 상장좌수 변화 × NAV로 1·5·20일 유입 (한투 좌수·순자산, 야후 순자산, SPDR 공식 이력) | `_ETF자금.csv`, `00_누적/00_ETF좌수이력.csv` |
 | 10 | `blocks/b10_briefing.py` | 오늘 브리핑(텍스트) | `_브리핑.txt` |
 | 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
