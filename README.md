@@ -16,6 +16,7 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 7 | `blocks/b07_sec.py` | 미국 개별주 TTM·연환산 PER (SEC) | `_SEC실적.csv` |
 | 8 | `blocks/b08_checklist.py` | 리오팀 체크리스트 1~32 | `_시장지표.csv` |
 | 9 | `blocks/b09_briefing.py` | 오늘 브리핑 | `_브리핑.pdf`, `_브리핑.html` |
+| 9 | `blocks/b09_nyx.py` (+ `nyx.py`) | 닉스 팀 7개 기준(지지·저항, 볼린저, RSI, CCI, 스토캐스틱 슬로우, 이격도, 일목)과 차트 패턴, 일봉·주봉 | `_닉스.csv` |
 | 10 | `blocks/b10_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
 새 블록은 블록 10 바로 앞 번호로 파일을 만들고, 맨 위 설명 칸을 같은 양식으로 채웁니다.
