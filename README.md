@@ -6,7 +6,7 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 ## 블록 (레고처럼 순서대로 실행)
 | 블록 | 파일 | 하는 일 | 만드는 파일 |
 |---|---|---|---|
-| 0 | `blocks/b00_setup.py` | 키 읽기, 드라이브에서 유니버스 엑셀·누적 파일 받기 | — |
+| 0 | `blocks/b00_setup.py` | 키 읽기, 드라이브에서 유니버스 csv·누적 파일 받기 | — |
 | 1 | `blocks/b01_prices.py` | 야후 시세 100종목 | `00_가격이력.csv`, `_시세.csv` |
 | 2 | `blocks/b02_kis.py` | 한투 PER·PBR (막히면 야후로 대체) + 야후 선행 PER | `_밸류에이션.csv` |
 | 3 | `blocks/b03_raw.py` | 야후·FRED·뉴욕연준·일본 재무성·CNN 원자료 | `_연준매크로.csv` |
