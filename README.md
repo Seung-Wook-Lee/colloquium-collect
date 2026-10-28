@@ -17,6 +17,7 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 8 | `blocks/b08_checklist.py` | 리오팀 체크리스트 1~32 | `_시장지표.csv` |
 | 9 | `blocks/b09_news.py` | 간밤 국제 뉴스(연합뉴스), 실적·경제지표 일정(DART·야후·FRED) | `_뉴스.csv`, `_일정.csv` |
 | 9 | `blocks/b09_nyx.py` (+ `nyx.py`) | 닉스 팀 7개 기준(지지·저항, 볼린저, RSI, CCI, 스토캐스틱 슬로우, 이격도, 일목)과 차트 패턴, 일봉·주봉 | `_닉스.csv` |
+| 9 | `blocks/b09_sector.py` (+ `sector.py`) | 닉스 팀 섹터 순환: 한국 섹터 ETF 14개를 TIGER 200과 비교(초과수익·모멘텀 순위·로테이션 사분면·20주선·7개 기준), 시범판정(룰 v0, 승인 전) | `_섹터.csv`, `_섹터궤적.csv` |
 | 10 | `blocks/b10_briefing.py` | 오늘 브리핑(텍스트) | `_브리핑.txt` |
 | 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
@@ -34,6 +35,6 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 ## 화면 (스트림릿)
 
 - 코드: `app/streamlit_app.py` (라이브러리는 `app/requirements.txt`)
-- 탭: 오늘 시장 / 종목(보유·관심·시장 거르기, PER 세 칸) / 주봉 차트(20주·60주선) / 수집 점검
+- 탭: 오늘 시장 / 회의록 / 종목(보유·관심·시장 거르기, PER 세 칸) / 섹터 순환(사분면 그림·8주 궤적·판정 표) / 주봉 차트(20주·60주선) / 수집 점검
 - 자료는 수집 프로그램과 같은 드라이브 창구로 읽습니다. 스트림릿 클라우드 Secrets에 `DRIVE_URL`, `DRIVE_TOKEN` 두 줄을 넣습니다.
 - PC에서 돌릴 때: `COLLOQ_DATA="(드라이브 데스크톱의 콜로키움 수집데이터 폴더)" streamlit run app/streamlit_app.py`
