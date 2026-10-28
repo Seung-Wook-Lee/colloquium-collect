@@ -18,12 +18,14 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 9 | `blocks/b09_news.py` | 간밤 국제 뉴스(연합뉴스), 실적·경제지표 일정(DART·야후·FRED) | `_뉴스.csv`, `_일정.csv` |
 | 9 | `blocks/b09_nyx.py` (+ `nyx.py`) | 닉스 팀 7개 기준(지지·저항, 볼린저, RSI, CCI, 스토캐스틱 슬로우, 이격도, 일목)과 차트 패턴, 일봉·주봉 | `_닉스.csv` |
 | 10 | `blocks/b10_briefing.py` | 오늘 브리핑(텍스트) | `_브리핑.txt` |
+| 10 | `blocks/b10_gemini.py` | 제미나이 위원(뉴스 국장, 피터·섹터 데스크, 엘피스) 발언 원고 — 회의실은 그대로 대독. 키 없으면 건너뜀 | `_위원_뉴스국장.txt`, `_위원_피터.txt`, `_위원_엘피스.txt` |
 | 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
 새 블록은 브리핑(블록 10) 앞 번호로 파일을 만들고, 맨 위 설명 칸을 같은 양식으로 채웁니다.
 
 ## 비밀값 (GitHub → Settings → Secrets and variables → Actions)
-`KIS_APP_KEY`, `KIS_APP_SECRET`, `FRED_KEY`, `DART_KEY`, `SEC_EMAIL`, `DRIVE_URL`, `DRIVE_TOKEN`
+`KIS_APP_KEY`, `KIS_APP_SECRET`, `FRED_KEY`, `DART_KEY`, `SEC_EMAIL`, `DRIVE_URL`, `DRIVE_TOKEN`, `GEMINI_API_KEY`
+- `GEMINI_API_KEY`는 Google AI Studio 무료 키. 위원 기준은 드라이브 '페르소나 스토리/위원총괄_Ver.…txt' 최신을 읽고, 창구가 그 폴더를 못 열면 `prompts/위원총괄.txt`를 씁니다.
 - 계좌번호는 넣지 않습니다. 한투는 조회만 합니다.
 - `DRIVE_URL`·`DRIVE_TOKEN`은 `apps_script/Code.gs`(드라이브 창구)를 의장님 구글 계정에 배포해서 얻습니다.
 
