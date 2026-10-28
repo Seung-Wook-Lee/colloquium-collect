@@ -185,7 +185,7 @@ try:
 <title>콜로키움 아침 브리핑 {TODAY}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;800&display=swap">
 <style>
-:root{{--ink:#1d2330;--mute:#6b7280;--line:#e5e7eb;--card:#f7f8fa;--up:#d32f2f;--dn:#1565c0;--red:#c62828;--amber:#b26a00;--green:#2e7d32}}
+:root{{--ink:#1d2330;--mute:#6b7280;--line:#e5e7eb;--card:#f7f8fa;--up:#1e8e3e;--dn:#d32f2f;--red:#c62828;--amber:#b26a00;--green:#2e7d32}}
 *{{box-sizing:border-box}}
 body{{margin:0;background:#fff;color:var(--ink);font:13px/1.45 'Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',sans-serif}}
 .page{{max-width:980px;margin:0 auto;padding:24px 20px}}
@@ -240,7 +240,7 @@ footer{{margin-top:28px;border-top:1px solid var(--line);padding-top:8px;color:v
 <h2>4. 종목 — 보유</h2><table class="t">{thead}{stocks("보유")}</table>
 <h2>5. 종목 — 관심</h2><table class="t">{thead}{stocks("관심")}</table>
 <p class="note">PER TTM = 최근 4분기 순이익(DART·SEC), 없으면 한투 값(직전 연간). PER 연환산 = 가장 최근 한 분기 순이익 × 4.
-PER 선행 = 야후의 애널리스트 예상 1년 이익 기준(한국 종목은 근거가 불분명해 '참고'). 등락 색은 한국식(빨강 상승, 파랑 하락).</p>
+PER 선행 = 야후의 애널리스트 예상 1년 이익 기준(한국 종목은 근거가 불분명해 '참고'). 등락 색은 미국식(초록 상승, 빨강 하락).</p>
 <footer>자료: 야후, 한국투자증권, CNN, FRED, 뉴욕연준, 일본 재무성, DART, SEC · 색과 문구는 의장 기준을 옮긴 것이며 투자 판단이 아닙니다.</footer>
 </div></body></html>'''
     out_html = f'{DAY}/{TODAY}_브리핑.html'

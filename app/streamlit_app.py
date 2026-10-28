@@ -32,7 +32,7 @@ D_MEET = '콜로키움/오늘의 시장해석'          # 회의록·시장해�
 LOCAL = os.environ.get('COLLOQ_DATA', '').strip()
 KST = dt.timezone(dt.timedelta(hours=9))
 SIG_ICON = {'빨강': '🔴', '주황': '🟠', '초록': '🟢'}
-UP, DN = '#d32f2f', '#1565c0'                 # 한국식: 빨강 상승, 파랑 하락
+UP, DN = '#1e8e3e', '#d32f2f'                 # 미국식: 초록 상승, 빨강 하락 (2026-10-28 의장)
 
 
 # ---------------------------------------------------------------- 자료 읽기
@@ -314,12 +314,12 @@ with t1:
         v = vix.iloc[0]
         c[1].metric('VIX', fmt(num(pd.Series([v['값']])).iloc[0]),
                     f'{num(pd.Series([v["값"]])).iloc[0] - num(pd.Series([v["1주 전"]])).iloc[0]:+.2f} (1주 전 대비)',
-                    delta_color='inverse', chart_data=spark('리스크', 'VIX'), chart_type='area', border=True, height=195)
+                    delta_color='normal', chart_data=spark('리스크', 'VIX'), chart_type='area', border=True, height=195)
     if mget('미국 10년') is not None:
         r = m.loc['미국 10년']
         c[2].metric(f'{SIG_ICON.get(r["신호"], "")} 미국 10년'.strip(), fmt(mget('미국 10년'), 3, '%'),
                     f'{mget("미국 10년", "1달"):+.2f}%p (1달)' if pd.notna(mget('미국 10년', '1달')) else None,
-                    delta_color='inverse', chart_data=spark('매크로', '미국 10년'), chart_type='area', border=True, height=195)
+                    delta_color='normal', chart_data=spark('매크로', '미국 10년'), chart_type='area', border=True, height=195)
 
     st.subheader('지수')
     if len(mac):
@@ -353,7 +353,7 @@ with t1:
                                                f'YTD {ytd:+.{2 if pp else 1}f}{r["변화 단위"]}' if pd.notna(ytd) else None,
                                                f'기준일 {r["기준일"]}'] if pd.notna(x) and x)
             cols[i % 4].metric(f'{SIG_ICON.get(r["신호"], "")} {r["항목"]}'.strip(), shown, delta,
-                               delta_color='off' if grp in ('환율', '원자재') or flat else 'inverse',
+                               delta_color='off' if flat else 'normal',
                                delta_arrow='off' if flat else 'auto', help=note or None,
                                chart_data=spark('매크로', r['항목']), chart_type='area', border=True, height=195)
 
