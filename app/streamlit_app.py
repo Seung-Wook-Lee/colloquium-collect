@@ -3,7 +3,8 @@
 #   읽는 것  : 드라이브 '콜로키움 수집데이터/YYYYMMDD/' 의 CSV·PDF·점검 파일, '00_누적/00_가격이력.csv'
 #              드라이브는 수집 프로그램과 같은 창구(drive.py, 비밀값 DRIVE_URL·DRIVE_TOKEN)로 읽는다.
 #              PC에서 돌릴 때는 환경변수 COLLOQ_DATA 에 '콜로키움 수집데이터' 폴더 경로를 넣으면 그 폴더를 바로 읽는다.
-#   화면     : 오늘 시장 / 종목 / 주봉 차트 / 수집 점검
+#   화면     : 오늘 시장 / 회의록 / 종목 / 주봉 차트 / 수집 점검
+#              회의록은 드라이브 '콜로키움/오늘의 시장해석/' 의 txt(회의록_YYYYMMDD.txt 등)를 그대로 보여 준다.
 #              색과 문구는 수집 블록이 적은 '신호'·'표시' 칸(의장 기준)만 따른다. 화면이 따로 판정하지 않는다.
 #   실행     : streamlit run app/streamlit_app.py
 # ======================================================================
@@ -27,6 +28,7 @@ except Exception:
 import drive  # noqa: E402
 
 D_DATA = '콜로키움 수집데이터'
+D_MEET = '콜로키움/오늘의 시장해석'          # 회의록·시장해석 txt
 LOCAL = os.environ.get('COLLOQ_DATA', '').strip()
 KST = dt.timezone(dt.timedelta(hours=9))
 SIG_ICON = {'빨강': '🔴', '주황': '🟠', '초록': '🟢'}
@@ -63,6 +65,21 @@ def csv(day, name):
 @st.cache_data(ttl=600, show_spinner=False)
 def blob(day, name):
     return _raw(f'{day}/{day}_{name}')
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def notes():
+    """회의록 폴더의 txt 이름 목록 (최근 것 먼저)"""
+    if LOCAL:
+        return []
+    names = [f['name'] for f in drive.ls(D_MEET) if f['name'].lower().endswith('.txt')]
+    return sorted(names, key=lambda n: (''.join(ch for ch in n if ch.isdigit())[:8], n), reverse=True)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def note(name):
+    b = drive.get(f'{D_MEET}/{name}')
+    return b.decode('utf-8', errors='replace') if b else ''
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner='가격 이력 불러오는 중…')
@@ -192,7 +209,7 @@ def fg_chart(h):
     return (band + rule + line + pts).properties(height=300)
 
 
-t1, t2, t3, t4 = st.tabs(['오늘 시장', '종목', '주봉 차트', '수집 점검'])
+t1, t5, t2, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', '주봉 차트', '수집 점검'])
 
 # ---------------------------------------------------------------- 1. 오늘 시장
 with t1:
@@ -354,6 +371,23 @@ def stock_table():
     t['등락률(%)'] = num(t['등락률(%)'])
     return t
 
+
+with t5:
+    if LOCAL:
+        st.info('PC 모드에서는 회의록을 읽지 않습니다. 회의록은 드라이브 "콜로키움/오늘의 시장해석" 폴더에 있습니다.')
+    else:
+        allnotes = notes()
+        mine = [n for n in allnotes if DAY in n]
+        if not allnotes:
+            st.info('아직 회의록이 없습니다. 7:30 회의가 끝나면 이 폴더에 올라옵니다.')
+        else:
+            if not mine:
+                st.caption(f'{DAY[:4]}-{DAY[4:6]}-{DAY[6:]} 회의록은 아직 없습니다. 아래에서 지난 회의록을 고르세요.')
+            pick = st.selectbox('회의록', allnotes, index=allnotes.index(mine[0]) if mine else 0,
+                                label_visibility='collapsed')
+            with st.container(border=True):
+                st.markdown(note(pick).replace('~', '\\~'))
+            st.caption('드라이브 "콜로키움/오늘의 시장해석" 폴더의 txt를 그대로 보여 줍니다. 회의가 끝나면 회의록_YYYYMMDD.txt로 올라옵니다.')
 
 with t2:
     tb = stock_table()
