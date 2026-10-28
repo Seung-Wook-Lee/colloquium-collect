@@ -5,20 +5,19 @@
 #              좌수가 없을 때(미국 일부)는 순자산 변화 − 가격 변동분으로 계산한다.
 #              1일·5일·20일 누적 유입, 순자산 대비 %, 시장 안 순위를 낸다.
 #   대상     : 콜로키움 100의 ETF 전부(국내 30·미국 10) + 미국 섹터 비교용 US_EXTRA(SPDR 섹터 11개, SPY·QQQ·SOXX·MAGS)
-#   소스     : 국내 = 한투 국내 현재가(상장주수) + ETF 현재가(NAV·순자산, 안 되면 빈칸)
+#   소스     : 국내 = 한투 ETF 현재가(유통좌수·NAV·순자산), 안 되면 국내 현재가의 상장주수
+#              (2026-10-29 시험: 유통좌수는 그날 설정·환매 반영, 상장주수·순자산총액은 하루 늦음)
 #              미국 = 한투 해외 현재가 상세(상장주수 shar) + 야후 순자산(totalAssets)·NAV
 #              SPDR 펀드(XL*·SPY·SPYM)는 State Street 공식 엑셀(NAV·좌수 일별 이력 1년)을 매일 받아 그것을 쓴다.
 #   읽는 것  : 한투 키 2개(블록 2가 받은 토큰이 있으면 그대로 씀)
 #   만드는 것: 수집데이터/00_누적/00_ETF좌수이력.csv (하루 한 줄씩 이어 씀, 같은 날 다시 돌리면 덮어씀)
 #              수집데이터/YYYYMMDD/YYYYMMDD_ETF자금.csv (ETF 한 줄, 시장별 20일 유입 순)
 #   쓰는 위원: 뉴스보이(어느 섹터로 돈이 몰리나, 사실 보고), 라케시스·클로토(수급 가점), 엘피스(갈아타기 기회)
-#   주의     : 국내 상장좌수는 설정·환매가 하루 늦게 반영될 수 있다. 기록이 쌓이기 전(5·20영업일)에는 해당 칸이 빈칸.
+#   주의     : 순자산 칸은 한투가 하루 전 NAV로 계산한 값이라 유입 계산에는 쓰지 않는다(좌수 × NAV 사용). 기록이 쌓이기 전(5·20영업일)에는 해당 칸이 빈칸.
 #              유입은 국내 억원, 미국 백만달러.
 #   고칠 곳  : 미국 비교 대상은 US_EXTRA
 #   실패하면 : 점검 파일에 '실패'로 남기고 다음 블록은 계속 실행
 # ======================================================================
-import json
-
 US_EXTRA = {'XLK': '기술', 'XLC': '커뮤니케이션', 'XLY': '임의소비재', 'XLP': '필수소비재', 'XLE': '에너지',
             'XLF': '금융', 'XLV': '헬스케어', 'XLI': '산업재', 'XLB': '소재', 'XLRE': '부동산', 'XLU': '유틸리티',
             'SPY': 'S&P500', 'QQQ': '나스닥100', 'SOXX': '반도체', 'MAGS': '매그니피센트7'}
@@ -84,7 +83,7 @@ try:
              for t, s in US_EXTRA.items() if t not in have]
     etf = pd.concat([etf, pd.DataFrame(extra)], ignore_index=True)
 
-    snap, diag = [], {}
+    snap = []
     for _, s in etf.iterrows():
         r = {'수집일': TODAY, '번호': s['번호'], '이름': s['정식 종목명'], '시장': s['시장'], '섹터/테마': s['섹터/테마'],
              '코드': s['코드'], '상장좌수': None, '종가': None, 'NAV': None, '순자산': None, '좌수출처': '', '순자산출처': ''}
@@ -96,20 +95,18 @@ try:
             e = _kis('/uapi/etfetn/v1/quotations/inquire-price', 'FHPST02400000',
                      {'fid_cond_mrkt_div_code': 'J', 'fid_input_iscd': s['코드']})
             if e:
-                diag.setdefault('국내ETF', e)
                 r['NAV'] = _f(e.get('nav'))
                 tot = _f(e.get('etf_ntas_ttam'))            # 순자산총액(억원)
                 if tot:
                     r.update({'순자산': tot * 1e8, '순자산출처': '한투'})
-                if not r['상장좌수'] and _f(e.get('lstn_stcn')):
-                    r.update({'상장좌수': _f(e.get('lstn_stcn')), '좌수출처': '한투 ETF'})
+                if _f(e.get('etf_crcl_stcn')):              # 유통좌수: 그날 설정·환매가 반영된 좌수(상장주수는 하루 늦음)
+                    r.update({'상장좌수': _f(e.get('etf_crcl_stcn')), '좌수출처': '한투 ETF 유통좌수'})
         else:
             first = {'NASDAQ': 'NAS', 'NYSE': 'NYS'}.get(s['거래소'], 'AMS')
             for ex in [first] + [e for e in ('AMS', 'NAS', 'NYS') if e != first]:
                 x = _kis('/uapi/overseas-price/v1/quotations/price-detail', 'HHDFS76200200',
                          {'AUTH': '', 'EXCD': ex, 'SYMB': s['코드']})
                 if x and _f(x.get('last')):
-                    diag.setdefault('미국ETF', x)
                     r.update({'상장좌수': _f(x.get('shar')), '종가': _f(x.get('last')), '좌수출처': '한투' if _f(x.get('shar')) else ''})
                     break
             try:
@@ -123,14 +120,13 @@ try:
             time.sleep(0.4)
         snap.append(r)
     snap = pd.DataFrame(snap)
-    if diag:
-        with open(f'{DAY}/{TODAY}_진단_ETF응답.json', 'w', encoding='utf-8') as fp:
-            json.dump(diag, fp, ensure_ascii=False, indent=1)
 
     # 누적 파일에 오늘 줄을 붙인다 (같은 날 다시 돌리면 오늘 줄만 바꿈)
     hist = pd.read_csv(FLOW_FILE, dtype={'수집일': str, '코드': str}) if os.path.exists(FLOW_FILE) else pd.DataFrame()
     if len(hist):
         hist = hist[hist['수집일'] != TODAY]
+        # 2026-10-29 첫 시험 때 국내는 상장주수로 기록됨 → 유통좌수와 섞이지 않게 버린다
+        hist = hist[~((hist['시장'] == '한국') & (hist['좌수출처'] == '한투'))]
     # SPDR 펀드는 State Street 공식 이력(최근 1년)을 매일 통째로 받아 그 코드의 줄을 바꾼다(좌수 기준을 한 출처로 통일).
     # 못 받으면 한투·야후 오늘 값을 그대로 쓴다.
     back, back_fail = [], []
