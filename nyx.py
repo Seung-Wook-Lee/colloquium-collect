@@ -56,6 +56,15 @@ def ichimoku(h, l, c):
     return tenkan, kijun, span_a, span_b
 
 
+def cross(a, b):
+    """이번 봉에서 a가 b를 넘었는지: '상향'(골든) / '하향'(데드) / ''"""
+    if a.iloc[-1] > b.iloc[-1] and a.iloc[-2] <= b.iloc[-2]:
+        return '상향'
+    if a.iloc[-1] < b.iloc[-1] and a.iloc[-2] >= b.iloc[-2]:
+        return '하향'
+    return ''
+
+
 def to_week(d):
     g = d.groupby(d.index.to_period('W-FRI'))
     w = g.agg({'시가': 'first', '고가': 'max', '저가': 'min', '종가': 'last', '거래량': 'sum'})
@@ -272,13 +281,16 @@ def frame_row(df, tf, pre=''):
     out[f'{p}RSI'] = round(r.iloc[-1], 1)
     out[f'{p}RSI_시그널'] = round(r.rolling(6).mean().iloc[-1], 1)
     out[f'{p}RSI_단순평균식'] = round(rsi_sma(c).iloc[-1], 1)
+    out[f'{p}RSI_시그널교차'] = cross(r, r.rolling(6).mean())
     # CCI(20)와 시그널(10)
     cc = cci(h, l, c)
     out[f'{p}CCI'] = round(cc.iloc[-1], 0)
     out[f'{p}CCI_시그널'] = round(cc.rolling(10).mean().iloc[-1], 0)
+    out[f'{p}CCI_시그널교차'] = cross(cc, cc.rolling(10).mean())
     # 스토캐스틱 슬로우(14,3,3)
     sk, sdd = stoch_slow(h, l, c)
     out[f'{p}STO_K'], out[f'{p}STO_D'] = round(sk.iloc[-1], 1), round(sdd.iloc[-1], 1)
+    out[f'{p}STO_교차'] = {'상향': '골든크로스', '하향': '데드크로스'}.get(cross(sk, sdd), '')
     # 이격도
     for m in ((20, 50, 60, 120) if tf == '일' else (20, 50, 60)):
         ma = c.rolling(m).mean().iloc[-1]
@@ -291,6 +303,7 @@ def frame_row(df, tf, pre=''):
     out[f'{p}일목_구름상단'], out[f'{p}일목_구름하단'] = top, bot
     out[f'{p}일목_구름위치'] = '위' if px > top else ('아래' if px < bot else '안') if np.isfinite(bot) else ''
     out[f'{p}일목_전환기준'] = '전환>기준' if tk.iloc[-1] > kj.iloc[-1] else ('전환<기준' if tk.iloc[-1] < kj.iloc[-1] else '같음')
+    out[f'{p}일목_전환기준교차'] = {'상향': '호전', '하향': '역전'}.get(cross(tk, kj), '')
     out[f'{p}일목_후행스팬'] = ('26봉 전 종가 위' if px > c.iloc[-27] else '26봉 전 종가 아래') if len(c) > 27 else ''
     # MACD 오실레이터(클로토 2단계용, 이번·지난·2봉 전)
     mo = macd_osc(c)
