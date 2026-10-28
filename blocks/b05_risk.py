@@ -8,6 +8,7 @@
 #                   값, 기준일, 1주 전·1달 전 값을 나란히 적는다.
 #              '신호' 칸은 의장 기준이 있는 항목과 VIX 역전(VIX > VIX3M)에만 적는다. 나머지는 '일반 기준' 글만 붙인다.
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_공포탐욕.csv, YYYYMMDD_리스크.csv
+#              (YYYYMMDD_추이.csv 에 공포탐욕 1년 이력, 7개 지표·리스크 항목의 최근 1달 값을 더함)
 #   쓰는 위원: 포보스(회의 0번 공포탐욕, 변동성·신용·자금), 리오(침체 신호), 뉴스보이(고용)
 #   고칠 곳  : 의장 기준이 정해지면 RISK 표의 의장 기준 칸과 RISK_RULES
 # ======================================================================
@@ -77,6 +78,16 @@ try:
                      'CNN 갱신시각': str(pd.to_datetime(x['timestamp'], unit='ms', utc=True)) if x.get('timestamp') else None})
     fg = pd.DataFrame(rows)
     fg['수집시각(KST)'] = stamp()
+    # 화면 그래프용: 종합 점수 1년 이력 + 7개 지표 원천값 최근 1달
+    hist = (CNN.get('fear_and_greed_historical') or {}).get('data') or []
+    if hist:
+        h = pd.Series({pd.to_datetime(p['x'], unit='ms').normalize(): p['y'] for p in hist}).sort_index()
+        TREND.extend(('공포탐욕', 'Fear & Greed Index', d.strftime('%Y-%m-%d'), round(float(v), 1)) for d, v in h.items())
+    for name, key, desc in FG_ITEMS:
+        pts = CNN.get(key, {}).get('data') or []
+        if pts:
+            trend('공포탐욕', name, pd.Series({pd.to_datetime(p['x'], unit='ms').normalize(): p['y'] for p in pts}).sort_index())
+    save_trend()
     fg.to_csv(f'{DAY}/{TODAY}_공포탐욕.csv', index=False, encoding='utf-8-sig')
     FG = {'score': f['score'], 'putcall': rows[4]['원천값']}
     log(f'[5 공포탐욕] 종합 {f["score"]:.1f} ({rating(f["rating"])}) | 전일 {f["previous_close"]:.1f} | '
@@ -99,6 +110,7 @@ RISK = []
 
 def rk(grp, name, s, unit='', chair='', general='', src='', value=None, date=None, w1=None, mo1=None, note=''):
     v, d = last(s) if value is None else (value, date)
+    trend('리스크', name, s)
     if s is not None and len(s) and d:
         w1 = at_or_before(s, pd.Timestamp(d) - pd.Timedelta(days=7)) if w1 is None else w1
         mo1 = at_or_before(s, pd.Timestamp(d) - pd.DateOffset(months=1)) if mo1 is None else mo1
@@ -149,6 +161,7 @@ try:
     risk = pd.DataFrame(RISK)
     risk['수집시각(KST)'] = stamp()
     risk.to_csv(f'{DAY}/{TODAY}_리스크.csv', index=False, encoding='utf-8-sig')
+    save_trend()   # 블록 4의 추이 파일에 리스크 항목을 더해 다시 저장
     none = risk.loc[risk['값'] == '데이터 없음', '항목'].tolist()
     log(f'[5 리스크] {len(risk) - len(none)}/{len(risk)}항목 | '
         f'신호: {", ".join(f"{a}({b})" for a, b in risk.loc[risk["신호"] != "", ["항목", "신호"]].values) or "없음"} | '
