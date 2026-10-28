@@ -11,6 +11,7 @@
 #              원자재 : WTI, 구리, 금 → YTD·1달(%), 사상 최고 대비
 #              '신호' 칸은 의장 기준이 있는 항목에만 빨강·주황·초록을 적는다(그 밖에는 비움).
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_매크로.csv
+#              수집데이터/YYYYMMDD/YYYYMMDD_추이.csv (항목별 최근 1달 값, 화면의 작은 선 그래프용. 블록 5가 리스크 항목을 덧붙임)
 #   쓰는 위원: 포보스(지수·금리), 엘피스(환율·원자재), 뉴스보이(물가·성장·고용)
 #   고칠 곳  : 의장 기준이 바뀌면 MACRO_RULES, 항목을 더하려면 블록 3 표에 넣고 아래 해당 묶음에 한 줄
 # ======================================================================
@@ -31,10 +32,29 @@ CHAIR_NOTE = {   # 의장 기준 문구(참고) — 체크리스트와 같은 �
     '코스피': '前 고점 9,385 / 1차고점 7500~7800', '금': '연준 금리인하 방향 = 금가격 상승',
 }
 MACRO = []
+TREND = []   # (구분, 항목, 날짜, 값) — 화면의 작은 선 그래프용
 
 
-def mrow(grp, name, s, unit='', pct=True, high=False, src='', value=None, date=None, note=''):
+def trend(kind, name, s):
+    """최근 1달 값을 TREND에 담는다. 1달 안에 점이 6개보다 적으면(주간·월간 지표) 최근 13개를 담는다."""
+    if s is None:
+        return
+    s = s.dropna()
+    if len(s) < 2:
+        return
+    w = s[s.index >= s.index[-1] - pd.DateOffset(months=1)]
+    if len(w) < 6:
+        w = s.iloc[-13:]
+    TREND.extend((kind, name, d.strftime('%Y-%m-%d'), round(float(v), 4)) for d, v in w.items())
+
+
+def save_trend():
+    pd.DataFrame(TREND, columns=['구분', '항목', '날짜', '값']).to_csv(f'{DAY}/{TODAY}_추이.csv', index=False, encoding='utf-8-sig')
+
+
+def mrow(grp, name, s, unit='', pct=True, high=False, src='', value=None, date=None, note='', line=None):
     v, d = last(s) if value is None else (value, date)
+    trend('매크로', name, s if line is None else line)
     r = {'구분': grp, '항목': name, '값': round(v, 3) if v is not None else '데이터 없음', '단위': unit, '기준일': d,
          'YTD': ytd(s, pct) if s is not None else None, '1달': m1(s, pct) if s is not None else None,
          '변화 단위': '%' if pct else '%p', '사상 최고': None, '최고일': None, '최고 대비(%)': None,
@@ -58,7 +78,7 @@ try:
             ks = YS['코스피']
             disp = ks / ks.rolling(50).mean() * 100
             mrow('지수', '코스피 50일 이격도', None, value=float(disp.iloc[-1]), date=ks.index[-1].strftime('%Y-%m-%d'),
-                 src='야후 ^KS11 계산', note=f'1년 최고 {disp.iloc[-250:].max():.1f} / 최저 {disp.iloc[-250:].min():.1f}')
+                 src='야후 ^KS11 계산', line=disp, note=f'1년 최고 {disp.iloc[-250:].max():.1f} / 최저 {disp.iloc[-250:].min():.1f}')
     # 환율
     for k in ['원/달러', '엔/달러', '100엔당 원', '달러지수']:
         mrow('환율', k, YS.get(k), src='야후 원/달러 ÷ 엔/달러 계산' if k == '100엔당 원' else f'야후 {YF_SERIES[k]}')
@@ -80,7 +100,7 @@ try:
         if s is not None and len(s) > 13:
             now_, before = yoy(s), yoy(s.iloc[:-1])
             r = mrow('물가', k, None, unit='%', pct=False, value=now_, date=last(s)[1], src=f'FRED {sid} 계산',
-                     note='1달 칸 = 직전 발표 대비')
+                     note='1달 칸 = 직전 발표 대비', line=(s / s.shift(12) - 1) * 100)
             r['1달'] = round(now_ - before, 2) if now_ is not None and before is not None else None
         else:
             mrow('물가', k, None, unit='%', src=f'FRED {sid}')
@@ -102,7 +122,7 @@ try:
     if s is not None and len(s) > 3:
         dif = s.diff().dropna()
         mrow('성장·고용', '비농업 고용 증감', None, unit='천명', pct=False, value=float(dif.iloc[-1]),
-             date=last(s)[1], src='FRED PAYEMS 계산', note=f'3개월 평균 {dif.iloc[-3:].mean():+,.0f}천명')
+             date=last(s)[1], src='FRED PAYEMS 계산', line=dif, note=f'3개월 평균 {dif.iloc[-3:].mean():+,.0f}천명')
     # 원자재
     for k in ['WTI', '구리', '금']:
         mrow('원자재', k, YS.get(k), unit='$', high=True, src=f'야후 {YF_SERIES[k]}')
@@ -110,6 +130,7 @@ try:
     mac = pd.DataFrame(MACRO)
     mac['수집시각(KST)'] = stamp()
     mac.to_csv(f'{DAY}/{TODAY}_매크로.csv', index=False, encoding='utf-8-sig')
+    save_trend()
     none = mac.loc[mac['값'] == '데이터 없음', '항목'].tolist()
     newhigh = mac.loc[mac['표시'].str.contains('신고점', na=False), '항목'].tolist()
     log(f'[4 매크로] {len(mac) - len(none)}/{len(mac)}항목 | 신고점: {", ".join(newhigh) or "없음"} | '

@@ -115,6 +115,82 @@ with st.sidebar:
 fg, mac, risk = csv(DAY, '공포탐욕'), csv(DAY, '매크로'), csv(DAY, '리스크')
 price, val = csv(DAY, '시세'), csv(DAY, '밸류에이션')
 dart, secr = csv(DAY, 'DART실적'), csv(DAY, 'SEC실적')
+trend_df = csv(DAY, '추이')
+FG_BANDS = [(0, 25, '#c0392b', '극단적 공포'), (25, 45, '#e67e22', '공포'), (45, 55, '#9aa0a6', '중립'),
+            (55, 75, '#7cb342', '탐욕'), (75, 100, '#2e7d32', '극단적 탐욕')]
+
+
+def series(kind, name):
+    """추이 파일에서 한 항목의 시계열 (없으면 빈 Series)"""
+    if not len(trend_df):
+        return pd.Series(dtype=float)
+    t = trend_df[(trend_df['구분'] == kind) & (trend_df['항목'] == name)]
+    return pd.Series(num(t['값']).values, index=pd.to_datetime(t['날짜'])).sort_index().dropna()
+
+
+def spark(kind, name):
+    s = series(kind, name)
+    return s.tolist() if len(s) >= 2 else None
+
+
+def fg_color(v):
+    return next(c for lo, hi, c, _ in FG_BANDS if v < hi or hi == 100)
+
+
+def fg_label(v):
+    return next(t for lo, hi, _, t in FG_BANDS if v < hi or hi == 100)
+
+
+def gauge_svg(score, label):
+    import math
+    cx, cy, r = 150, 140, 115
+    pt = lambda val, rr: (cx + rr * math.cos(math.pi * (1 - val / 100)), cy - rr * math.sin(math.pi * (1 - val / 100)))
+    segs = ''
+    for lo, hi, c, _ in FG_BANDS:
+        (x1, y1), (x2, y2) = pt(lo, r), pt(hi, r)
+        segs += f'<path d="M{x1:.1f},{y1:.1f} A{r},{r} 0 0 1 {x2:.1f},{y2:.1f}" stroke="{c}" stroke-width="22" fill="none"/>'
+    ticks = ''.join(f'<text x="{pt(t, r + 22)[0]:.1f}" y="{pt(t, r + 22)[1] + 4:.1f}" font-size="11" fill="#6b7280" '
+                    f'text-anchor="middle">{t}</text>' for t in (0, 25, 45, 55, 75, 100))
+    nx, ny = pt(score, r - 30)
+    col = fg_color(score)
+    import base64
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 175">{segs}{ticks}'
+           f'<line x1="{cx}" y1="{cy}" x2="{nx:.1f}" y2="{ny:.1f}" stroke="#1d2330" stroke-width="4" stroke-linecap="round"/>'
+           f'<circle cx="{cx}" cy="{cy}" r="7" fill="#1d2330"/></svg>')
+    b64 = base64.b64encode(svg.encode()).decode()   # st.html은 svg 태그를 지우므로 그림으로 넣는다
+    return (f'<div style="text-align:center"><img src="data:image/svg+xml;base64,{b64}" style="width:100%;max-width:340px">'
+            f'<div style="font-size:44px;font-weight:800;line-height:1;margin-top:-6px;color:{col}">{score:.1f}</div>'
+            f'<div style="font-size:18px;font-weight:700;color:{col}">{label}</div></div>')
+
+
+def score_bar(score, label):
+    if pd.isna(score):
+        return '<div style="color:#6b7280">—</div>'
+    col = fg_color(score)
+    return (f'<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:10px;background:#eceff1;'
+            f'border-radius:5px;overflow:hidden"><div style="width:{score:.0f}%;height:100%;background:{col}"></div></div>'
+            f'<b style="font-variant-numeric:tabular-nums">{score:.1f}</b>'
+            f'<span style="color:{col};font-weight:600;font-size:13px">{label}</span></div>')
+
+
+def fg_chart(h):
+    d = h.rename('점수').rename_axis('날짜').reset_index()
+    bands = pd.DataFrame([{'lo': lo, 'hi': hi, 'c': c, '구간': n} for lo, hi, c, n in FG_BANDS])
+    x0, x1 = d['날짜'].min(), d['날짜'].max()
+    band = alt.Chart(bands).mark_rect(opacity=0.12).encode(
+        y=alt.Y('lo:Q', scale=alt.Scale(domain=[0, 100]), title=None), y2='hi:Q',
+        color=alt.Color('c:N', scale=None), tooltip=[alt.Tooltip('구간:N')]).transform_calculate(
+        x0=f'datetime({x0.year},{x0.month - 1},{x0.day})', x1=f'datetime({x1.year},{x1.month - 1},{x1.day})').encode(
+        x=alt.X('x0:T', title=None), x2='x1:T')
+    rule = alt.Chart(pd.DataFrame({'y': [70]})).mark_rule(strokeDash=[4, 4], color='#6b7280').encode(y='y:Q')
+    line = alt.Chart(d).mark_line(strokeWidth=2, color='#1d2330').encode(
+        x=alt.X('날짜:T', axis=alt.Axis(format='%m-%d', grid=False)), y=alt.Y('점수:Q', scale=alt.Scale(domain=[0, 100])))
+    hover = alt.selection_point(fields=['날짜'], nearest=True, on='pointerover', empty=False)
+    pts = alt.Chart(d).mark_point(size=70, filled=True, color='#1d2330').encode(
+        x='날짜:T', y='점수:Q', opacity=alt.condition(hover, alt.value(1), alt.value(0)),
+        tooltip=[alt.Tooltip('날짜:T', format='%Y-%m-%d'), alt.Tooltip('점수:Q', format='.1f')]).add_params(hover)
+    return (band + rule + line + pts).properties(height=300)
+
 
 t1, t2, t3, t4 = st.tabs(['오늘 시장', '종목', '주봉 차트', '수집 점검'])
 
@@ -128,33 +204,83 @@ with t1:
         except Exception:
             return None
 
-    c = st.columns(4)
+    # ---- 공포와 탐욕 (맨 위, 가장 자세히)
+    st.subheader('공포와 탐욕')
     tot = fg[fg['구분'] == '종합'].iloc[0] if len(fg) and (fg['구분'] == '종합').any() else None
-    if tot is not None:
-        s, prev = num(pd.Series([tot['점수'], tot['전일']]))
-        c[0].metric('공포와 탐욕', f'{s:.1f}  {tot["판정"]}', f'{s - prev:+.1f} (전일 대비)' if pd.notna(prev) else None)
+    if tot is None:
+        st.info('이 날짜의 공포탐욕 자료가 없습니다.')
+    else:
+        s = num(pd.Series([tot['점수']])).iloc[0]
+        left, right = st.columns([1, 2], gap='large')
+        with left:
+            st.html(gauge_svg(s, tot['판정']))
+            trs = ''
+            for k in ['전일', '1주 전', '1개월 전', '1년 전']:
+                pv = num(pd.Series([tot.get(k)])).iloc[0]
+                if pd.isna(pv):
+                    continue
+                dv = s - pv
+                dc = '#c0392b' if dv < 0 else '#2e7d32'
+                trs += (f'<tr><td style="padding:4px 8px;color:#6b7280">{k}</td>'
+                        f'<td style="padding:4px 8px;text-align:right;font-weight:700;color:{fg_color(pv)}">{pv:.1f}</td>'
+                        f'<td style="padding:4px 8px;color:{fg_color(pv)};font-size:13px">{fg_label(pv)}</td>'
+                        f'<td style="padding:4px 8px;text-align:right;color:{dc}">지금 {dv:+.1f}</td></tr>')
+            if trs:
+                st.html('<table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;'
+                        f'font-size:15px">{trs}</table>')
+        with right:
+            fh = series('공포탐욕', 'Fear & Greed Index')
+            if len(fh):
+                span = st.segmented_control('기간', ['1달', '3달', '6달', '1년'], default='3달', key='fgspan',
+                                            label_visibility='collapsed')
+                months = {'1달': 1, '3달': 3, '6달': 6, '1년': 12}[span or '3달']
+                st.altair_chart(fg_chart(fh[fh.index >= fh.index[-1] - pd.DateOffset(months=months)]), width='stretch')
+                st.caption(f'CNN 공포탐욕 종합 점수 추이. 띠 색: 0–25 극단적 공포 · 25–45 공포 · 45–55 중립 · 55–75 탐욕 · 75–100 극단적 탐욕. '
+                           f'점선 70 = 의장 기준(70 넘으면 현금↑). 최근 1년 최저 {fh.min():.1f}({fh.idxmin():%Y-%m-%d}), 최고 {fh.max():.1f}({fh.idxmax():%Y-%m-%d}).')
+            else:
+                st.caption('추이 자료는 다음 수집부터 쌓입니다.')
+
+        st.markdown('**7개 지표** — 점수(0–100)와 원천값 최근 1달')
+        f7 = fg[fg['구분'] == '지표']
+        cols = st.columns(4)
+        for i, (_, r) in enumerate(f7.iterrows()):
+            sc = num(pd.Series([r['점수']])).iloc[0]
+            raw = series('공포탐욕', r['지표'])
+            with cols[i % 4].container(border=True):
+                st.markdown(f'**{r["지표"].split(". ", 1)[-1]}**')
+                st.html(score_bar(sc, r['판정']))
+                if len(raw):
+                    st.metric(r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2), chart_data=raw.tolist(), help=r.get('원천값 설명'),
+                              label_visibility='visible')
+                if pd.notna(r.get('해석')):
+                    st.caption(r['해석'])
+
+    st.divider()
+    c = st.columns(3)
     if len(m) and '코스피 50일 이격도' in m.index:
         r = m.loc['코스피 50일 이격도']
-        c[1].metric(f'{SIG_ICON.get(r["신호"], "")} 코스피 50일 이격도'.strip(), fmt(num(pd.Series([r['값']])).iloc[0], 1),
+        c[0].metric(f'{SIG_ICON.get(r["신호"], "")} 코스피 50일 이격도'.strip(), fmt(num(pd.Series([r['값']])).iloc[0], 1),
+                    chart_data=spark('매크로', '코스피 50일 이격도'),
                     help=f'125 이상 과열 주의, 130 이상 과열. {r["비고"] if pd.notna(r["비고"]) else ""}')
         if pd.notna(r['표시']):
-            c[1].caption(r['표시'])
+            c[0].caption(r['표시'])
     vix = risk[risk['항목'] == 'VIX'] if len(risk) else pd.DataFrame()
     if len(vix):
         v = vix.iloc[0]
-        c[2].metric('VIX', fmt(num(pd.Series([v['값']])).iloc[0]),
+        c[1].metric('VIX', fmt(num(pd.Series([v['값']])).iloc[0]),
                     f'{num(pd.Series([v["값"]])).iloc[0] - num(pd.Series([v["1주 전"]])).iloc[0]:+.2f} (1주 전 대비)',
-                    delta_color='inverse')
+                    delta_color='inverse', chart_data=spark('리스크', 'VIX'))
     if mget('미국 10년') is not None:
         r = m.loc['미국 10년']
-        c[3].metric(f'{SIG_ICON.get(r["신호"], "")} 미국 10년'.strip(), fmt(mget('미국 10년'), 3, '%'),
+        c[2].metric(f'{SIG_ICON.get(r["신호"], "")} 미국 10년'.strip(), fmt(mget('미국 10년'), 3, '%'),
                     f'{mget("미국 10년", "1달"):+.2f}%p (1달)' if pd.notna(mget('미국 10년', '1달')) else None,
-                    delta_color='inverse')
+                    delta_color='inverse', chart_data=spark('매크로', '미국 10년'))
 
     st.subheader('지수')
     if len(mac):
         ix = mac[(mac['구분'] == '지수') & (mac['항목'] != '코스피 50일 이격도')].copy()
-        ix = ix[['항목', '값', '기준일', 'YTD', '1달', '최고 대비(%)', '표시', '의장 기준(참고)']]
+        ix['최근 1달'] = ix['항목'].map(lambda k: spark('매크로', k) or None)
+        ix = ix[['항목', '값', '최근 1달', '기준일', 'YTD', '1달', '최고 대비(%)', '표시', '의장 기준(참고)']]
         for k in ['값', 'YTD', '1달', '최고 대비(%)']:
             ix[k] = num(ix[k])
         ix[['표시', '의장 기준(참고)']] = ix[['표시', '의장 기준(참고)']].fillna('')
@@ -162,7 +288,8 @@ with t1:
         st.dataframe(
             ix.style.map(updown, subset=['YTD(%)', '1달(%)']).format(
                 {'값': '{:,.2f}', 'YTD(%)': '{:+.1f}', '1달(%)': '{:+.1f}', '사상 최고 대비(%)': '{:+.1f}'}, na_rep='—'),
-            hide_index=True, width='stretch')
+            hide_index=True, width='stretch',
+            column_config={'최근 1달': st.column_config.LineChartColumn('최근 1달', width='small')})
 
     def tiles(grp, dec=2):
         g = mac[mac['구분'] == grp] if len(mac) else pd.DataFrame()
@@ -180,33 +307,28 @@ with t1:
                                                f'YTD {ytd:+.{2 if pp else 1}f}{r["변화 단위"]}' if pd.notna(ytd) else None,
                                                f'기준일 {r["기준일"]}'] if pd.notna(x) and x)
             cols[i % 4].metric(f'{SIG_ICON.get(r["신호"], "")} {r["항목"]}'.strip(), shown, delta,
-                               delta_color='off' if grp in ('환율', '원자재') else 'inverse', help=note or None)
+                               delta_color='off' if grp in ('환율', '원자재') else 'inverse', help=note or None,
+                               chart_data=spark('매크로', r['항목']))
 
     for grp, dec in [('환율', 2), ('금리', 3), ('물가', 2), ('성장·고용', 2), ('원자재', 1)]:
         st.subheader(grp)
         tiles(grp, dec)
-    st.caption('🔴🟠🟢 표시는 의장 기준이 있는 항목에만 붙습니다. 칸 위에 마우스를 올리면 기준과 기준일이 보입니다. '
-               '월간 지표(물가·고용)의 1달은 직전 발표 대비입니다.')
-
-    st.subheader('공포와 탐욕 — 7개 지표')
-    if len(fg):
-        f7 = fg[fg['구분'] == '지표'][[x for x in ['지표', '점수', '판정', '해석'] if x in fg]].copy()
-        f7['점수'] = num(f7['점수'])
-        st.dataframe(f7, hide_index=True, width='stretch',
-                     column_config={'점수': st.column_config.ProgressColumn('점수', min_value=0, max_value=100, format='%.1f'),
-                                    '해석': st.column_config.TextColumn('해석', width='large')})
+    st.caption('작은 선은 최근 1달 값입니다(월간·주간 지표는 최근 13번 발표). 🔴🟠🟢 표시는 의장 기준이 있는 항목에만 붙습니다. '
+               '칸 위에 마우스를 올리면 기준과 기준일이 보입니다. 월간 지표(물가·고용)의 1달은 직전 발표 대비입니다.')
 
     st.subheader('리스크')
     if len(risk):
         rk = risk.copy()
         rk['신호'] = rk['신호'].map(lambda x: f'{SIG_ICON[x]} {x}' if x in SIG_ICON else '')
         rk['기준·메모'] = rk[['표시', '의장 기준(참고)', '일반 기준(참고)']].bfill(axis=1).iloc[:, 0]
-        rk = rk[['구분', '항목', '값', '단위', '1주 전', '1달 전', '기준일', '신호', '기준·메모', '비고']]
+        rk['최근 1달'] = rk['항목'].map(lambda k: spark('리스크', k) or None)
+        rk = rk[['구분', '항목', '값', '최근 1달', '단위', '1주 전', '1달 전', '기준일', '신호', '기준·메모', '비고']]
         rk[['단위', '기준일', '기준·메모', '비고']] = rk[['단위', '기준일', '기준·메모', '비고']].fillna('')
         for k in ['값', '1주 전', '1달 전']:
             rk[k] = num(rk[k])
         st.dataframe(rk, hide_index=True, width='stretch', height=38 * (len(rk) + 1),
-                     column_config={'기준·메모': st.column_config.TextColumn(width='large')})
+                     column_config={'기준·메모': st.column_config.TextColumn(width='large'),
+                                    '최근 1달': st.column_config.LineChartColumn('최근 1달', width='small')})
 
 # ---------------------------------------------------------------- 2. 종목
 def stock_table():
