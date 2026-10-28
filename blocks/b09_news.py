@@ -12,7 +12,7 @@
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_뉴스.csv (시각, 제목, 요약, 링크)
 #              수집데이터/YYYYMMDD/YYYYMMDD_일정.csv (날짜, 시각, 구분, 대상, 내용, 출처)
 #   쓰는 위원: 뉴스보이(간밤 뉴스·오늘 일정), 섹터 위원(담당 종목 실적 일정)
-#   고칠 곳  : 뉴스 건수 NEWS_MAX, 일정 기간 SCHED_DAYS, 미국 지표 목록 US_RELEASES
+#   고칠 곳  : 뉴스 건수 NEWS_MAX, 일정 기간 SCHED_DAYS, 미국 지표 목록 US_RELEASES, 해마다 FOMC_DAYS
 #   실패하면 : 소스별로 건너뛰고 점검 파일에 남긴다
 # ======================================================================
 import html as _h, re as _re, xml.etree.ElementTree as _ET, zipfile as _zip
@@ -23,19 +23,21 @@ NEWS_RSS = 'https://www.yna.co.kr/rss/international.xml'
 NEWS_MAX = 10
 SCHED_DAYS = 7
 ET_TZ = ZoneInfo('America/New_York')
-US_RELEASES = [   # (FRED 발표 이름에 들어 있는 말, 한국어 이름, 통상 발표 시각(미국 동부))
-    ('Consumer Price Index', '미국 CPI(소비자물가)', '08:30'),
-    ('Producer Price Index', '미국 PPI(생산자물가)', '08:30'),
-    ('Employment Situation', '미국 고용보고서(비농업·실업률)', '08:30'),
-    ('Personal Income and Outlays', '미국 PCE 물가·개인소득', '08:30'),
-    ('Gross Domestic Product', '미국 GDP', '08:30'),
-    ('Advance Monthly Sales for Retail', '미국 소매판매', '08:30'),
-    ('Unemployment Insurance Weekly Claims', '미국 신규 실업수당 청구', '08:30'),
-    ('Job Openings and Labor Turnover', '미국 JOLTS(구인)', '10:00'),
-    ('University of Michigan', '미시간대 소비자심리', '10:00'),
-    ('Industrial Production', '미국 산업생산', '09:15'),
-    ('FOMC', 'FOMC 금리 결정', '14:00'),
-]
+US_RELEASES = {   # FRED 발표 이름(정확히 같아야 함) → (한국어 이름, 통상 발표 시각(미국 동부))
+    'Consumer Price Index': ('미국 CPI(소비자물가)', '08:30'),
+    'Producer Price Index': ('미국 PPI(생산자물가)', '08:30'),
+    'Employment Situation': ('미국 고용보고서(비농업·실업률)', '08:30'),
+    'Personal Income and Outlays': ('미국 PCE 물가·개인소득', '08:30'),
+    'Gross Domestic Product': ('미국 GDP', '08:30'),
+    'Advance Monthly Sales for Retail and Food Services': ('미국 소매판매', '08:30'),
+    'Unemployment Insurance Weekly Claims Report': ('미국 신규 실업수당 청구', '08:30'),
+    'Job Openings and Labor Turnover Survey': ('미국 JOLTS(구인)', '10:00'),
+    'Surveys of Consumers': ('미시간대 소비자심리', '10:00'),
+    'G.17 Industrial Production and Capacity Utilization': ('미국 산업생산', '09:15'),
+}
+# FOMC 금리 결정일(회의 둘째 날, 미국 동부 14:00 발표). FRED 달력에는 매일 나와 쓸 수 없어 연준 발표 일정을 적어 둔다.
+# 해마다 연준 누리집(federalreserve.gov, FOMC 일정)을 보고 고친다.
+FOMC_DAYS = ['2026-01-28', '2026-03-18', '2026-04-29', '2026-06-17', '2026-07-29', '2026-09-16', '2026-10-28', '2026-12-09']
 WD = '월화수목금토일'
 today = NOW.date()
 until = today + dt.timedelta(days=SCHED_DAYS)
@@ -99,10 +101,11 @@ def _when(text):
             d = dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
         except ValueError:
             continue
-        if d >= today and (best is None or d < best[0]):
-            tm = TIME_RE.search(text[m.end():m.end() + 40])
-            hm = f'{int(tm.group(1)):02d}:{tm.group(2) or "00"}' if tm and int(tm.group(1)) < 24 else ''
-            best = (d, hm)
+        if d < today or (best and (d > best[0] or (d == best[0] and best[1]))):
+            continue            # 더 이른 날짜를 이미 찾았거나, 같은 날짜에 시각까지 찾았으면 넘어간다
+        tm = TIME_RE.search(text[m.end():m.end() + 40])
+        hm = f'{int(tm.group(1)):02d}:{tm.group(2) or "00"}' if tm and int(tm.group(1)) < 24 else ''
+        best = (d, hm)
     return best
 
 
@@ -130,6 +133,9 @@ try:
             nm = x.get('report_nm', '')
             rdate = dt.datetime.strptime(x['rcept_dt'], '%Y%m%d').date()
             if '잠정' in nm and '실적' in nm and rdate >= today - dt.timedelta(days=1):
+                if ('잠정', rdate) in seen:      # 자회사 실적 공시가 여러 건 나와도 한 줄만
+                    continue
+                seen.add(('잠정', rdate))
                 _add(rdate, '', '한국 실적', s['정식 종목명'], f'공시됨: {nm.strip()}', f'DART {x["rcept_no"]}', s['보유/관심'])
                 n_found += 1
                 continue
@@ -193,20 +199,23 @@ try:
     if r is None:
         raise RuntimeError('FRED 응답 없음')
     n_found, seen = 0, set()
-    for x in r.json().get('release_dates', []):
-        for key, ko, hm in US_RELEASES:
-            if key.lower() in x.get('release_name', '').lower() and (x['date'], ko) not in seen:
-                seen.add((x['date'], ko))
-                d = dt.date.fromisoformat(x['date'])
-                h, m = map(int, hm.split(':'))
-                kst = dt.datetime(d.year, d.month, d.day, h, m, tzinfo=ET_TZ).astimezone(KST)
-                if kst.date() > until:
-                    continue
-                SCHED.append({'날짜': kst.strftime('%Y-%m-%d'), '요일': WD[kst.weekday()],
-                              '시각(한국)': kst.strftime('%H:%M') + ' 통상', '구분': '미국 지표', '대상': ko,
-                              '보유/관심': '', '내용': x['release_name'], '출처': 'FRED 발표 달력'})
-                n_found += 1
-                break
+    rel = [(x['date'], x.get('release_name', ''), 'FRED 발표 달력') for x in r.json().get('release_dates', [])
+           if x.get('release_name') in US_RELEASES]
+    rel += [(d, 'FOMC', '연준 FOMC 일정') for d in FOMC_DAYS]
+    for day_s, name, src in rel:
+        ko, hm = US_RELEASES[name] if name in US_RELEASES else ('FOMC 금리 결정', '14:00')
+        if (day_s, ko) in seen:
+            continue
+        seen.add((day_s, ko))
+        d = dt.date.fromisoformat(day_s)
+        h, m = map(int, hm.split(':'))
+        kst = dt.datetime(d.year, d.month, d.day, h, m, tzinfo=ET_TZ).astimezone(KST)
+        if not today <= kst.date() <= until:
+            continue
+        SCHED.append({'날짜': kst.strftime('%Y-%m-%d'), '요일': WD[kst.weekday()],
+                      '시각(한국)': kst.strftime('%H:%M') + ' 통상', '구분': '미국 지표', '대상': ko,
+                      '보유/관심': '', '내용': name, '출처': src})
+        n_found += 1
     us_msg = f'미국 지표 일정 {n_found}건'
 except Exception as e:
     us_msg = f'미국 지표 일정 실패({type(e).__name__} {e})'
