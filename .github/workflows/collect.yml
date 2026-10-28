@@ -2,6 +2,11 @@ name: 콜로키움 자료수집
 
 on:
   workflow_dispatch:          # Actions 화면의 'Run workflow' 버튼으로 손으로 돌리기
+    inputs:
+      blocks:
+        description: '시험으로 돌릴 블록 번호(띄어쓰기로 구분, 예: 9). 비우면 전부'
+        required: false
+        default: ''
   schedule:                   # 매일 아침 7시(한국) 자동 실행 — 8시 프리장 전에 끝나도록 (2026-10-28 의장 결정)
     - cron: '0 22 * * *'      # UTC 22:00 = 한국 07:00 (GitHub 사정으로 몇 분~수십 분 늦을 수 있음)
 
@@ -31,4 +36,5 @@ jobs:
           SEC_EMAIL: ${{ secrets.SEC_EMAIL }}
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
-        run: python run.py
+          BLOCKS: ${{ github.event.inputs.blocks }}
+        run: python run.py $BLOCKS

@@ -1,9 +1,9 @@
 # ======================================================================
-# [블록 9] 오늘 브리핑 — 그날 파일을 모아 보기 좋은 한 문서로 만든다
+# [블록 10] 오늘 브리핑 — 그날 파일을 모아 보기 좋은 한 문서로 만든다
 #   하는 일  : 오늘 날짜 폴더의 CSV를 읽어 브리핑 HTML을 만들고, 크로미엄이 있으면 PDF로도 바꾼다.
-#              순서: 1 공포와 탐욕 → 2 매크로 → 3 리스크 → 4 보유 종목 → 5 관심 종목
+#              순서: 1 공포와 탐욕 → 2 오늘 일정·간밤 국제 뉴스 → 3 매크로 → 4 리스크 → 5 보유 종목 → 6 관심 종목
 #              색은 각 블록이 적은 '신호' 칸(의장 기준)만 따른다. 브리핑이 따로 판정하지 않는다.
-#   읽는 것  : 오늘 공포탐욕·매크로·리스크·시세·밸류에이션·DART실적·SEC실적.csv (없는 파일은 그 칸만 '—')
+#   읽는 것  : 오늘 공포탐욕·일정·뉴스·매크로·리스크·시세·밸류에이션·DART실적·SEC실적.csv (없는 파일은 그 칸만 '—')
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_브리핑.pdf (드라이브·폰에서 바로 열림), YYYYMMDD_브리핑.html
 #   고칠 곳  : 모양은 CSS, 표 순서는 맨 아래 doc
 # ======================================================================
@@ -73,6 +73,7 @@ def _scale(v):
 try:
     fg, mac, risk = _read('공포탐욕'), _read('매크로'), _read('리스크')
     price, val, dart, secr = _read('시세'), _read('밸류에이션'), _read('DART실적'), _read('SEC실적')
+    sch, news = _read('일정'), _read('뉴스')
     macro_by = {r['항목']: r for r in mac}
 
     # 1. 공포와 탐욕
@@ -91,7 +92,21 @@ try:
     else:
         sec1 = '<p class="mute">공포탐욕 데이터 없음</p>'
 
-    # 2. 매크로
+    # 2. 오늘 일정·간밤 국제 뉴스
+    sch_rows = ''
+    for r in sch:
+        today_row = r['날짜'] == NOW.strftime('%Y-%m-%d')
+        mark = f' <small class="mute">{E(r["보유/관심"])}</small>' if r.get('보유/관심') else ''
+        sch_rows += (f'<tr{" class=today" if today_row else ""}><td>{E(r["날짜"][5:])} ({E(r["요일"])})</td>'
+                     f'<td class="r">{E(r["시각(한국)"])}</td><td class="small mute">{E(r["구분"])}</td>'
+                     f'<td><b>{E(r["대상"])}</b>{mark}</td><td class="small">{E(r["내용"])}</td></tr>')
+    sec_sch = (f'<table class="t"><tr><th>날짜</th><th class="r">시각(한국)</th><th>구분</th><th>대상</th><th>내용</th></tr>{sch_rows}</table>'
+               if sch_rows else '<p class="mute">앞으로 7일 안에 잡힌 일정 없음(또는 수집 실패, 점검 파일 참고)</p>')
+    news_rows = ''.join(f'<tr><td class="small mute">{E(r["시각(한국)"])}</td><td><b>{E(r["제목"])}</b>'
+                        f'<div class="small mute">{E(r["요약"])}</div></td></tr>' for r in news)
+    sec_news = (f'<table class="t">{news_rows}</table>' if news_rows else '<p class="mute">간밤 국제 뉴스 없음(또는 수집 실패)</p>')
+
+    # 3. 매크로
     def sigcls(r):
         return SIG.get(r.get('신호') or '', '')
 
@@ -131,7 +146,7 @@ try:
                     f'<em>{E(note)}</em><i>{E(r["기준일"] or "")}</i></div>')
         return out
 
-    # 3. 리스크
+    # 4. 리스크
     rk_rows, grp = '', None
     for r in risk:
         if r['구분'] != grp:
@@ -146,7 +161,7 @@ try:
                     f'<td class="r mute">{_f(_n(r["1달 전"]), dec)}</td><td class="small mute">{E(r["기준일"] or "")}</td>'
                     f'<td class="small {c}">{E(crit)}{(" · " + E(r["비고"])) if r["비고"] else ""}</td></tr>')
 
-    # 4·5. 종목
+    # 5·6. 종목
     vby = {r['번호']: r for r in val}
     per = {}
     for r in dart + secr:
@@ -216,6 +231,7 @@ h3{{font-size:13px;margin:14px 0 6px;color:var(--mute);font-weight:600}}
 .scale span{{position:absolute;top:13px;font-size:10px;color:var(--mute);transform:translateX(-50%)}}
 .dot{{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}}
 .dot.red{{background:var(--red)}} .dot.amber{{background:#e0a030}} .dot.green{{background:var(--green)}} .dot.none{{background:#cfd4da}}
+tr.today td{{background:#fff8e1}}
 tr.grp td{{background:var(--card);font-weight:700;font-size:12px;padding:4px 6px}}
 .note{{color:var(--mute);font-size:11px;margin-top:6px}}
 footer{{margin-top:28px;border-top:1px solid var(--line);padding-top:8px;color:var(--mute);font-size:11px}}
@@ -224,7 +240,11 @@ footer{{margin-top:28px;border-top:1px solid var(--line);padding-top:8px;color:v
 </style></head><body><div class="page">
 <header><div><h1>콜로키움 아침 브리핑</h1><p>{NOW:%Y년 %m월 %d일} ({wd})</p></div><p>만든 시각 {stamp()} KST</p></header>
 <h2>1. 공포와 탐욕</h2>{sec1}
-<h2>2. 매크로</h2>
+<h2>2. 오늘 일정 · 간밤 국제 뉴스</h2>
+<h3>실적·경제지표 일정 (오늘부터 7일)</h3>{sec_sch}
+<p class="note">한국 실적은 DART 기업설명회·결산실적 예고 공시 본문에서 읽은 날짜·시각. 미국·일본은 야후 예정일. 미국 지표 시각은 통상 발표 시각을 한국 시각으로 바꾼 것.</p>
+<h3>간밤 국제 뉴스 (연합뉴스, 어제 18시 이후)</h3>{sec_news}
+<h2>3. 매크로</h2>
 <h3>지수</h3>
 <table class="t"><tr><th>지수</th><th class="r">종가</th><th>기준일</th><th class="r">YTD</th><th class="r">1달</th><th class="r">사상 최고 대비</th><th>의장 기준</th></tr>{idx}</table>
 {disp}
@@ -234,14 +254,14 @@ footer{{margin-top:28px;border-top:1px solid var(--line);padding-top:8px;color:v
 <h3>성장·고용</h3><div class="tiles">{tiles("성장·고용")}</div>
 <h3>원자재</h3><div class="tiles">{tiles("원자재", 1)}</div>
 <p class="note">YTD는 작년 마지막 거래일 대비, 1달은 한 달 전 대비. 금리는 %p 변화. 월간 지표(물가·고용)의 1달은 직전 발표 대비.</p>
-<h2>3. 리스크</h2>
+<h2>4. 리스크</h2>
 <table class="t"><tr><th>항목</th><th class="r">값</th><th class="r">1주 전</th><th class="r">1달 전</th><th>기준일</th><th>기준·메모</th></tr>{rk_rows}</table>
 <p class="note">점 색은 의장 기준이 있는 항목과 VIX 역전에만 붙습니다. 회색 점은 숫자와 일반 기준만 보여 줍니다.</p>
-<h2>4. 종목 — 보유</h2><table class="t">{thead}{stocks("보유")}</table>
-<h2>5. 종목 — 관심</h2><table class="t">{thead}{stocks("관심")}</table>
+<h2>5. 종목 — 보유</h2><table class="t">{thead}{stocks("보유")}</table>
+<h2>6. 종목 — 관심</h2><table class="t">{thead}{stocks("관심")}</table>
 <p class="note">PER TTM = 최근 4분기 순이익(DART·SEC), 없으면 한투 값(직전 연간). PER 연환산 = 가장 최근 한 분기 순이익 × 4.
 PER 선행 = 야후의 애널리스트 예상 1년 이익 기준(한국 종목은 근거가 불분명해 '참고'). 등락 색은 미국식(초록 상승, 빨강 하락).</p>
-<footer>자료: 야후, 한국투자증권, CNN, FRED, 뉴욕연준, 일본 재무성, DART, SEC · 색과 문구는 의장 기준을 옮긴 것이며 투자 판단이 아닙니다.</footer>
+<footer>자료: 야후, 한국투자증권, CNN, 연합뉴스, FRED, 뉴욕연준, 일본 재무성, DART, SEC · 색과 문구는 의장 기준을 옮긴 것이며 투자 판단이 아닙니다.</footer>
 </div></body></html>'''
     out_html = f'{DAY}/{TODAY}_브리핑.html'
     with open(out_html, 'w', encoding='utf-8') as f:
@@ -259,7 +279,7 @@ PER 선행 = 야후의 애널리스트 예상 1년 이익 기준(한국 종목�
         pdf_ok = True
     except Exception as e:
         print('  PDF 변환 건너뜀:', e)
-    log(f'[9 브리핑] HTML 만듦 | PDF {"만듦" if pdf_ok else "못 만듦(크로미엄 없음)"}')
+    log(f'[10 브리핑] HTML 만듦 | PDF {"만듦" if pdf_ok else "못 만듦(크로미엄 없음)"}')
 except Exception as e:
     traceback.print_exc()
-    log(f'[9 브리핑] 실패: {type(e).__name__} {e}')
+    log(f'[10 브리핑] 실패: {type(e).__name__} {e}')

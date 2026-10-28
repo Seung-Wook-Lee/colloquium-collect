@@ -15,10 +15,11 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 6 | `blocks/b06_dart.py` | 한국 개별주 TTM·연환산 PER (DART) | `_DART실적.csv` |
 | 7 | `blocks/b07_sec.py` | 미국 개별주 TTM·연환산 PER (SEC) | `_SEC실적.csv` |
 | 8 | `blocks/b08_checklist.py` | 리오팀 체크리스트 1~32 | `_시장지표.csv` |
-| 9 | `blocks/b09_briefing.py` | 오늘 브리핑 | `_브리핑.pdf`, `_브리핑.html` |
-| 10 | `blocks/b10_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
+| 9 | `blocks/b09_news.py` | 간밤 국제 뉴스(연합뉴스), 실적·경제지표 일정(DART·야후·FRED) | `_뉴스.csv`, `_일정.csv` |
+| 10 | `blocks/b10_briefing.py` | 오늘 브리핑 | `_브리핑.pdf`, `_브리핑.html` |
+| 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
-새 블록은 블록 10 바로 앞 번호로 파일을 만들고, 맨 위 설명 칸을 같은 양식으로 채웁니다.
+새 블록은 브리핑(블록 10) 앞 번호로 파일을 만들고, 맨 위 설명 칸을 같은 양식으로 채웁니다.
 
 ## 비밀값 (GitHub → Settings → Secrets and variables → Actions)
 `KIS_APP_KEY`, `KIS_APP_SECRET`, `FRED_KEY`, `DART_KEY`, `SEC_EMAIL`, `DRIVE_URL`, `DRIVE_TOKEN`
@@ -26,7 +27,7 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 - `DRIVE_URL`·`DRIVE_TOKEN`은 `apps_script/Code.gs`(드라이브 창구)를 의장님 구글 계정에 배포해서 얻습니다.
 
 ## 실행
-- 손으로: Actions → 콜로키움 자료수집 → Run workflow
+- 손으로: Actions → 콜로키움 자료수집 → Run workflow (블록 칸에 `9`처럼 번호를 넣으면 그 블록만 시험으로 돌림, 비우면 전부)
 - 매일 아침 7시(한국): `.github/workflows/collect.yml`의 `schedule`로 자동 실행 (2026-10-28 켬, 8시 프리장 전에 끝나도록).
 
 ## 화면 (스트림릿)

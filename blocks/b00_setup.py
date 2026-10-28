@@ -2,7 +2,7 @@
 # [블록 0] 준비 — 모든 블록이 쓰는 공통 바탕 (항상 맨 먼저 실행)
 #   하는 일  : 오늘 날짜(한국 시각) 정하기, 키 읽기, 드라이브 파일 준비, 콜로키움 100 종목 목록 읽기
 #              GitHub에서 돌 때: 드라이브 창구(drive.py)로 필요한 파일을 내려받아 work/ 폴더에 두고,
-#                                마지막 블록 10이 결과를 드라이브에 올린다.
+#                                마지막 블록 11이 결과를 드라이브에 올린다.
 #              코랩에서 돌 때  : 드라이브를 연결해 그대로 읽고 쓴다.
 #   읽는 것  : 드라이브 콜로키움/포트폴리오/콜로키움100_유니버스_*.xlsx (가장 최신 파일)
 #              드라이브 콜로키움 수집데이터/00_누적/ (가격 이력, 실적 저장본 등 이어 쓰는 파일 전부)
@@ -20,6 +20,7 @@ NOW = dt.datetime.now(KST)
 TODAY = NOW.strftime('%Y%m%d')
 LOG = []      # 점검 요약 줄
 FATAL = False
+ONLY = globals().get('ONLY', [])   # run.py에 블록 번호를 주면 그 목록(시험 실행), 아니면 빈 목록
 nfc = lambda x: unicodedata.normalize('NFC', x)
 
 
@@ -56,7 +57,7 @@ KEEP = f'{DATA}/00_누적'        # 이어 쓰는 파일(가격 이력, 실적 �
 for p in [UNIV_DIR, DAY, KEEP]:
     os.makedirs(p, exist_ok=True)
 
-SYNC = {}   # GitHub: 내려받은 파일 → 내용 지문 (블록 10이 바뀐 파일만 올린다)
+SYNC = {}   # GitHub: 내려받은 파일 → 내용 지문 (블록 11이 바뀐 파일만 올린다)
 
 
 def _fp(path):
