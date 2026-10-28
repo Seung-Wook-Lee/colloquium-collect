@@ -122,11 +122,11 @@ with st.sidebar:
     if st.button('새로 불러오기', width='stretch'):
         st.cache_data.clear()
         st.rerun()
-    pdf = blob(DAY, '브리핑.pdf')
-    if pdf:
-        st.download_button('브리핑 PDF 받기', pdf, file_name=f'{DAY}_브리핑.pdf', mime='application/pdf',
+    brief = blob(DAY, '브리핑.txt')
+    if brief:
+        st.download_button('브리핑 txt 받기', brief, file_name=f'{DAY}_브리핑.txt', mime='text/plain',
                            width='stretch')
-    st.caption('자료: 야후, 한국투자증권, CNN, FRED, 뉴욕연준, 일본 재무성, DART, SEC\n\n'
+    st.caption('자료: 야후, 한국투자증권, CNN, 연합뉴스, FRED, 뉴욕연준, 일본 재무성, DART, SEC\n\n'
                '색과 문구는 의장 기준을 옮긴 것이며 투자 판단이 아닙니다.')
 
 fg, mac, risk = csv(DAY, '공포탐욕'), csv(DAY, '매크로'), csv(DAY, '리스크')

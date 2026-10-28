@@ -6,7 +6,7 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 ## 블록 (레고처럼 순서대로 실행)
 | 블록 | 파일 | 하는 일 | 만드는 파일 |
 |---|---|---|---|
-| 0 | `blocks/b00_setup.py` | 키 읽기, 드라이브에서 유니버스 엑셀·누적 파일 받기 | — |
+| 0 | `blocks/b00_setup.py` | 키 읽기, 드라이브에서 유니버스 csv·누적 파일 받기 | — |
 | 1 | `blocks/b01_prices.py` | 야후 시세 100종목 | `00_가격이력.csv`, `_시세.csv` |
 | 2 | `blocks/b02_kis.py` | 한투 PER·PBR (막히면 야후로 대체) + 야후 선행 PER | `_밸류에이션.csv` |
 | 3 | `blocks/b03_raw.py` | 야후·FRED·뉴욕연준·일본 재무성·CNN 원자료 | `_연준매크로.csv` |
@@ -15,11 +15,12 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 6 | `blocks/b06_dart.py` | 한국 개별주 TTM·연환산 PER (DART) | `_DART실적.csv` |
 | 7 | `blocks/b07_sec.py` | 미국 개별주 TTM·연환산 PER (SEC) | `_SEC실적.csv` |
 | 8 | `blocks/b08_checklist.py` | 리오팀 체크리스트 1~32 | `_시장지표.csv` |
-| 9 | `blocks/b09_briefing.py` | 오늘 브리핑 | `_브리핑.pdf`, `_브리핑.html` |
+| 9 | `blocks/b09_news.py` | 간밤 국제 뉴스(연합뉴스), 실적·경제지표 일정(DART·야후·FRED) | `_뉴스.csv`, `_일정.csv` |
 | 9 | `blocks/b09_nyx.py` (+ `nyx.py`) | 닉스 팀 7개 기준(지지·저항, 볼린저, RSI, CCI, 스토캐스틱 슬로우, 이격도, 일목)과 차트 패턴, 일봉·주봉 | `_닉스.csv` |
-| 10 | `blocks/b10_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
+| 10 | `blocks/b10_briefing.py` | 오늘 브리핑(텍스트) | `_브리핑.txt` |
+| 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
-새 블록은 블록 10 바로 앞 번호로 파일을 만들고, 맨 위 설명 칸을 같은 양식으로 채웁니다.
+새 블록은 브리핑(블록 10) 앞 번호로 파일을 만들고, 맨 위 설명 칸을 같은 양식으로 채웁니다.
 
 ## 비밀값 (GitHub → Settings → Secrets and variables → Actions)
 `KIS_APP_KEY`, `KIS_APP_SECRET`, `FRED_KEY`, `DART_KEY`, `SEC_EMAIL`, `DRIVE_URL`, `DRIVE_TOKEN`
@@ -27,7 +28,7 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 - `DRIVE_URL`·`DRIVE_TOKEN`은 `apps_script/Code.gs`(드라이브 창구)를 의장님 구글 계정에 배포해서 얻습니다.
 
 ## 실행
-- 손으로: Actions → 콜로키움 자료수집 → Run workflow
+- 손으로: Actions → 콜로키움 자료수집 → Run workflow (블록 칸에 `9`처럼 번호를 넣으면 그 블록만 시험으로 돌림, 비우면 전부)
 - 매일 아침 7시(한국): `.github/workflows/collect.yml`의 `schedule`로 자동 실행 (2026-10-28 켬, 8시 프리장 전에 끝나도록).
 
 ## 화면 (스트림릿)
