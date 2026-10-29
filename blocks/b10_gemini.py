@@ -8,10 +8,11 @@
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_위원_뉴스국장.txt · _위원_피터.txt · _위원_엘피스.txt
 #   비밀값   : GEMINI_API_KEY (없으면 이 블록은 건너뛴다). 모델을 바꾸려면 GEMINI_MODEL
 # ======================================================================
-import time as _time
+import re, time as _time
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '').strip()
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', '').strip() or 'gemini-2.5-flash'
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', '').strip()      # 비우면 키로 쓸 수 있는 최신 Flash 모델을 고른다
+API = 'https://generativelanguage.googleapis.com/v1beta'
 D_PERSONA = '페르소나 스토리'
 
 
@@ -35,23 +36,42 @@ def _cards():
     return 'prompts/위원총괄.txt', open('prompts/위원총괄.txt', encoding='utf-8').read()
 
 
+def _pick_model():
+    """키로 쓸 수 있는 모델 중 최신 Flash(정식판 우선). 모델 이름이 해마다 바뀌어 고정하지 않는다."""
+    r = requests.get(f'{API}/models', headers={'x-goog-api-key': GEMINI_KEY}, params={'pageSize': 1000}, timeout=60)
+    r.raise_for_status()
+    skip = ('lite', 'image', 'tts', 'audio', 'live', 'exp', 'embedding', 'thinking', 'latest')
+    names = [m['name'].split('/')[-1] for m in r.json().get('models', [])
+             if 'generateContent' in m.get('supportedGenerationMethods', [])]
+    flash = [n for n in names if n.startswith('gemini-') and 'flash' in n and not any(k in n for k in skip)]
+
+    def key(n):
+        ver = re.search(r'gemini-(\d+(?:\.\d+)?)', n)
+        return ('preview' not in n, float(ver.group(1)) if ver else 0, -len(n))
+    if flash:
+        return max(flash, key=key)
+    return 'gemini-flash-latest' if 'gemini-flash-latest' in names else names[0]
+
+
 def _ask(prompt, search=False):
     body = {'contents': [{'role': 'user', 'parts': [{'text': prompt}]}],
             'generationConfig': {'temperature': 0.3}}
     if search:
         body['tools'] = [{'google_search': {}}]
-    url = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
+    url = f'{API}/models/{GEMINI_MODEL}:generateContent'
     for n in range(4):
         try:
             r = requests.post(url, headers={'x-goog-api-key': GEMINI_KEY}, json=body, timeout=180)
             if r.status_code in (429, 500, 503) and n < 3:
                 _time.sleep(20 * (n + 1))
                 continue
+            if 400 <= r.status_code < 500:              # 키·모델 이름 문제는 다시 해도 같다
+                raise RuntimeError(f'{r.status_code} {r.text[:150]}')
             r.raise_for_status()
             parts = r.json()['candidates'][0]['content']['parts']
             return ''.join(p.get('text', '') for p in parts).strip()
         except Exception as e:
-            if n == 3:
+            if n == 3 or str(e)[:1] == '4':
                 raise RuntimeError(str(e)[:200]) from None
             _time.sleep(10)
 
@@ -96,6 +116,9 @@ ELPIS_TASK = '''엘피스(리오팀, 기회 종합)로 쓴다. 아래 뉴스 국
 if not GEMINI_KEY:
     log('[10 제미나이 위원] 건너뜀: GEMINI_API_KEY 없음')
 else:
+    if not GEMINI_MODEL:
+        GEMINI_MODEL = _pick_model()
+    print(f'  제미나이 모델: {GEMINI_MODEL}')
     CARDS_NAME, CARDS = _cards()
     brief = _txt('브리핑.txt')
     done, fail, out = [], [], {}
