@@ -12,10 +12,10 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 3 | `blocks/b03_raw.py` | 야후·FRED·뉴욕연준·일본 재무성·CNN 원자료 | `_연준매크로.csv` |
 | 4 | `blocks/b04_macro.py` | 지수·환율·금리·물가·성장·원자재 (YTD, 1달, 사상 최고 대비) | `_매크로.csv` |
 | 5 | `blocks/b05_risk.py` | 공포탐욕+7개 지표 해석, 변동성·신용·스트레스·침체·자금 | `_공포탐욕.csv`, `_리스크.csv` |
-| 6 | `blocks/b06_dart.py` | 한국 개별주 TTM·연환산 PER (DART) | `_DART실적.csv` |
+| 6 | `blocks/b06_dart.py` | 한국 개별주 TTM·연환산 PER, 잠정실적 반영 연환산 PER (DART) | `_DART실적.csv` |
 | 7 | `blocks/b07_sec.py` | 미국 개별주 TTM·연환산 PER (SEC) | `_SEC실적.csv` |
 | 8 | `blocks/b08_checklist.py` | 리오팀 체크리스트 1~32 | `_시장지표.csv` |
-| 9 | `blocks/b09_news.py` | 간밤 국제 뉴스(연합뉴스), 실적·경제지표 일정(DART·야후·FRED) | `_뉴스.csv`, `_일정.csv` |
+| 9 | `blocks/b09_news.py` | 간밤 뉴스(연합뉴스 국제·야후 종목별·CNBC 각 10건), 실적·경제지표 일정(DART·야후·FRED, 간밤 발표 포함) | `_뉴스.csv`, `_일정.csv` |
 | 9 | `blocks/b09_nyx.py` (+ `nyx.py`) | 닉스 팀 7개 기준(지지·저항, 볼린저, RSI, CCI, 스토캐스틱 슬로우, 이격도, 일목)과 차트 패턴, 일봉·주봉 | `_닉스.csv` |
 | 10 | `blocks/b10_briefing.py` | 오늘 브리핑(텍스트) | `_브리핑.txt` |
 | 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |

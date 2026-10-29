@@ -48,7 +48,7 @@ try:
     sch, news = _read('일정'), _read('뉴스')
     wd = '월화수목금토일'[NOW.weekday()]
     out = [f'콜로키움 아침 브리핑 — {NOW:%Y년 %m월 %d일} ({wd})', f'만든 시각 {stamp()} KST',
-           '자료: 야후, 한국투자증권, CNN, 연합뉴스, FRED, 뉴욕연준, 일본 재무성, DART, SEC',
+           '자료: 야후, 한국투자증권, CNN, 연합뉴스, CNBC, FRED, 뉴욕연준, 일본 재무성, DART, SEC',
            '[빨강]·[주황]·[초록]은 의장 기준을 옮긴 것이며 투자 판단이 아닙니다. 등락은 +상승 / -하락.']
 
     # 1. 공포와 탐욕
@@ -75,13 +75,19 @@ try:
         out.append('앞으로 7일 안에 잡힌 일정 없음(또는 수집 실패, 점검 파일 참고)')
     out.append('  ★는 오늘. 한국 실적은 DART 기업설명회·실적예고 공시 본문의 시각, 미국·일본은 야후 예정일, 미국 지표 "통상"은 늘 발표하는 시각.')
     out.append('')
-    out.append('[간밤 국제 뉴스 — 연합뉴스, 어제 18시 이후]')
-    for r in news:
-        out.append(f'- {r["시각(한국)"]} {r["제목"]}')
-        if r.get('요약'):
-            out.append(f'    {r["요약"]}')
-    if not news:
-        out.append('간밤 국제 뉴스 없음(또는 수집 실패)')
+    for src_name, head in [('연합뉴스 국제', '간밤 국제 뉴스 — 연합뉴스, 어제 18시 이후'),
+                           ('야후 종목별', '간밤 종목 뉴스 — 야후 파이낸스, 미국 보유·관심 종목'),
+                           ('CNBC', '간밤 미국 뉴스 — CNBC 주요 뉴스')]:
+        rows = [r for r in news if (r.get('출처') or '연합뉴스 국제') == src_name]
+        out.append(f'[{head}]')
+        for r in rows:
+            who = f'[{r["종목"]}] ' if r.get('종목') else ''
+            out.append(f'- {r["시각(한국)"]} {who}{r["제목"]}')
+            if r.get('요약'):
+                out.append(f'    {r["요약"]}')
+        if not rows:
+            out.append('없음(또는 수집 실패, 점검 파일 참고)')
+        out.append('')
 
     # 3. 매크로
     out += _h('3. 매크로')
@@ -129,6 +135,10 @@ try:
     # 5·6. 종목
     vby = {r['번호']: r for r in val}
     per = {r['번호']: (_n(r.get('PER TTM(시총÷순이익)')), _n(r.get('PER 연환산(최근분기×4)'))) for r in dart + secr}
+    # 잠정실적이 정기보고서보다 새것이면 연환산은 잠정 순이익 × 4 (2026-10-29 의장 지시)
+    pre = {r['번호']: (_n(r.get('PER 연환산(잠정×4)')), r.get('잠정 분기')) for r in dart if r.get('잠정이 더 새것') == '예'}
+    # 한국 PBR은 DART 최신 분기 자본 기준(한투 PBR은 직전 결산 자본이라 이익이 빨리 크는 종목은 크게 높게 나옴)
+    pbr_d = {r['번호']: _n(r.get('PBR(시총÷지배자본)')) for r in dart}
 
     def per_txt(v):
         return '—' if v is None else ('적자' if v < 0 else f'{v:,.1f}')
@@ -141,6 +151,12 @@ try:
             no, v = r['번호'], vby.get(r['번호'], {})
             px, hi52 = _n(r['종가']), _n(v.get('52주 고가'))
             ttm, run = per.get(no, (None, None))
+            run_tag = ''
+            if pre.get(no, (None,))[0] is not None:
+                run, run_tag = pre[no][0], f'(잠정 {pre[no][1]})'
+            pbr, pbr_tag = _n(v.get('PBR')), ''
+            if pbr_d.get(no) is not None:
+                pbr, pbr_tag = pbr_d[no], '(DART)'
             src = ''
             if ttm is None and r['구분'] == '개별주' and _n(v.get('PER')) is not None:
                 ttm, src = _n(v.get('PER')), '(한투)'
@@ -149,7 +165,7 @@ try:
             dec = 0 if r['시장'] in ('한국', '일본') else 2
             rows.append(f'{no}. {r["정식 종목명"]}: {_f(px, dec)} | {_p(_n(r["등락률(%)"]), 2)} | '
                         f'52주 고점 대비 {_p((px / hi52 - 1) * 100 if px and hi52 else None)} | '
-                        f'PER TTM {per_txt(ttm)}{src} · 연환산 {per_txt(run)} · 선행 {fwd_txt} | PBR {_f(_n(v.get("PBR")))}')
+                        f'PER TTM {per_txt(ttm)}{src} · 연환산 {per_txt(run)}{run_tag} · 선행 {fwd_txt} | PBR {_f(pbr)}{pbr_tag}')
         return rows or ['—']
 
     out += _h('5. 종목 — 보유')
@@ -157,6 +173,7 @@ try:
     out += _h('6. 종목 — 관심')
     out += stocks('관심')
     out += ['', 'PER TTM = 최근 4분기 순이익(DART·SEC), 없으면 한투 값(직전 연간). PER 연환산 = 가장 최근 한 분기 순이익 × 4.',
+            '"(잠정 ○Q)"는 정기보고서보다 새 잠정실적 공시의 순이익 × 4. PBR "(DART)"는 최신 분기 자본 기준, 표시 없으면 한투 값.',
             'PER 선행 = 야후의 애널리스트 예상 1년 이익 기준(한국 종목은 근거가 불분명해 "참고").']
     with open(f'{DAY}/{TODAY}_브리핑.txt', 'w', encoding='utf-8') as f:
         f.write('\n'.join(out) + '\n')
