@@ -62,7 +62,7 @@ def _ask(prompt, search=False):
     for n in range(4):
         try:
             r = requests.post(url, headers={'x-goog-api-key': GEMINI_KEY}, json=body, timeout=180)
-            if r.status_code in (429, 500, 503) and n < 3:
+            if r.status_code in (429, 500, 503) and n < (1 if search else 3):
                 _time.sleep(20 * (n + 1))
                 continue
             if 400 <= r.status_code < 500:              # 키·모델 이름 문제는 다시 해도 같다
@@ -71,7 +71,7 @@ def _ask(prompt, search=False):
             parts = r.json()['candidates'][0]['content']['parts']
             return ''.join(p.get('text', '') for p in parts).strip()
         except Exception as e:
-            if n == 3 or str(e)[:1] == '4':
+            if n == 3 or str(e)[:1] == '4' or (search and '429' in str(e)):
                 raise RuntimeError(str(e)[:200]) from None
             _time.sleep(10)
 
@@ -131,7 +131,16 @@ else:
              '\n\n[피터 보고]\n' + out.get('피터', '(없음)'), False)]
     for key, who, task, data, search in plan:
         try:
-            text = _member(who, task, data(), search)
+            note = ''
+            try:
+                text = _member(who, task, data(), search)
+            except RuntimeError as e:
+                if not (search and '429' in str(e)):
+                    raise
+                # 무료 등급은 구글 검색 한도가 작다 → 검색 없이 연합뉴스 목록만으로 다시 쓴다
+                note = '(오늘은 웹 검색 한도에 걸려 연합뉴스 목록만으로 썼습니다)\n'
+                text = _member(who, task + '\n웹 검색은 오늘 쓸 수 없다. 브리핑의 연합뉴스 목록만 쓴다.', data(), False)
+            text = note + text
             out[key] = text
             head = (f'[{who}] {TODAY[:4]}-{TODAY[4:6]}-{TODAY[6:]} 정례 회의 발언 원고\n'
                     f'작성: {stamp()} KST · 제미나이({GEMINI_MODEL}) · 기준 {CARDS_NAME}\n'
