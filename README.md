@@ -15,6 +15,7 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 6 | `blocks/b06_dart.py` | 한국 개별주 TTM·연환산 PER, 잠정실적 반영 연환산 PER (DART) | `_DART실적.csv` |
 | 7 | `blocks/b07_sec.py` | 미국 개별주 TTM·연환산 PER (SEC) | `_SEC실적.csv` |
 | 8 | `blocks/b08_checklist.py` | 리오팀 체크리스트 1~32 | `_시장지표.csv` |
+| 8-리오 | `blocks/b08_rio.py` | 리오 매크로 체크리스트: 7개 항목 꺾임, 국면, 반대 신호 n/7 | `_매크로체크리스트.csv` |
 | 9 | `blocks/b09_news.py` | 간밤 뉴스(연합뉴스 국제·야후 종목별·CNBC 각 10건), 실적·경제지표 일정(DART·야후·FRED, 간밤 발표 포함) | `_뉴스.csv`, `_일정.csv` |
 | 9 | `blocks/b09_nyx.py` (+ `nyx.py`) | 닉스 팀 7개 기준(지지·저항, 볼린저, RSI, CCI, 스토캐스틱 슬로우, 이격도, 일목)과 차트 패턴, 일봉·주봉 | `_닉스.csv` |
 | 10 | `blocks/b10_briefing.py` | 오늘 브리핑(텍스트) | `_브리핑.txt` |
