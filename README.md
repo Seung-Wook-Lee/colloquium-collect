@@ -12,19 +12,22 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 3 | `blocks/b03_raw.py` | 야후·FRED·뉴욕연준·일본 재무성·CNN 원자료 | `_연준매크로.csv` |
 | 4 | `blocks/b04_macro.py` | 지수·환율·금리·물가·성장·원자재 (YTD, 1달, 사상 최고 대비) | `_매크로.csv` |
 | 5 | `blocks/b05_risk.py` | 공포탐욕+7개 지표 해석, 변동성·신용·스트레스·침체·자금 | `_공포탐욕.csv`, `_리스크.csv` |
-| 6 | `blocks/b06_dart.py` | 한국 개별주 TTM·연환산 PER (DART) | `_DART실적.csv` |
+| 6 | `blocks/b06_dart.py` | 한국 개별주 TTM·연환산 PER, 잠정실적 반영 연환산 PER (DART) | `_DART실적.csv` |
 | 7 | `blocks/b07_sec.py` | 미국 개별주 TTM·연환산 PER (SEC) | `_SEC실적.csv` |
 | 8 | `blocks/b08_checklist.py` | 리오팀 체크리스트 1~32 | `_시장지표.csv` |
-| 9 | `blocks/b09_news.py` | 간밤 국제 뉴스(연합뉴스), 실적·경제지표 일정(DART·야후·FRED) | `_뉴스.csv`, `_일정.csv` |
+| 8-리오 | `blocks/b08_rio.py` | 리오 매크로 체크리스트: 7개 항목 꺾임, 국면, 반대 신호 n/7 | `_매크로체크리스트.csv` |
+| 9 | `blocks/b09_news.py` | 간밤 뉴스(연합뉴스 국제·야후 종목별·CNBC 각 10건), 실적·경제지표 일정(DART·야후·FRED, 간밤 발표 포함) | `_뉴스.csv`, `_일정.csv` |
 | 9 | `blocks/b09_nyx.py` (+ `nyx.py`) | 닉스 팀 7개 기준(지지·저항, 볼린저, RSI, CCI, 스토캐스틱 슬로우, 이격도, 일목)과 차트 패턴, 일봉·주봉 | `_닉스.csv` |
 | 9 | `blocks/b09_sector.py` (+ `sector.py`) | 닉스 팀 섹터 순환: 한국 섹터 ETF 14개를 TIGER 200과 비교(초과수익·모멘텀 순위·로테이션 사분면·20주선·7개 기준), 라케시스·클로토·아트로포스 판정(룰 v1, 2026-10-29 의장 승인) | `_섹터.csv`, `_섹터궤적.csv` |
 | 10 | `blocks/b10_briefing.py` | 오늘 브리핑(텍스트) | `_브리핑.txt` |
+| 10 | `blocks/b10_gemini.py` | 제미나이 위원(뉴스 국장, 피터·섹터 데스크, 엘피스) 발언 원고 — 회의실은 그대로 대독. 키 없으면 건너뜀 | `_위원_뉴스국장.txt`, `_위원_피터.txt`, `_위원_엘피스.txt` |
 | 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
 새 블록은 브리핑(블록 10) 앞 번호로 파일을 만들고, 맨 위 설명 칸을 같은 양식으로 채웁니다.
 
 ## 비밀값 (GitHub → Settings → Secrets and variables → Actions)
-`KIS_APP_KEY`, `KIS_APP_SECRET`, `FRED_KEY`, `DART_KEY`, `SEC_EMAIL`, `DRIVE_URL`, `DRIVE_TOKEN`
+`KIS_APP_KEY`, `KIS_APP_SECRET`, `FRED_KEY`, `DART_KEY`, `SEC_EMAIL`, `DRIVE_URL`, `DRIVE_TOKEN`, `GEMINI_API_KEY`
+- `GEMINI_API_KEY`는 Google AI Studio 무료 키. 위원 기준은 드라이브 '페르소나 스토리/위원총괄_Ver.…txt' 최신을 읽고, 창구가 그 폴더를 못 열면 `prompts/위원총괄.txt`를 씁니다.
 - 계좌번호는 넣지 않습니다. 한투는 조회만 합니다.
 - `DRIVE_URL`·`DRIVE_TOKEN`은 `apps_script/Code.gs`(드라이브 창구)를 의장님 구글 계정에 배포해서 얻습니다.
 
