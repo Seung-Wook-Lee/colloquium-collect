@@ -3,6 +3,8 @@
 #   하는 일  : (가) 간밤 뉴스, 어제 저녁 6시(한국) 이후 올라온 것만. 세 곳에서 각각 최대 NEWS_MAX건
 #                   ① 연합뉴스 국제 ② 야후 파이낸스 종목별 뉴스(미국 보유·관심 개별주, 한 종목 최대 2건, 보유 먼저)
 #                   ③ CNBC 주요 뉴스(Top News). 2026-10-29 의장 지시("국제 뉴스를 넓히자, 꼭 넣도록")
+#                   ④ 아침 정리 기사: 국내 언론사의 '뉴욕증시 마감·간밤 해외증시·모닝 브리핑' 기사를 구글 뉴스 검색 RSS로 모은다.
+#                      한 언론사만 막혀도 다른 곳 기사가 잡히는 예비 통로. 2026-10-30 의장 "뉴스블록의 대안을 마련하자"
 #              (나) 국내 실적발표 일정: 한국 개별주의 DART 거래소공시 중 '기업설명회(IR) 개최'·'결산실적공시 예고'를
 #                   찾아 본문에서 날짜·시각을 읽는다. 오늘·어제 나온 '영업(잠정)실적' 공시도 함께 적는다.
 #              (다) 미국·일본 종목 실적발표 일정: 야후 실적 발표일(시각은 한국 시각으로 바꿈)
@@ -11,7 +13,7 @@
 #              (라) 미국 주요 경제지표 발표 일정: FRED 발표 달력(CPI·고용·PCE·GDP·FOMC 등).
 #                   FRED에는 발표 시각이 없어 통상 발표 시각(미국 동부)을 한국 시각으로 바꿔 '통상'이라 적는다.
 #              일정은 오늘부터 SCHED_DAYS일 안의 것만. 판정은 하지 않는다.
-#   소스     : 연합뉴스·야후 종목별·CNBC RSS(키 없음), DART OpenAPI(DART_KEY), 야후(키 없음), FRED API(FRED_KEY)
+#   소스     : 연합뉴스·야후 종목별·CNBC·구글 뉴스 검색 RSS(키 없음), DART OpenAPI(DART_KEY), 야후(키 없음), FRED API(FRED_KEY)
 #   읽는 것  : 수집데이터/00_누적/00_DART_고유번호.csv (블록 6이 만든 종목코드 → DART 고유번호)
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_뉴스.csv (시각, 제목, 요약, 링크, 출처, 종목)
 #              수집데이터/YYYYMMDD/YYYYMMDD_일정.csv (날짜, 시각, 구분, 대상, 내용, 출처)
@@ -26,6 +28,8 @@ from zoneinfo import ZoneInfo
 NEWS_RSS = 'https://www.yna.co.kr/rss/international.xml'
 YAHOO_RSS = 'https://feeds.finance.yahoo.com/rss/2.0/headline'
 CNBC_RSS = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'
+GNEWS_RSS = 'https://news.google.com/rss/search'
+MORNING_QUERIES = ['뉴욕증시 마감', '간밤 해외증시', '모닝 브리핑 증시', '뉴욕마감']   # 아침 정리 기사 검색어 (고칠 곳)
 NEWS_MAX = 10             # 출처마다 최대 건수
 YAHOO_PER_TICKER = 2      # 야후 종목별 뉴스에서 한 종목 최대 건수
 SCHED_DAYS = 7
@@ -126,6 +130,27 @@ try:                                    # ③ CNBC 주요 뉴스
     msgs.append(f'CNBC {len(got)}건')
 except Exception as e:
     msgs.append(f'CNBC 실패({type(e).__name__} {e})')
+try:                                    # ④ 아침 정리 기사 — 구글 뉴스 검색(국내 언론사), 제목 끝 ' - 매체'를 출처로
+    pool, seen, n_fail = [], set(), 0
+    for q in MORNING_QUERIES:
+        try:
+            items = _rss(GNEWS_RSS, '아침 정리', params={'q': f'{q} when:1d', 'hl': 'ko', 'gl': 'KR', 'ceid': 'KR:ko'})
+        except Exception:
+            n_fail += 1
+            continue
+        for x in items:
+            title, _, media = x['제목'].rpartition(' - ')
+            title = title or x['제목']
+            if title in seen:
+                continue
+            seen.add(title)
+            x.update({'제목': title, '종목': media, '요약': ''})   # 구글 요약은 제목 반복이라 비움, 매체는 '종목' 칸에
+            pool.append(x)
+    got = sorted(pool, key=lambda x: x['시각(한국)'], reverse=True)[:NEWS_MAX]
+    news += got
+    msgs.append(f'아침 정리 {len(got)}건' + (f'(검색어 실패 {n_fail})' if n_fail else ''))
+except Exception as e:
+    msgs.append(f'아침 정리 실패({type(e).__name__} {e})')
 pd.DataFrame(news, columns=NEWS_COLS).to_csv(f'{DAY}/{TODAY}_뉴스.csv', index=False, encoding='utf-8-sig')
 news_msg = ', '.join(msgs)
 
