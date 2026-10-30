@@ -3,7 +3,7 @@
 #   읽는 것  : 드라이브 '콜로키움 수집데이터/YYYYMMDD/' 의 CSV·PDF·점검 파일, '00_누적/00_가격이력.csv'
 #              드라이브는 수집 프로그램과 같은 창구(drive.py, 비밀값 DRIVE_URL·DRIVE_TOKEN)로 읽는다.
 #              PC에서 돌릴 때는 환경변수 COLLOQ_DATA 에 '콜로키움 수집데이터' 폴더 경로를 넣으면 그 폴더를 바로 읽는다.
-#   화면     : 오늘 시장 / 회의록 / 종목 / 주봉 차트 / 수집 점검
+#   화면     : 오늘 시장 / 회의록 / 종목 / 섹터 순환 / 주봉 차트 / 수집 점검
 #              회의록은 드라이브 '콜로키움/오늘의 시장해석/' 의 txt(회의록_YYYYMMDD.txt 등)를 그대로 보여 준다.
 #              색과 문구는 수집 블록이 적은 '신호'·'표시' 칸(의장 기준)만 따른다. 화면이 따로 판정하지 않는다.
 #   실행     : streamlit run app/streamlit_app.py
@@ -233,7 +233,8 @@ def fg_chart(h):
     return (band + rule + line + pts).properties(height=300)
 
 
-t1, t5, t2, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', '주봉 차트', '수집 점검'])
+sec, sec_tr = csv(DAY, '섹터'), csv(DAY, '섹터궤적')
+t1, t5, t2, t6, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', '섹터 순환', '주봉 차트', '수집 점검'])
 
 # ---------------------------------------------------------------- 1. 오늘 시장
 with t1:
@@ -444,6 +445,97 @@ with t2:
             hide_index=True, width='stretch', height=min(38 * (len(v) + 1), 900))
         st.caption(f'{len(v)}종목. PER TTM = 최근 4분기 순이익(DART·SEC), 없으면 한투(직전 연간). PER 연환산 = 최근 한 분기 × 4. '
                    'PER 선행 = 야후 애널리스트 예상(한국 종목은 참고). 음수 PER은 적자입니다. 표 머리를 누르면 정렬됩니다.')
+
+# ---------------------------------------------------------------- 섹터 순환
+QUAD_COLOR = {'선도': UP, '약화': '#e8a33d', '침체': DN, '개선': '#2a78d6'}
+
+
+def short(n):
+    for w in ('TIGER ', 'KODEX ', 'PLUS ', 'SOL ', 'RISE ', 'HANARO ', '코리아', '플러스', 'TOP10', 'TOP3', 'TOP2'):
+        n = n.replace(w, '')
+    return n.replace('미국필라델피아반도체나스닥', '미국반도체').replace('글로벌HBM반도체', 'HBM반도체').strip()
+
+
+with t6:
+    if not len(sec):
+        st.info('이 날짜의 섹터 파일이 없습니다(블록 9-섹터는 2026-10-29부터 만듭니다).')
+    else:
+        sec['이름'] = sec['종목'].map(short)
+        jd = sec['판정'].fillna('')
+        names_of = lambda w: ', '.join(sec.loc[jd.str.contains(w), '이름']) or '없음'
+        c = st.columns(4)
+        c[0].metric('20주선 위 섹터', f"{int((sec['20주선_위'] == '위').sum())} / {len(sec)}",
+                    help='국내 섹터 전체의 체력(시장 폭). 0이면 모든 섹터가 중기 하락 추세')
+        c[1].metric('라케시스 · 추세 강함', names_of('라케시스 추세 강함'))
+        c[2].metric('클로토 · 반전 후보', names_of('클로토 반전 후보'))
+        c[3].metric('아트로포스 · 과열·꺾임', str(int(jd.str.contains('아트로포스').sum())) + '개',
+                    help=names_of('아트로포스'))
+        st.caption('닉스 섹터 순환 룰 v1(2026-10-29 의장 승인). 비교 기준은 TIGER 200. 판정은 충족 여부와 근거만이며 비중 결정은 의장이 합니다.')
+
+        if len(sec_tr):
+            tr = sec_tr.merge(sec[['번호', '이름', 'RRG_사분면']], on='번호')
+            dflt = sec.loc[jd.str.contains('클로토 반전 후보|라케시스 추세 강함'), '이름'].tolist()
+            see = st.multiselect('8주 궤적을 볼 섹터', sec['이름'].tolist(), default=dflt,
+                                 placeholder='섹터를 고르면 최근 8주 움직임이 선으로 나옵니다')
+            rng = lambda k: (min(tr[k].min(), 97) - 2, max(tr[k].max(), 103) + 2)
+            (x0, x1), (y0, y1) = rng('RS_Ratio'), rng('RS_Momentum')
+            sx = alt.Scale(domain=[x0, x1], nice=False, zero=False)
+            sy = alt.Scale(domain=[y0, y1], nice=False, zero=False)
+            qc = alt.Color('RRG_사분면:N', scale=alt.Scale(domain=list(QUAD_COLOR), range=list(QUAD_COLOR.values())),
+                           legend=alt.Legend(orient='top', title='지금 사분면'))
+            x = alt.X('RS_Ratio:Q', scale=sx, title='RS-Ratio (100 위 = 반년 평균보다 시장 대비 강함)')
+            y = alt.Y('RS_Momentum:Q', scale=sy, title='RS-Momentum (100 위 = 좋아지는 중)')
+            tip = [alt.Tooltip('이름:N', title='섹터'), alt.Tooltip('주:N', title='주'),
+                   alt.Tooltip('RS_Ratio:Q', format='.1f'), alt.Tooltip('RS_Momentum:Q', format='.1f')]
+            path = alt.Chart(tr[tr['이름'].isin(see)]).mark_line(strokeWidth=2, opacity=0.6).encode(
+                x=x, y=y, color=qc, detail='번호:N', order=alt.Order('몇주전:Q', sort='descending'))
+            dots = alt.Chart(tr[tr['이름'].isin(see) & (tr['몇주전'] > 0)]).mark_circle(opacity=0.45).encode(x=x, y=y, color=qc, size=alt.value(25), tooltip=tip)
+            now = tr[tr['몇주전'] == 0]
+            head = alt.Chart(now).mark_circle(size=140, opacity=1).encode(x=x, y=y, color=qc, tooltip=tip)
+            label = alt.Chart(now).mark_text(align='left', dx=8, fontSize=12).encode(x=x, y=y, text='이름:N')
+            mid = pd.DataFrame({'v': [100]})
+            vline = alt.Chart(mid).mark_rule(color='#9aa0a6').encode(x='v:Q')
+            hline = alt.Chart(mid).mark_rule(color='#9aa0a6').encode(y='v:Q')
+            corner = pd.DataFrame({'x': [x1 - 0.5, x1 - 0.5, x0 + 0.5, x0 + 0.5], 'y': [y1 - 0.5, y0 + 0.5, y0 + 0.5, y1 - 0.5],
+                                   't': ['선도', '약화', '침체', '개선'], 'a': ['right', 'right', 'left', 'left'],
+                                   'b': ['top', 'bottom', 'bottom', 'top']})
+            qtext = alt.layer(*[alt.Chart(corner[corner['t'] == t]).mark_text(
+                fontSize=15, fontWeight='bold', opacity=0.35, align=r.a, baseline=r.b, color=QUAD_COLOR[t]).encode(
+                x=alt.X('x:Q', scale=sx), y=alt.Y('y:Q', scale=sy), text='t:N') for t, r in zip(corner['t'], corner.itertuples())])
+            st.altair_chart((vline + hline + qtext + path + dots + head + label).properties(height=520), width='stretch')
+            st.caption('섹터 로테이션 사분면(주봉, 최근 8주 궤적, 큰 점이 이번 주). 섹터는 대개 선도 → 약화 → 침체 → 개선 → 선도 '
+                       '순서로 시계방향으로 돕니다. 침체 → 개선은 바닥 반전, 선도 → 약화는 꺾임의 첫 신호입니다. '
+                       'RS = 섹터 ÷ TIGER 200, RS-Ratio = RS ÷ 26주 평균, RS-Momentum = RS-Ratio ÷ 4주 전 (원조 RRG 근사식).')
+
+        show = [k for k in ['번호', '이름', '모멘텀순위', '판정', '초과_1개월(%p)', '초과_3개월(%p)', '초과_6개월(%p)',
+                            '초과_12개월(%p)', 'RRG_4주전', 'RRG_사분면', '20주선_위', '20주선_기울기', '52주고점대비(%)',
+                            '3개월저점대비반등(%)', '일_RSI', '일_RSI_단순평균식', '주_RSI', '주_CCI', '주_STO_K',
+                            '주_볼린저_%B', '주_20주_이격도', '주_일목_구름위치', '주_패턴'] if k in sec]
+        tbl = sec[show].rename(columns={'일_RSI': '일 RSI', '일_RSI_단순평균식': '일 RSI(미래에셋식)', '주_RSI': '주 RSI',
+                                        '주_CCI': '주 CCI', '주_STO_K': '주 STO K', '주_볼린저_%B': '주 %B',
+                                        '주_20주_이격도': '20주 이격도', '주_일목_구름위치': '주 일목 구름', '주_패턴': '주봉 패턴'})
+        ex = [k for k in tbl if k.startswith('초과_') or k in ('52주고점대비(%)', '3개월저점대비반등(%)')]
+        for k in ex + ['일 RSI', '일 RSI(미래에셋식)', '주 RSI', '주 CCI', '주 STO K', '주 %B', '20주 이격도']:
+            if k in tbl:
+                tbl[k] = num(tbl[k])
+        qcol = lambda v: f'color:{QUAD_COLOR[v]};font-weight:600' if v in QUAD_COLOR else ''
+        st.dataframe(
+            tbl.style.map(updown, subset=ex).map(qcol, subset=[k for k in ('RRG_4주전', 'RRG_사분면') if k in tbl]).format(
+                {**{k: '{:+.1f}' for k in ex}, '일 RSI': '{:.1f}', '일 RSI(미래에셋식)': '{:.1f}', '주 RSI': '{:.1f}',
+                 '주 CCI': '{:.0f}', '주 STO K': '{:.1f}', '주 %B': '{:.2f}', '20주 이격도': '{:.1f}'}, na_rep='—'),
+            hide_index=True, width='stretch', height=38 * (len(tbl) + 1),
+            column_config={'판정': st.column_config.TextColumn(width='large'),
+                           '주봉 패턴': st.column_config.TextColumn(width='large')})
+        st.caption('모멘텀 순위 = 1·3·6개월 TIGER 200 대비 초과수익 순위의 평균. RSI는 와일더식(판정), 미래에셋식(단순평균) 병기. '
+                   '7개 기준 전체는 같은 날짜 수집데이터의 _섹터.csv에 있습니다.')
+        with st.expander('판정 기준 (룰 v1, 2026-10-29 의장 승인)'):
+            st.markdown(
+                '- **라케시스 추세 강함**: 사분면 선도 + 모멘텀 순위 상위 1/3 + 20주선 위·20주선 상승. 선도인데 20주선 아래면 "관찰".\n'
+                '- **클로토 반전 후보**: 52주 고점 대비 -20% 이하에서 반전 증거 3개 중 2개 이상(1개면 "관찰"). '
+                '① 상대강도 반전(개선, 또는 4주 전 침체·개선 → 선도) ② 주봉 MACD 오실레이터 음수권 상승 전환 '
+                '③ 주봉 바닥 패턴 넥라인 돌파 또는 지지 반등.\n'
+                '- **아트로포스 과열**: 주봉 RSI 70 이상, 20주 이격도 120 이상, 주봉 볼린저 상단 위 중 하나. '
+                '**꺾임 주의**: 4주 전 선도 → 지금 약화·침체, 주봉 MACD 양수권 하락 전환, 주봉 천장 넥라인 이탈 중 하나. 매도 가격은 제시하지 않습니다.')
 
 # ---------------------------------------------------------------- 3. 주봉 차트
 with t3:
