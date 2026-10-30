@@ -30,6 +30,7 @@ YAHOO_RSS = 'https://feeds.finance.yahoo.com/rss/2.0/headline'
 CNBC_RSS = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'
 GNEWS_RSS = 'https://news.google.com/rss/search'
 MORNING_QUERIES = ['뉴욕증시 마감', '간밤 해외증시', '모닝 브리핑 증시', '뉴욕마감']   # 아침 정리 기사 검색어 (고칠 곳)
+MORNING_TITLE = r'뉴욕증시|뉴욕마감|뉴욕 마감|美증시|미 증시|미국 증시|간밤|해외증시|월가|글로벌 마켓'   # 제목에 이 말이 있는 것만
 NEWS_MAX = 10             # 출처마다 최대 건수
 YAHOO_PER_TICKER = 2      # 야후 종목별 뉴스에서 한 종목 최대 건수
 SCHED_DAYS = 7
@@ -141,7 +142,7 @@ try:                                    # ④ 아침 정리 기사 — 구글 �
         for x in items:
             title, _, media = x['제목'].rpartition(' - ')
             title = title or x['제목']
-            if title in seen:
+            if title in seen or not _re.search(MORNING_TITLE, title):
                 continue
             seen.add(title)
             x.update({'제목': title, '종목': media, '요약': ''})   # 구글 요약은 제목 반복이라 비움, 매체는 '종목' 칸에
