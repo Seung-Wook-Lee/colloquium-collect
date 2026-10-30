@@ -1,6 +1,7 @@
 [theme]
 base = "light"
 font = "sans serif"
+greenColor = "#15803d"   # 오름·좋음 표시와 작은 막대 색: 짙은 녹색 (2026-10-31 의장)
 
 [client]
 toolbarMode = "minimal"
