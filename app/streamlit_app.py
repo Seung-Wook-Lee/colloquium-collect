@@ -3,7 +3,7 @@
 #   읽는 것  : 드라이브 '콜로키움 수집데이터/YYYYMMDD/' 의 CSV·PDF·점검 파일, '00_누적/00_가격이력.csv'
 #              드라이브는 수집 프로그램과 같은 창구(drive.py, 비밀값 DRIVE_URL·DRIVE_TOKEN)로 읽는다.
 #              PC에서 돌릴 때는 환경변수 COLLOQ_DATA 에 '콜로키움 수집데이터' 폴더 경로를 넣으면 그 폴더를 바로 읽는다.
-#   화면     : 오늘 시장 / 회의록 / 종목 / 주봉 차트 / 수집 점검
+#   화면     : 오늘 시장 / 회의록 / 종목 / ETF 자금 / 주봉 차트 / 수집 점검
 #              회의록은 드라이브 '콜로키움/오늘의 시장해석/' 의 txt(회의록_YYYYMMDD.txt 등)를 그대로 보여 준다.
 #              색과 문구는 수집 블록이 적은 '신호'·'표시' 칸(의장 기준)만 따른다. 화면이 따로 판정하지 않는다.
 #   실행     : streamlit run app/streamlit_app.py
@@ -233,7 +233,8 @@ def fg_chart(h):
     return (band + rule + line + pts).properties(height=300)
 
 
-t1, t5, t2, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', '주봉 차트', '수집 점검'])
+flow = csv(DAY, 'ETF자금')
+t1, t5, t2, t6, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', 'ETF 자금', '주봉 차트', '수집 점검'])
 
 # ---------------------------------------------------------------- 1. 오늘 시장
 with t1:
@@ -444,6 +445,71 @@ with t2:
             hide_index=True, width='stretch', height=min(38 * (len(v) + 1), 900))
         st.caption(f'{len(v)}종목. PER TTM = 최근 4분기 순이익(DART·SEC), 없으면 한투(직전 연간). PER 연환산 = 최근 한 분기 × 4. '
                    'PER 선행 = 야후 애널리스트 예상(한국 종목은 참고). 음수 PER은 적자입니다. 표 머리를 누르면 정렬됩니다.')
+
+# ---------------------------------------------------------------- ETF 자금
+FLOW_COLS = ['유입_1일', '유입_5일', '유입_20일', '유입_20일_순자산대비(%)', '좌수변화_20일(%)', '순자산']
+
+
+def flow_bars(d, k, unit):
+    """유입(+) 초록, 유출(-) 빨강 가로 막대"""
+    d = d[d[k].notna()].sort_values(k, ascending=False)
+    if not len(d):
+        return None
+    d = d.assign(방향=d[k].map(lambda v: '유입' if v > 0 else '유출'))
+    return alt.Chart(d).mark_bar().encode(
+        x=alt.X(f'{k}:Q', title=f'{k.replace("유입_", "")} 자금유입({unit})'),
+        y=alt.Y('표시:N', sort=None, title=None),
+        color=alt.Color('방향:N', scale=alt.Scale(domain=['유입', '유출'], range=[UP, DN]), legend=None),
+        tooltip=[alt.Tooltip('표시:N', title='ETF'), alt.Tooltip(f'{k}:Q', format=',.1f', title=unit),
+                 alt.Tooltip('순자산:Q', format=',.0f', title=f'순자산({unit})')]).properties(height=22 * len(d) + 30)
+
+
+with t6:
+    if not len(flow):
+        st.info('이 날짜의 ETF 자금 파일이 없습니다(블록 9-자금은 2026-10-31부터 매일 만듭니다).')
+    else:
+        for k in FLOW_COLS:
+            flow[k] = num(flow[k])
+        flow['표시'] = flow.apply(lambda r: r['코드'] if r['시장'] == '미국' else r['이름'], axis=1)
+        mk = st.radio('시장', ['한국', '미국'], horizontal=True, label_visibility='collapsed')
+        v = flow[flow['시장'] == mk]
+        unit = '억원' if mk == '한국' else '백만달러'
+        k = '유입_20일' if v['유입_20일'].notna().any() else '유입_5일' if v['유입_5일'].notna().any() else '유입_1일'
+        x = v[v[k].notna()].sort_values(k, ascending=False)
+        name = lambda r: f"{r['표시']} {r[k]:+,.0f}"
+        c = st.columns(3)
+        span = k.replace('유입_', '')
+        c[0].markdown(f'**{span} 유입 상위**\n\n' + ('\n'.join(f'- {name(r)}' for _, r in x.head(3).iterrows() if r[k] > 0)
+                                                     or '기록 쌓는 중'))
+        c[1].markdown(f'**{span} 유출 상위**\n\n' + ('\n'.join(f'- {name(r)}' for _, r in x.tail(3).iloc[::-1].iterrows()
+                                                              if r[k] < 0) or '없음'))
+        c[2].metric('기록이 있는 ETF', f'{len(x)} / {len(v)}', help='국내 ETF와 SPDR이 아닌 미국 ETF는 2026-10-29부터 기록을 쌓습니다')
+        st.caption(f'자금유입 = ETF 좌수 변화 × NAV ({unit}). 좌수가 늘면 돈이 들어와 새로 설정된 것, 줄면 환매된 것입니다. '
+                   '뉴스 국장이 회의 끝 "더 하실 말씀" 순서에 보고합니다.')
+        if mk == '미국':
+            sect = v[v['코드'].isin(['XLK', 'XLC', 'XLY', 'XLP', 'XLE', 'XLF', 'XLV', 'XLI', 'XLB', 'XLRE', 'XLU'])]
+            ch = flow_bars(sect.assign(표시=sect['코드'] + ' ' + sect['섹터/테마']), k, unit)
+            if ch is not None:
+                st.markdown('**미국 섹터 11개 (SPDR)**')
+                st.altair_chart(ch, width='stretch')
+            rest = v[~v.index.isin(sect.index)]
+            ch = flow_bars(rest, k, unit)
+            if ch is not None:
+                st.markdown('**그 밖의 미국 ETF (콜로키움 100·지수·반도체)**')
+                st.altair_chart(ch, width='stretch')
+        else:
+            ch = flow_bars(v, k, unit)
+            if ch is not None:
+                st.altair_chart(ch, width='stretch')
+        show = [c for c in ['번호', '이름', '코드', '섹터/테마', '순자산', '유입_1일', '유입_5일', '유입_20일',
+                            '유입_20일_순자산대비(%)', '좌수변화_20일(%)', '기록일수', '계산방식', '좌수출처'] if c in v]
+        ex = [c for c in FLOW_COLS if c in show and c != '순자산']
+        st.dataframe(v[show].style.map(updown, subset=ex).format(
+            {'순자산': '{:,.0f}', '유입_1일': '{:+,.1f}', '유입_5일': '{:+,.1f}', '유입_20일': '{:+,.1f}',
+             '유입_20일_순자산대비(%)': '{:+.2f}', '좌수변화_20일(%)': '{:+.2f}'}, na_rep='—'),
+            hide_index=True, width='stretch', height=min(38 * (len(v) + 1), 900))
+        st.caption(f'단위 {unit}. 5일·20일 칸은 기록이 그만큼 쌓여야 채워집니다. 미국 SPDR 펀드(XL*·SPY·SPYM)는 '
+                   'State Street 공식 이력으로 처음부터 채워져 있습니다.')
 
 # ---------------------------------------------------------------- 3. 주봉 차트
 with t3:

@@ -38,6 +38,6 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 ## 화면 (스트림릿)
 
 - 코드: `app/streamlit_app.py` (라이브러리는 `app/requirements.txt`)
-- 탭: 오늘 시장 / 종목(보유·관심·시장 거르기, PER 세 칸) / 주봉 차트(20주·60주선) / 수집 점검
+- 탭: 오늘 시장 / 종목(보유·관심·시장 거르기, PER 세 칸) / ETF 자금(국내·미국 유입·유출 막대, 미국 섹터 11개) / 주봉 차트(20주·60주선) / 수집 점검
 - 자료는 수집 프로그램과 같은 드라이브 창구로 읽습니다. 스트림릿 클라우드 Secrets에 `DRIVE_URL`, `DRIVE_TOKEN` 두 줄을 넣습니다.
 - PC에서 돌릴 때: `COLLOQ_DATA="(드라이브 데스크톱의 콜로키움 수집데이터 폴더)" streamlit run app/streamlit_app.py`
