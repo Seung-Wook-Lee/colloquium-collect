@@ -184,6 +184,47 @@ def spark(kind, name):
     return s.tolist() if len(s) >= 2 and s.nunique() > 1 else None   # 한 달 내내 같은 값(기준금리 등)은 선을 그리지 않는다
 
 
+BAR_COLOR = '#2f8f8a'   # 작은 막대 색: 청록(2026-10-31 의장 예시 그림)
+
+
+def mini_bars(data, h=70):
+    """빈틈 없이 붙은 작은 막대(속을 칠한 선처럼 보이게). 세로축은 값 범위에 맞춰 바닥을 올린다."""
+    v = pd.Series(data, dtype=float).reset_index(drop=True)
+    lo, hi = v.min(), v.max()
+    pad = (hi - lo) * 0.15 or abs(hi) * 0.01 or 1
+    lo -= pad
+    df = pd.DataFrame({'i': range(len(v)), 'v': v})
+    return (alt.Chart(df).mark_bar(color=BAR_COLOR, clip=True, width={'band': 1})
+            .encode(x=alt.X('i:O', axis=None, scale=alt.Scale(paddingInner=0, paddingOuter=0)),
+                    y=alt.Y('v:Q', axis=None, scale=alt.Scale(domain=[lo, hi + pad * 0.2], zero=False)),
+                    y2=alt.datum(lo), tooltip=alt.value(None))
+            .properties(height=h).configure_view(stroke=None))
+
+
+def bars_svg(data, w=160, h=34):
+    """표 칸용 빈틈 없는 작은 막대 그림(data URL). 표 내장 차트는 선·흐린 면뿐이라 그림으로 넣는다."""
+    if not data:
+        return None
+    import base64
+    v = pd.Series(data, dtype=float).dropna().tolist()
+    lo, hi = min(v), max(v)
+    pad = (hi - lo) * 0.15 or abs(hi) * 0.01 or 1
+    lo -= pad
+    bw = w / len(v)
+    rects = ''.join(f'<rect x="{i * bw:.2f}" y="{h - (x - lo) / (hi - lo) * h:.2f}" width="{bw + 0.3:.2f}" '
+                    f'height="{(x - lo) / (hi - lo) * h:.2f}"/>' for i, x in enumerate(v))
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" fill="{BAR_COLOR}">{rects}</svg>'
+    return 'data:image/svg+xml;base64,' + base64.b64encode(svg.encode()).decode()
+
+
+def card(where, label, value, delta=None, data=None, border=True, **kw):
+    """st.metric + 빈틈 없는 작은 막대 (st.metric 내장 막대는 띄엄띄엄이라 따로 그림)"""
+    box = where.container(border=border)
+    box.metric(label, value, delta, **kw)
+    if data:
+        box.altair_chart(mini_bars(data), width='stretch')
+
+
 def fg_color(v):
     return next(c for lo, hi, c, _ in FG_BANDS if v < hi or hi == 100)
 
@@ -306,8 +347,8 @@ with t1:
                     with st.popover('읽는 법', width='stretch'):
                         st.markdown(f'**{key}**\n\n' + FG_HELP[key])
                 if len(raw):
-                    st.metric(r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2), chart_data=raw.tolist(), chart_type='bar', help=r.get('원천값 설명'),
-                              label_visibility='visible')
+                    card(st, r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2), data=raw.tolist(), border=False,
+                         help=r.get('원천값 설명'))
                 if pd.notna(r.get('해석')):
                     st.caption(r['해석'])
 
@@ -315,28 +356,28 @@ with t1:
     c = st.columns(3)
     if len(m) and '코스피 50일 이격도' in m.index:
         r = m.loc['코스피 50일 이격도']
-        c[0].metric(f'{SIG_ICON.get(r["신호"], "")} 코스피 50일 이격도'.strip(), fmt(num(pd.Series([r['값']])).iloc[0], 1),
-                    chart_data=spark('매크로', '코스피 50일 이격도'), chart_type='bar', border=True, height=195,
+        card(c[0], f'{SIG_ICON.get(r["신호"], "")} 코스피 50일 이격도'.strip(), fmt(num(pd.Series([r['값']])).iloc[0], 1),
+                    data=spark('매크로', '코스피 50일 이격도'),
                     help=f'125 이상 과열 주의, 130 이상 과열. {r["비고"] if pd.notna(r["비고"]) else ""}')
         if pd.notna(r['표시']):
             c[0].caption(r['표시'])
     vix = risk[risk['항목'] == 'VIX'] if len(risk) else pd.DataFrame()
     if len(vix):
         v = vix.iloc[0]
-        c[1].metric('VIX', fmt(num(pd.Series([v['값']])).iloc[0]),
+        card(c[1], 'VIX', fmt(num(pd.Series([v['값']])).iloc[0]),
                     f'{num(pd.Series([v["값"]])).iloc[0] - num(pd.Series([v["1주 전"]])).iloc[0]:+.2f} (1주 전 대비)',
-                    delta_color='normal', chart_data=spark('리스크', 'VIX'), chart_type='bar', border=True, height=195)
+                    delta_color='normal', data=spark('리스크', 'VIX'))
     if mget('미국 10년') is not None:
         r = m.loc['미국 10년']
-        c[2].metric(f'{SIG_ICON.get(r["신호"], "")} 미국 10년'.strip(), fmt(mget('미국 10년'), 3, '%'),
+        card(c[2], f'{SIG_ICON.get(r["신호"], "")} 미국 10년'.strip(), fmt(mget('미국 10년'), 3, '%'),
                     ' · '.join(f'{x:+.2f}%p {k}' for x, k in [(day_change(series('매크로', '미국 10년'), True), '1D'),
                                                                (mget('미국 10년', '1달'), '1M')] if x is not None and pd.notna(x)) or None,
-                    delta_color='normal', chart_data=spark('매크로', '미국 10년'), chart_type='bar', border=True, height=195)
+                    delta_color='normal', data=spark('매크로', '미국 10년'))
 
     st.subheader('지수')
     if len(mac):
         ix = mac[(mac['구분'] == '지수') & (mac['항목'] != '코스피 50일 이격도')].copy()
-        ix['최근 1달'] = ix['항목'].map(lambda k: spark('매크로', k) or None)
+        ix['최근 1달'] = ix['항목'].map(lambda k: bars_svg(spark('매크로', k)))
         ix = ix[['항목', '값', '최근 1달', '기준일', 'YTD', '1달', '최고 대비(%)', '표시', '의장 기준(참고)']]
         for k in ['값', 'YTD', '1달', '최고 대비(%)']:
             ix[k] = num(ix[k])
@@ -346,7 +387,7 @@ with t1:
             ix.style.map(updown, subset=['YTD(%)', '1달(%)']).format(
                 {'값': '{:,.2f}', 'YTD(%)': '{:+.1f}', '1달(%)': '{:+.1f}', '사상 최고 대비(%)': '{:+.1f}'}, na_rep='—'),
             hide_index=True, width='stretch',
-            column_config={'최근 1달': st.column_config.LineChartColumn('최근 1달', width='small')})
+            column_config={'최근 1달': st.column_config.ImageColumn('최근 1달', width='medium')})
 
     def tiles(grp, dec=2):
         g = mac[mac['구분'] == grp] if len(mac) else pd.DataFrame()
@@ -368,15 +409,15 @@ with t1:
             note = ' · '.join(str(x) for x in [r['표시'], r['비고'] if r['항목'] != '기준금리(범위)' else None,
                                                f'YTD {ytd:+.{2 if pp else 1}f}{r["변화 단위"]}' if pd.notna(ytd) else None,
                                                f'기준일 {r["기준일"]}'] if pd.notna(x) and x)
-            cols[i % 4].metric(f'{SIG_ICON.get(r["신호"], "")} {r["항목"]}'.strip(), shown, delta,
+            card(cols[i % 4], f'{SIG_ICON.get(r["신호"], "")} {r["항목"]}'.strip(), shown, delta,
                                delta_color='off' if flat else 'normal',
                                delta_arrow='off' if flat else 'auto', help=note or None,
-                               chart_data=spark('매크로', r['항목']), chart_type='bar', border=True, height=195)
+                               data=spark('매크로', r['항목']))
 
     for grp, dec in [('환율', 2), ('금리', 3), ('물가', 2), ('성장·고용', 2), ('원자재', 1)]:
         st.subheader(grp)
         tiles(grp, dec)
-    st.caption('작은 막대는 최근 1달 값입니다(월간·주간 지표는 최근 13번 발표). 🔴🟠🟢 표시는 의장 기준이 있는 항목에만 붙습니다. '
+    st.caption('작은 막대(빈틈 없이 붙인 청록 막대)는 최근 1달 값입니다(월간·주간 지표는 최근 13번 발표). 🔴🟠🟢 표시는 의장 기준이 있는 항목에만 붙습니다. '
                '칸 위에 마우스를 올리면 기준과 기준일이 보입니다. 1D는 직전 관측일 대비, 1M은 1달 전 대비입니다. 월간 지표(물가·고용)는 1D 없이 1M만, 1M은 직전 발표 대비입니다.')
 
     st.subheader('리스크')
@@ -384,14 +425,14 @@ with t1:
         rk = risk.copy()
         rk['신호'] = rk['신호'].map(lambda x: f'{SIG_ICON[x]} {x}' if x in SIG_ICON else '')
         rk['기준·메모'] = rk[['표시', '의장 기준(참고)', '일반 기준(참고)']].bfill(axis=1).iloc[:, 0]
-        rk['최근 1달'] = rk['항목'].map(lambda k: spark('리스크', k) or None)
+        rk['최근 1달'] = rk['항목'].map(lambda k: bars_svg(spark('리스크', k)))
         rk = rk[['구분', '항목', '값', '최근 1달', '단위', '1주 전', '1달 전', '기준일', '신호', '기준·메모', '비고']]
         rk[['단위', '기준일', '기준·메모', '비고']] = rk[['단위', '기준일', '기준·메모', '비고']].fillna('')
         for k in ['값', '1주 전', '1달 전']:
             rk[k] = num(rk[k])
         st.dataframe(rk, hide_index=True, width='stretch', height=38 * (len(rk) + 1),
                      column_config={'기준·메모': st.column_config.TextColumn(width='large'),
-                                    '최근 1달': st.column_config.LineChartColumn('최근 1달', width='small')})
+                                    '최근 1달': st.column_config.ImageColumn('최근 1달', width='medium')})
 
 # ---------------------------------------------------------------- 2. 종목
 def stock_table():
