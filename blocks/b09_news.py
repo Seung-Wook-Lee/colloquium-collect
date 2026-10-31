@@ -10,6 +10,8 @@
 #                   ⑥ DART 공시 제목: 한국 개별주의 어제·오늘 공시 전부. 자사주·배당·소각은 [주주환원], 증자·합병·수주는 [자본·지배구조]
 #                      꼬리표를 달고 먼저 싣는다. 2026-10-31 의장 "주주 환원 같은 건 공시가 뜨잖아, DART도 자주 봐야"
 #                   ⑦ 네이버 뉴스 검색 API: 한국 개별주, 제목+요약(키 NAVER_CLIENT_ID·NAVER_CLIENT_SECRET, 무료 하루 25,000회)
+#                      새 키는 네이버 클라우드 NAVER API HUB에서 발급(한시 무료, 유료 전환 땐 사전 공지)
+#                   무료 한도: API_LIMITS. 80% 넘으면 브리핑 맨 위 [사용량 주의], 95% 넘으면 그 통로를 쉰다(00_누적/00_API사용량.csv)
 #                   ⑧ Finnhub 종목 뉴스: 미국 개별주, 제목+요약(키 FINNHUB_KEY, 무료 분당 60회)
 #                   ⑨ 사건 검색(Tavily): 전일 ±5% 넘게 움직인 개별주만 '종목명 + 급등/급락 이유'로 검색(키 TAVILY_KEY, 무료 월 1,000)
 #                      ⑦⑧⑨는 키가 없으면 건너뛰고 점검 파일에 '건너뜀'으로 남긴다.
@@ -57,6 +59,13 @@ DART_SKIP = r'임원ㆍ주요주주특정증권등소유상황보고서|임원·
 DART_RETURN = r'자기주식|자사주|배당|소각|주주환원|기업가치 ?제고|밸류업'   # [주주환원] 꼬리표 (고칠 곳)
 DART_CAPITAL = r'유상증자|무상증자|전환사채|신주인수권|교환사채|합병|분할|최대주주|대량보유|공개매수|단일판매|공급계약|타법인주식'
 MOVE_PCT = 5.0            # 사건 검색: 전일 등락률 절댓값이 이만큼 넘는 종목만
+API_LIMITS = {   # 무료 한도: 서비스 → (기간 '월'/'일', 한도). 80% 넘으면 브리핑 맨 위에 [사용량 주의] (2026-10-31 의장 "한도 전에 미리 알려줘")
+    'Tavily': ('월', 1000), '네이버 검색': ('일', 25000), 'Finnhub': ('일', 60 * 60 * 24),
+}
+API_WARN_PCT = 80         # 이 비율(%)을 넘으면 경고
+API_STOP_PCT = 95         # 이 비율(%)을 넘으면 그 달(그날)은 그 통로를 쉬어 한도를 넘기지 않는다
+USAGE = {}                # 오늘 쓴 호출 수(서비스별)
+API_WARN = []             # 브리핑 맨 위에 실을 경고
 MOVE_MAX = 10             # 사건 검색: 하루 최대 종목 수(종목당 Tavily 1크레딧, 무료 월 1,000)
 ET_TZ = ZoneInfo('America/New_York')
 US_RELEASES = {   # FRED 발표 이름(정확히 같아야 함) → (한국어 이름, 통상 발표 시각(미국 동부))
@@ -211,6 +220,28 @@ try:                                    # ⑤ 한국·일본 종목별 — 구�
     msgs.append(f'한국·일본 종목별 {len(got)}건' + (f'(조회 실패 {n_fail}종목)' if n_fail else ''))
 except Exception as e:
     msgs.append(f'한국·일본 종목별 실패({type(e).__name__} {e})')
+f_use = f'{KEEP}/00_API사용량.csv'
+use_old = pd.read_csv(f_use, dtype={'날짜': str}, encoding='utf-8-sig') if os.path.exists(f_use) else pd.DataFrame(columns=['날짜', '서비스', '건수'])
+use_old = use_old[use_old['날짜'] != TODAY]       # 같은 날 다시 돌리면 그날 줄은 새로 쓴다
+
+
+def _used(svc):
+    """이번 달(또는 오늘)까지 쓴 양: 누적 파일 + 오늘 지금까지"""
+    per = API_LIMITS[svc][0]
+    pre = TODAY[:6] if per == '월' else TODAY
+    past = use_old[(use_old['서비스'] == svc) & use_old['날짜'].astype(str).str.startswith(pre)]['건수'].sum()
+    return int(past) + USAGE.get(svc, 0)
+
+
+def _room(svc):
+    """한도의 API_STOP_PCT% 전이면 True"""
+    return _used(svc) < API_LIMITS[svc][1] * API_STOP_PCT / 100
+
+
+def _use(svc, n=1):
+    USAGE[svc] = USAGE.get(svc, 0) + n
+
+
 def _tag(nm):
     """공시 제목에 붙일 꼬리표: 주주환원은 의장이 특히 챙김(2026-10-31)"""
     if _re.search(DART_RETURN, nm):
@@ -267,7 +298,14 @@ except Exception as e:
 try:                                    # ⑦ 네이버 뉴스 검색 API — 한국 개별주, 제목+요약
     if not (SEC.get('NAVER_CLIENT_ID') and SEC.get('NAVER_CLIENT_SECRET')):
         raise RuntimeError('네이버 키 없음')
-    hdr = {'X-Naver-Client-Id': SEC['NAVER_CLIENT_ID'], 'X-Naver-Client-Secret': SEC['NAVER_CLIENT_SECRET']}
+    # 2026-07 이후 새 키는 네이버 클라우드 NAVER API HUB에서만 나온다(개발자센터 신규 신청 종료).
+    # HUB 주소를 먼저 쓰고, 안 되면 옛 개발자센터 주소로 한 번 더 시도한다(옛 방식은 2027-06 종료 예정).
+    NAVER_EPS = [('https://naverapihub.apigw.ntruss.com/search/v1/news',
+                  {'X-NCP-APIGW-API-KEY-ID': SEC['NAVER_CLIENT_ID'], 'X-NCP-APIGW-API-KEY': SEC['NAVER_CLIENT_SECRET']}),
+                 ('https://openapi.naver.com/v1/search/news.json',
+                  {'X-Naver-Client-Id': SEC['NAVER_CLIENT_ID'], 'X-Naver-Client-Secret': SEC['NAVER_CLIENT_SECRET']})]
+    if not _room('네이버 검색'):
+        raise RuntimeError('오늘 무료 한도 거의 다 씀')
     kr7 = u[(u['시장'] == '한국') & (u['구분'] == '개별주')]
     kr7 = pd.concat([kr7[kr7['보유/관심'] == '보유'], kr7[kr7['보유/관심'] != '보유']])
     pool, seen, n_fail = [], set(), 0
@@ -275,8 +313,13 @@ try:                                    # ⑦ 네이버 뉴스 검색 API — �
         time.sleep(0.15)
         name = s['정식 종목명']
         try:
-            r = requests.get('https://openapi.naver.com/v1/search/news.json', headers=hdr, timeout=30,
-                             params={'query': f'"{name}"', 'display': 30, 'sort': 'date'})
+            for ep, hdr in list(NAVER_EPS):
+                _use('네이버 검색')
+                r = requests.get(ep, headers=hdr, timeout=30, params={'query': f'"{name}"', 'display': 30, 'sort': 'date'})
+                if r.status_code in (401, 403, 404) and len(NAVER_EPS) > 1:
+                    NAVER_EPS.remove((ep, hdr))      # 이 주소는 이 키로 안 됨 → 다음 주소로, 이후 종목도 그 주소만
+                    continue
+                break
             r.raise_for_status()
             items = r.json().get('items') or []
         except Exception:
@@ -316,6 +359,7 @@ try:                                    # ⑧ Finnhub 종목 뉴스 — 미국 �
     for _, s in us8.iterrows():
         time.sleep(1.1)
         try:
+            _use('Finnhub')
             r = requests.get('https://finnhub.io/api/v1/company-news', timeout=30,
                              params={'symbol': s['yfinance 티커'], 'from': (today - dt.timedelta(days=1)).isoformat(),
                                      'to': today.isoformat(), 'token': SEC['FINNHUB_KEY']})
@@ -364,7 +408,11 @@ try:                                    # ⑨ 사건 검색(Tavily) — 전일 �
             q = f'{name} ({s["yfinance 티커"]}) stock {"jumps" if up else "falls"} why'
         else:
             q = f'{name} 주가 {"급등" if up else "급락"} 이유'
+        if not _room('Tavily'):
+            msgs.append('사건 검색: 이번 달 Tavily 무료 한도 거의 다 써서 쉼')
+            break
         try:
+            _use('Tavily')
             r = requests.post('https://api.tavily.com/search', timeout=60,
                               headers={'Authorization': f'Bearer {SEC["TAVILY_KEY"]}'},
                               json={'query': q, 'topic': 'news', 'days': 2, 'max_results': 3, 'search_depth': 'basic'})
@@ -387,6 +435,18 @@ try:                                    # ⑨ 사건 검색(Tavily) — 전일 �
     msgs.append(f'사건 검색 {len(px)}종목 {len(got)}건' + (f'(검색 실패 {n_fail})' if n_fail else ''))
 except Exception as e:
     msgs.append(f'사건 검색 건너뜀({type(e).__name__} {e})')
+try:                                    # 무료 한도 사용량 누적: 00_누적/00_API사용량.csv, 80% 넘으면 경고
+    use_new = pd.DataFrame([{'날짜': TODAY, '서비스': k, '건수': v} for k, v in USAGE.items()], columns=['날짜', '서비스', '건수'])
+    pd.concat([use_old, use_new], ignore_index=True).to_csv(f_use, index=False, encoding='utf-8-sig')
+    for svc, (per, lim) in API_LIMITS.items():
+        n = _used(svc)
+        if n >= lim * API_WARN_PCT / 100:
+            API_WARN.append(f'{svc} 무료 한도 {per} {lim:,}회 중 {n:,}회 사용({n / lim:.0%})'
+                            + (' — 한도 직전이라 쉬는 중' if n >= lim * API_STOP_PCT / 100 else ''))
+    msgs.append('API 사용 ' + ', '.join(f'{k} {_used(k):,}/{API_LIMITS[k][1]:,}({API_LIMITS[k][0]})' for k in USAGE)
+                + (f' | 경고 {len(API_WARN)}' if API_WARN else ''))
+except Exception as e:
+    msgs.append(f'API 사용량 기록 실패({type(e).__name__} {e})')
 try:                                    # 기업 카드용 누적: 00_누적/00_종목뉴스.csv (링크·제목 중복 제거, ARCHIVE_DAYS일 보관)
     f_arc = f'{KEEP}/00_종목뉴스.csv'
     arc_cols = ['날짜', '번호', '종목', '시각(한국)', '제목', '요약', '출처', '링크']

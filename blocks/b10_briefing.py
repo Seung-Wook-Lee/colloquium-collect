@@ -51,6 +51,8 @@ try:
     out = [f'콜로키움 아침 브리핑 — {NOW:%Y년 %m월 %d일} ({wd})', f'만든 시각 {stamp()} KST',
            '자료: 야후, 한국투자증권, CNN, 연합뉴스, CNBC, 구글 뉴스, 네이버 뉴스, Finnhub, Tavily, FRED, 뉴욕연준, 일본 재무성, DART, SEC',
            '[빨강]·[주황]·[초록]은 의장 기준을 옮긴 것이며 투자 판단이 아닙니다. 등락은 +상승 / -하락.']
+    for w in globals().get('API_WARN') or []:      # 블록 9가 남긴 무료 한도 경고(2026-10-31 의장 "미리미리 알려줘")
+        out.append(f'[사용량 주의] {w}')
 
     # 1. 공포와 탐욕
     out += _h('1. 공포와 탐욕 (CNN Fear & Greed)')
