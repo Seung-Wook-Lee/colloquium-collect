@@ -4,7 +4,7 @@
 #              드라이브는 수집 프로그램과 같은 창구(drive.py, 비밀값 DRIVE_URL·DRIVE_TOKEN)로 읽는다.
 #              PC에서 돌릴 때는 환경변수 COLLOQ_DATA 에 '콜로키움 수집데이터' 폴더 경로를 넣으면 그 폴더를 바로 읽는다.
 #   화면     : 오늘 시장 / 회의록 / 종목 / 섹터 순환 / 주봉 차트 / 수집 점검
-#              회의록은 드라이브 '콜로키움/오늘의 시장해석/' 의 txt(회의록_YYYYMMDD.txt 등)를 그대로 보여 준다.
+#              회의록은 드라이브 '콜로키움/회의록 모음/' 의 txt(회의록_YYYYMMDD.txt 등)를 그대로 보여 준다.
 #              색과 문구는 수집 블록이 적은 '신호'·'표시' 칸(의장 기준)만 따른다. 화면이 따로 판정하지 않는다.
 #   실행     : streamlit run app/streamlit_app.py
 # ======================================================================
@@ -28,7 +28,8 @@ except Exception:
 import drive  # noqa: E402
 
 D_DATA = '콜로키움 수집데이터'
-D_MEET = '콜로키움/오늘의 시장해석'          # 회의록·시장해석 txt
+D_MEET = '콜로키움/회의록 모음'              # 회의록 txt (2026-10-31 '오늘의 시장해석'에서 이름 바꿈)
+D_MEET_OLD = '콜로키움/오늘의 시장해석'
 LOCAL = os.environ.get('COLLOQ_DATA', '').strip()
 KST = dt.timezone(dt.timedelta(hours=9))
 SIG_ICON = {'빨강': '🔴', '주황': '🟠', '초록': '🟢'}
@@ -68,17 +69,23 @@ def blob(day, name):
 
 
 @st.cache_data(ttl=600, show_spinner=False)
+def _meet():
+    """회의록 폴더 경로 (새 이름 폴더가 비어 있으면 옛 이름)"""
+    return D_MEET if drive.ls(D_MEET) else D_MEET_OLD
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def notes():
     """회의록 폴더의 txt 이름 목록 (최근 것 먼저)"""
     if LOCAL:
         return []
-    names = [f['name'] for f in drive.ls(D_MEET) if f['name'].lower().endswith('.txt')]
+    names = [f['name'] for f in drive.ls(_meet()) if f['name'].lower().endswith('.txt')]
     return sorted(names, key=lambda n: (''.join(ch for ch in n if ch.isdigit())[:8], n), reverse=True)
 
 
 @st.cache_data(ttl=600, show_spinner=False)
 def note(name):
-    b = drive.get(f'{D_MEET}/{name}')
+    b = drive.get(f'{_meet()}/{name}')
     return b.decode('utf-8', errors='replace') if b else ''
 
 
@@ -461,7 +468,7 @@ def stock_table():
 
 with t5:
     if LOCAL:
-        st.info('PC 모드에서는 회의록을 읽지 않습니다. 회의록은 드라이브 "콜로키움/오늘의 시장해석" 폴더에 있습니다.')
+        st.info('PC 모드에서는 회의록을 읽지 않습니다. 회의록은 드라이브 "콜로키움/회의록 모음" 폴더에 있습니다.')
     else:
         allnotes = notes()
         mine = [n for n in allnotes if DAY in n]
@@ -474,7 +481,7 @@ with t5:
                                 label_visibility='collapsed')
             with st.container(border=True):
                 st.markdown(note(pick).replace('~', '\\~'))
-            st.caption('드라이브 "콜로키움/오늘의 시장해석" 폴더의 txt를 그대로 보여 줍니다. 회의가 끝나면 회의록_YYYYMMDD.txt로 올라옵니다.')
+            st.caption('드라이브 "콜로키움/회의록 모음" 폴더의 txt를 그대로 보여 줍니다. 회의가 끝나면 회의록_YYYYMMDD.txt로 올라옵니다.')
 
 with t2:
     tb = stock_table()
