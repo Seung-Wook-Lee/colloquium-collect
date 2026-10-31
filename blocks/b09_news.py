@@ -3,6 +3,8 @@
 #   하는 일  : (가) 간밤 뉴스, 어제 저녁 6시(한국) 이후 올라온 것만. 세 곳에서 각각 최대 NEWS_MAX건
 #                   ① 연합뉴스 국제 ② 야후 파이낸스 종목별 뉴스(미국 보유·관심 개별주, 한 종목 최대 2건, 보유 먼저)
 #                   ③ CNBC 주요 뉴스(Top News). 2026-10-29 의장 지시("국제 뉴스를 넓히자, 꼭 넣도록")
+#                   ⑤ 한국·일본 종목별 뉴스: 구글 뉴스 검색 RSS로 개별주 이름을 검색(보유 먼저, 한 종목 최대 2건).
+#                      2026-10-31 추가 — SK하이닉스 10/28 실적처럼 한국 종목 큰 뉴스가 수집에서 빠지던 구멍을 막는다.
 #                   ④ 아침 정리 기사: 국내 언론사의 '뉴욕증시 마감·간밤 해외증시·모닝 브리핑' 기사를 구글 뉴스 검색 RSS로 모은다.
 #                      한 언론사만 막혀도 다른 곳 기사가 잡히는 예비 통로. 2026-10-30 의장 "뉴스블록의 대안을 마련하자"
 #              (나) 국내 실적발표 일정: 한국 개별주의 DART 거래소공시 중 '기업설명회(IR) 개최'·'결산실적공시 예고'를
@@ -33,6 +35,8 @@ MORNING_QUERIES = ['뉴욕증시 마감', '간밤 해외증시', '모닝 브리�
 MORNING_TITLE = r'뉴욕증시|뉴욕마감|뉴욕 마감|美증시|미 증시|미국 증시|간밤|해외증시|월가|글로벌 마켓'   # 제목에 이 말이 있는 것만
 NEWS_MAX = 10             # 출처마다 최대 건수
 YAHOO_PER_TICKER = 2      # 야후 종목별 뉴스에서 한 종목 최대 건수
+ASIA_PER_TICKER = 2       # 한국·일본 종목별(구글 뉴스)에서 한 종목 최대 건수
+ASIA_MAX = 20             # 한국·일본 종목별 전체 최대 건수
 SCHED_DAYS = 7
 ET_TZ = ZoneInfo('America/New_York')
 US_RELEASES = {   # FRED 발표 이름(정확히 같아야 함) → (한국어 이름, 통상 발표 시각(미국 동부))
@@ -152,6 +156,38 @@ try:                                    # ④ 아침 정리 기사 — 구글 �
     msgs.append(f'아침 정리 {len(got)}건' + (f'(검색어 실패 {n_fail})' if n_fail else ''))
 except Exception as e:
     msgs.append(f'아침 정리 실패({type(e).__name__} {e})')
+try:                                    # ⑤ 한국·일본 종목별 — 구글 뉴스 검색, 보유 먼저, 한 종목 최대 ASIA_PER_TICKER건
+    asia = u[u['시장'].isin(['한국', '일본']) & (u['구분'] == '개별주')]
+    asia = pd.concat([asia[asia['보유/관심'] == '보유'], asia[asia['보유/관심'] != '보유']])
+    pool, seen, n_fail = [], set(), 0
+    for _, s in asia.iterrows():
+        time.sleep(0.3)
+        name = s['정식 종목명']
+        try:
+            items = _rss(GNEWS_RSS, f'{s["시장"]} 종목별', name,
+                         params={'q': f'"{name}" when:1d', 'hl': 'ko', 'gl': 'KR', 'ceid': 'KR:ko'})
+        except Exception:
+            n_fail += 1
+            continue
+        k = 0
+        for x in items:
+            title, _, media = x['제목'].rpartition(' - ')
+            title = title or x['제목']
+            if title in seen or name.replace(' ', '') not in title.replace(' ', ''):   # 제목에 종목명이 있는 것만
+                continue
+            seen.add(title)
+            x.update({'제목': f'{title} ({media})' if media else title, '요약': '', '보유': s['보유/관심'] == '보유'})
+            pool.append(x)
+            k += 1
+            if k >= ASIA_PER_TICKER:
+                break
+    pool = sorted(pool, key=lambda x: x['시각(한국)'], reverse=True)
+    pool = sorted(pool, key=lambda x: not x.pop('보유'))
+    got = sorted(pool[:ASIA_MAX], key=lambda x: x['시각(한국)'], reverse=True)
+    news += got
+    msgs.append(f'한국·일본 종목별 {len(got)}건' + (f'(조회 실패 {n_fail}종목)' if n_fail else ''))
+except Exception as e:
+    msgs.append(f'한국·일본 종목별 실패({type(e).__name__} {e})')
 pd.DataFrame(news, columns=NEWS_COLS).to_csv(f'{DAY}/{TODAY}_뉴스.csv', index=False, encoding='utf-8-sig')
 news_msg = ', '.join(msgs)
 
