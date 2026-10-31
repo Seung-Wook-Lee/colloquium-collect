@@ -3,7 +3,8 @@
 #   읽는 것  : 드라이브 '콜로키움 수집데이터/YYYYMMDD/' 의 CSV·PDF·점검 파일, '00_누적/00_가격이력.csv'
 #              드라이브는 수집 프로그램과 같은 창구(drive.py, 비밀값 DRIVE_URL·DRIVE_TOKEN)로 읽는다.
 #              PC에서 돌릴 때는 환경변수 COLLOQ_DATA 에 '콜로키움 수집데이터' 폴더 경로를 넣으면 그 폴더를 바로 읽는다.
-#   화면     : 오늘 시장 / 회의록 / 종목 / 섹터 순환 / 주봉 차트 / 수집 점검
+#   화면     : 오늘 시장 / 회의록 / 종목 / 포트폴리오 / 섹터 순환 / 주봉 차트 / 수집 점검
+#              포트폴리오는 드라이브 '실전 투자 자료'(없으면 '콜로키움/포트폴리오')의 주력포트폴리오_Ver.…csv(종목·비중%만)
 #              회의록은 드라이브 '콜로키움/오늘의 시장해석/' 의 txt(회의록_YYYYMMDD.txt 등)를 그대로 보여 준다.
 #              색과 문구는 수집 블록이 적은 '신호'·'표시' 칸(의장 기준)만 따른다. 화면이 따로 판정하지 않는다.
 #   실행     : streamlit run app/streamlit_app.py
@@ -26,6 +27,7 @@ try:                                        # 스트림릿 클라우드: Secrets
 except Exception:
     pass
 import drive  # noqa: E402
+import portfolio as P  # noqa: E402
 
 D_DATA = '콜로키움 수집데이터'
 D_MEET = '콜로키움/오늘의 시장해석'          # 회의록·시장해석 txt
@@ -285,7 +287,7 @@ def fg_chart(h):
 
 
 sec, sec_tr = csv(DAY, '섹터'), csv(DAY, '섹터궤적')
-t1, t5, t2, t6, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', '섹터 순환', '주봉 차트', '수집 점검'])
+t1, t5, t2, t7, t6, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', '포트폴리오', '섹터 순환', '주봉 차트', '수집 점검'])
 
 # ---------------------------------------------------------------- 1. 오늘 시장
 with t1:
@@ -501,6 +503,207 @@ with t2:
             hide_index=True, width='stretch', height=min(38 * (len(v) + 1), 900))
         st.caption(f'{len(v)}종목. PER TTM = 최근 4분기 순이익(DART·SEC), 없으면 한투(직전 연간). PER 연환산 = 최근 한 분기 × 4. '
                    'PER 선행 = 야후 애널리스트 예상(한국 종목은 참고). 음수 PER은 적자입니다. 표 머리를 누르면 정렬됩니다.')
+
+# ---------------------------------------------------------------- 포트폴리오 (종목·비중%만, 금액 없음)
+PF_DIRS = ['실전 투자 자료', '콜로키움/포트폴리오']    # 앞 폴더부터 찾는다 (드라이브 창구 Code.gs 허용 폴더여야 함)
+GOAL_PCT, GOAL_DAY = 20.0, dt.date(2026, 12, 31)       # 첫 목표(2026-10-31 의장): 연말까지 +20%
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def pf_files():
+    """(폴더, 비중 파일 이름들, 제안비중 파일 이름들) — 최근 버전 먼저"""
+    for d in PF_DIRS:
+        try:
+            names = [f['name'] for f in drive.ls(d)]
+        except Exception:
+            continue
+        hold = sorted([n for n in names if n.startswith('주력포트폴리오_Ver.') and n.endswith('.csv')], reverse=True)
+        prop = sorted([n for n in names if n.startswith('주력포트폴리오_제안비중_Ver.') and n.endswith('.csv')], reverse=True)
+        if hold:
+            return d, hold, prop
+    return None, [], []
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def pf_csv(path):
+    b = drive.get(path)
+    return pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', dtype={'번호': str}) if b else pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False)
+def pf_map():
+    return pd.read_csv(ROOT / 'app' / 'portfolio_map.csv', encoding='utf-8-sig', dtype=str)
+
+
+def ver_date(name):
+    m = pd.Series([name]).str.extract(r'Ver\.(\d{8})')[0].iloc[0]
+    return dt.datetime.strptime(m, '%Y%m%d').date() if isinstance(m, str) else dt.date.today()
+
+
+def hbar(df, cat, val, h=None, color='#2a78d6', fmt_='.1f'):
+    base = alt.Chart(df).encode(y=alt.Y(f'{cat}:N', sort='-x', title=None),
+                                x=alt.X(f'{val}:Q', title=None, axis=alt.Axis(grid=False)))
+    bars = base.mark_bar(color=color, cornerRadiusEnd=3)
+    text = base.mark_text(align='left', dx=4, fontSize=12).encode(text=alt.Text(f'{val}:Q', format=fmt_))
+    return (bars + text).properties(height=h or 28 * len(df) + 10)
+
+
+with t7:
+    folder, hold_names, prop_names = (None, [], []) if LOCAL else pf_files()
+    a, b = st.columns([3, 2])
+    up_h = b.file_uploader('또는 csv 직접 올리기(이 화면에서만 쓰고 저장하지 않음)', type='csv', key='pf_up')
+    hold, prop, src = pd.DataFrame(), pd.DataFrame(), ''
+    if up_h is not None:
+        hold, src = pd.read_csv(up_h, encoding='utf-8-sig', dtype={'번호': str}), up_h.name
+    elif hold_names:
+        src = a.selectbox('포트폴리오 파일', hold_names, help=f'드라이브 "{folder}" 폴더')
+        hold = pf_csv(f'{folder}/{src}')
+        if prop_names:
+            prop = pf_csv(f'{folder}/{prop_names[0]}')
+    if not len(hold):
+        st.info('포트폴리오 csv가 없습니다. 드라이브 "실전 투자 자료" 폴더에 주력포트폴리오_Ver.YYYYMMDD_HHMM.csv'
+                '(칸: 시장, 종목, 구분, 전체비중% …)를 두거나 오른쪽에서 csv를 올려 주세요. '
+                '"실전 투자 자료"를 읽으려면 드라이브 창구(apps_script/Code.gs)를 새 버전으로 배포해야 합니다.')
+    else:
+        try:
+            h = P.load(hold, pf_map())
+        except ValueError as e:
+            st.error(str(e))
+            st.stop()
+        miss = h.loc[h['번호'].isna() & (h['비중'] > 0), '종목'].tolist()
+        st.caption(f'{src} · {len(h)}줄 · 비중 합 {h["비중"].sum():.1f}%'
+                   + (f' · 콜로키움 100에서 못 찾은 종목: {", ".join(miss)} (가격 계산에서 빠짐)' if miss else '')
+                   + (f' · 제안 비중: {prop_names[0]}' if len(prop) else ''))
+        px = prices()
+
+        # ---- 목표 진척
+        st.subheader('첫 목표 진척')
+        c = st.columns([1, 1, 1, 1])
+        base = c[0].date_input('기준일', value=ver_date(src) if src else dt.date.today(),
+                               help='이 날 종가부터 지금까지의 수익률. 지금 비중을 기준일부터 들고 있었다고 봅니다.')
+        contrib, tot, last = P.since(h, px, base) if len(px) else (pd.DataFrame(), float('nan'), None)
+        c[1].metric('기준일 뒤 수익률', fmt(tot, 2, '%'),
+                    help=f'최근 가격 {last.date() if last is not None else "—"} · 현지 통화 기준(환율 미반영)')
+        c[2].metric(f'목표 {GOAL_DAY:%m/%d}까지', f'+{GOAL_PCT:.0f}%',
+                    delta=None if pd.isna(tot) else f'남은 {GOAL_PCT - tot:.1f}%p', delta_color='off')
+        c[3].metric('남은 날', f'{(GOAL_DAY - dt.datetime.now(KST).date()).days}일')
+        if len(contrib):
+            k = contrib.dropna(subset=['기여%p'])
+            with st.expander('종목별 기여(%p) 보기'):
+                st.dataframe(k[['종목', '비중', '기준일 뒤%', '기여%p']].style.map(updown, subset=['기준일 뒤%', '기여%p'])
+                             .format({'비중': '{:.1f}', '기준일 뒤%': '{:+.1f}', '기여%p': '{:+.2f}'}),
+                             hide_index=True, width='stretch')
+
+        # ---- 1. 목표 대비 차이
+        st.subheader('1. 목표 배분 대비 (현금성 30 · 지수 30 · 주식·ETF 40)')
+        tg = P.target_gap(h)
+        mk_w = h.groupby('시장')['비중'].sum().round(1)
+        st.caption('시장 비중: ' + ' · '.join(f'{k} {v:.1f}%' for k, v in mk_w.sort_values(ascending=False).items())
+                   + '. 목표는 시장마다 같은 30/30/40 틀(12/15~12/31 전환, 의장 10/31)입니다.')
+        cols = st.columns(len(tg['시장'].unique()))
+        for col, (mk, g) in zip(cols, tg.groupby('시장', sort=False)):
+            col.markdown(f'**{mk}**')
+            d = g.melt(id_vars='자산군', value_vars=['시장 안%', '목표%'], var_name='구분', value_name='%')
+            ch = alt.Chart(d).mark_bar().encode(
+                y=alt.Y('자산군:N', title=None, sort=list(P.TARGET)), x=alt.X('%:Q', title=None, scale=alt.Scale(domain=[0, 100])),
+                yOffset=alt.YOffset('구분:N', sort=['시장 안%', '목표%']), color=alt.Color('구분:N', scale=alt.Scale(domain=['시장 안%', '목표%'], range=['#2a78d6', '#c7ccd4']),
+                                                legend=alt.Legend(orient='bottom', title=None)),
+                tooltip=['자산군', '구분', alt.Tooltip('%:Q', format='.1f')]).properties(height=170)
+            col.altair_chart(ch, width='stretch')
+            col.dataframe(g[['자산군', '시장 안%', '목표%', '차이%p']].style.map(updown, subset=['차이%p'])
+                          .format({'시장 안%': '{:.1f}', '목표%': '{:.0f}', '차이%p': '{:+.1f}'}),
+                          hide_index=True, width='stretch')
+
+        # ---- 2. 쏠림
+        st.subheader('2. 쏠림 점검')
+        stats, by_desk, by_mk, by_sec = P.concentration(h)
+        c = st.columns(5)
+        for i, (k, v) in enumerate(stats.items()):
+            c[i].metric(k, v if isinstance(v, str) else (f'{v:.1f}%' if '%' in k else f'{v:g}'),
+                        help='비중이 모두 같다면 몇 종목을 든 것과 같은지(HHI 역수)' if k == '실효 종목 수' else None)
+        a, b = st.columns(2)
+        a.markdown('**섹터 데스크별**')
+        a.altair_chart(hbar(by_desk, '데스크', '비중%'), width='stretch')
+        b.markdown('**업종별 (상위 12, 반도체는 하나로)**')
+        b.altair_chart(hbar(by_sec.head(12), '업종', '비중%', color='#1baf7a'), width='stretch')
+
+        # ---- 3. 위험도
+        st.subheader('3. 위험도 (베타 · 최대 낙폭 · 상관)')
+        if not len(px):
+            st.info('가격 이력이 없어 위험도를 계산하지 못했습니다.')
+        else:
+            bt = P.betas(h, px)
+            hb = h.assign(베타=h['yfinance 티커'].map(bt))
+            ok = hb.dropna(subset=['베타'])
+            wbeta = (ok['베타'] * ok['비중']).sum() / ok['비중'].sum() if len(ok) else float('nan')
+            s3 = P.port_series(h, px, 3)
+            s1 = s3[s3.index >= s3.index[-1] - pd.DateOffset(years=1)] if len(s3) else s3
+            dd1, st1, en1 = P.drawdown(s1)
+            dd3, st3, en3 = P.drawdown(s3)
+            c = st.columns(3)
+            c[0].metric('가중 베타', fmt(wbeta, 2), help='종목별 2년 주간 베타(한국=TIGER 200, 미국=SPYM)를 비중으로 평균')
+            c[1].metric('1년 최대 낙폭', fmt(dd1, 1, '%'),
+                        help=f'{st1:%Y-%m-%d} → {en1:%Y-%m-%d}' if st1 is not None else None)
+            c[2].metric('3년 최대 낙폭', fmt(dd3, 1, '%'),
+                        help=f'{st3:%Y-%m-%d} → {en3:%Y-%m-%d}' if st3 is not None else None)
+            if len(s3):
+                dd = (s3 / s3.cummax() - 1).mul(100).rename('낙폭%').reset_index().rename(columns={'index': '날짜'})
+                dd.columns = ['날짜', '낙폭%']
+                st.altair_chart(alt.Chart(dd).mark_area(color=DN, opacity=0.35, line={'color': DN}).encode(
+                    x=alt.X('날짜:T', title=None, axis=alt.Axis(format='%Y-%m', grid=False)),
+                    y=alt.Y('낙폭%:Q', title='고점 대비 %'),
+                    tooltip=[alt.Tooltip('날짜:T', format='%Y-%m-%d'), alt.Tooltip('낙폭%:Q', format='.1f')]
+                ).properties(height=180), width='stretch')
+                st.caption('지금 비중을 3년 동안 그대로 들고 있었다면의 고점 대비 낙폭(현지 통화, 환율 미반영).')
+            a, b = st.columns([3, 2])
+            cm, pairs = P.corr(h, px)
+            if len(cm):
+                long = cm.reset_index(names='종목 1').melt('종목 1', var_name='종목 2', value_name='상관')
+                order = list(cm.columns)
+                a.markdown('**1년 주간 수익률 상관 (비중 1% 이상)**')
+                a.altair_chart(alt.Chart(long).mark_rect().encode(
+                    x=alt.X('종목 2:N', sort=order, title=None, axis=alt.Axis(labelAngle=-60, labelOverlap=False)),
+                    y=alt.Y('종목 1:N', sort=order, title=None, axis=alt.Axis(labelOverlap=False)),
+                    color=alt.Color('상관:Q', scale=alt.Scale(scheme='blueorange', domain=[-1, 1]), legend=None),
+                    tooltip=['종목 1', '종목 2', alt.Tooltip('상관:Q', format='.2f')]).properties(height=22 * len(order) + 20),
+                    width='stretch')
+            b.markdown('**같이 움직이는 묶음 (상관 0.7 이상)**')
+            if len(pairs):
+                b.dataframe(pairs, hide_index=True, width='stretch', height=min(38 * (len(pairs) + 1), 300))
+            else:
+                b.caption('없음')
+            b.markdown('**종목별 베타**')
+            b.dataframe(hb.loc[hb['비중'] > 0, ['종목', '비중', '베타']].sort_values('베타', ascending=False)
+                        .style.format({'비중': '{:.1f}', '베타': '{:.2f}'}, na_rep='—'),
+                        hide_index=True, width='stretch', height=300)
+
+        # ---- 4. 닉스 신호 대조
+        st.subheader('4. 보유 종목 × 닉스 팀 지표')
+        sg = P.signals(h, csv(DAY, '닉스'))
+        if not len(sg):
+            st.info('이 날짜의 닉스 파일이 없습니다.')
+        else:
+            st.dataframe(sg.style.map(updown, subset=['52주 고점 대비%']).format(
+                {'비중%': '{:.1f}', '52주 고점 대비%': '{:+.1f}', '일 RSI': '{:.0f}', '주 RSI': '{:.0f}', '20주 이격도': '{:.0f}',
+                 }, na_rep='—'),
+                hide_index=True, width='stretch', height=min(38 * (len(sg) + 1), 900),
+                column_config={'눈여겨볼 점': st.column_config.TextColumn(width='large')})
+            st.caption('블록 9-닉스 값을 그대로 옮긴 것입니다. "눈여겨볼 점"은 지지·저항 상태, 패턴, 주봉 MACD 방향, '
+                       'RSI 30 이하·70 이상, 볼린저 밖 같은 사실만 적고, 신호 판정은 클로토·라케시스·아트로포스가 회의에서 합니다.')
+
+        # ---- 5. 매매 후보표
+        st.subheader('5. 매매 후보표 (목표 비중 − 지금 비중)')
+        tl = P.trade_list(h, prop)
+        tl = tl[(tl['지금%'] > 0) | (tl.get('제안%', pd.Series(0, index=tl.index)).fillna(0) > 0)
+                | (tl.get('마감 목표%', pd.Series(0, index=tl.index)).fillna(0) > 0)]
+        gapc = [x for x in ('마감까지%p', '제안까지%p') if x in tl]
+        st.dataframe(tl.style.map(updown, subset=gapc + [x for x in ['수익률%'] if x in tl]).format(
+            {x: '{:.1f}' for x in ('지금%', '마감 목표%', '제안%')} | {x: '{:+.1f}' for x in gapc + ['수익률%']}, na_rep='—'),
+            hide_index=True, width='stretch', height=min(38 * (len(tl) + 1), 1000),
+            column_config={'제안 근거': st.column_config.TextColumn(width='large')})
+        st.caption('제안% = 최근 제안비중 csv(위원 회의안). 마감 목표% = 포트폴리오 csv의 마감비율(시장 안 %)을 전체 %로 바꾼 값 '
+                   '(12/15~12/31 전환 목표, 빈칸은 0). 초록은 늘릴 쪽, 빨강은 줄일 쪽. 제안까지 차이가 큰 순서입니다.')
+
 
 # ---------------------------------------------------------------- 섹터 순환
 QUAD_COLOR = {'선도': UP, '약화': '#e8a33d', '침체': DN, '개선': '#2a78d6'}
