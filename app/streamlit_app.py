@@ -3,7 +3,7 @@
 #   읽는 것  : 드라이브 '콜로키움 수집데이터/YYYYMMDD/' 의 CSV·PDF·점검 파일, '00_누적/00_가격이력.csv'
 #              드라이브는 수집 프로그램과 같은 창구(drive.py, 비밀값 DRIVE_URL·DRIVE_TOKEN)로 읽는다.
 #              PC에서 돌릴 때는 환경변수 COLLOQ_DATA 에 '콜로키움 수집데이터' 폴더 경로를 넣으면 그 폴더를 바로 읽는다.
-#   화면     : 오늘 시장 / 회의록 / 종목 / 주봉 차트 / 수집 점검
+#   화면     : 오늘 시장 / 회의록 / 종목 / 섹터 순환 / 주봉 차트 / 수집 점검
 #              회의록은 드라이브 '콜로키움/오늘의 시장해석/' 의 txt(회의록_YYYYMMDD.txt 등)를 그대로 보여 준다.
 #              색과 문구는 수집 블록이 적은 '신호'·'표시' 칸(의장 기준)만 따른다. 화면이 따로 판정하지 않는다.
 #   실행     : streamlit run app/streamlit_app.py
@@ -169,9 +169,60 @@ def series(kind, name):
     return pd.Series(num(t['값']).values, index=pd.to_datetime(t['날짜'])).sort_index().dropna()
 
 
+MONTHLY_GRP = ('물가', '성장·고용')
+
+
+def day_change(s, pp):
+    """직전 관측 대비 변화(1D): %p 항목은 차이, 나머지는 %"""
+    if len(s) < 2 or not s.iloc[-2]:
+        return None
+    return s.iloc[-1] - s.iloc[-2] if pp else (s.iloc[-1] / s.iloc[-2] - 1) * 100
+
+
 def spark(kind, name):
     s = series(kind, name)
     return s.tolist() if len(s) >= 2 and s.nunique() > 1 else None   # 한 달 내내 같은 값(기준금리 등)은 선을 그리지 않는다
+
+
+BAR_COLOR = '#2f8f8a'   # 작은 막대 색: 청록(2026-10-31 의장 예시 그림)
+
+
+def mini_bars(data, h=70):
+    """빈틈 없이 붙은 작은 막대(속을 칠한 선처럼 보이게). 세로축은 값 범위에 맞춰 바닥을 올린다."""
+    v = pd.Series(data, dtype=float).reset_index(drop=True)
+    lo, hi = v.min(), v.max()
+    pad = (hi - lo) * 0.15 or abs(hi) * 0.01 or 1
+    lo -= pad
+    df = pd.DataFrame({'i': range(len(v)), 'v': v})
+    return (alt.Chart(df).mark_bar(color=BAR_COLOR, clip=True, width={'band': 1})
+            .encode(x=alt.X('i:O', axis=None, scale=alt.Scale(paddingInner=0, paddingOuter=0)),
+                    y=alt.Y('v:Q', axis=None, scale=alt.Scale(domain=[lo, hi + pad * 0.2], zero=False)),
+                    y2=alt.datum(lo), tooltip=alt.value(None))
+            .properties(height=h).configure_view(stroke=None))
+
+
+def bars_svg(data, w=160, h=34):
+    """표 칸용 빈틈 없는 작은 막대 그림(data URL). 표 내장 차트는 선·흐린 면뿐이라 그림으로 넣는다."""
+    if not data:
+        return None
+    import base64
+    v = pd.Series(data, dtype=float).dropna().tolist()
+    lo, hi = min(v), max(v)
+    pad = (hi - lo) * 0.15 or abs(hi) * 0.01 or 1
+    lo -= pad
+    bw = w / len(v)
+    rects = ''.join(f'<rect x="{i * bw:.2f}" y="{h - (x - lo) / (hi - lo) * h:.2f}" width="{bw + 0.3:.2f}" '
+                    f'height="{(x - lo) / (hi - lo) * h:.2f}"/>' for i, x in enumerate(v))
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" fill="{BAR_COLOR}">{rects}</svg>'
+    return 'data:image/svg+xml;base64,' + base64.b64encode(svg.encode()).decode()
+
+
+def card(where, label, value, delta=None, data=None, border=True, **kw):
+    """st.metric + 빈틈 없는 작은 막대 (st.metric 내장 막대는 띄엄띄엄이라 따로 그림)"""
+    box = where.container(border=border)
+    box.metric(label, value, delta, **kw)
+    if data:
+        box.altair_chart(mini_bars(data), width='stretch')
 
 
 def fg_color(v):
@@ -233,7 +284,8 @@ def fg_chart(h):
     return (band + rule + line + pts).properties(height=300)
 
 
-t1, t5, t2, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', '주봉 차트', '수집 점검'])
+sec, sec_tr = csv(DAY, '섹터'), csv(DAY, '섹터궤적')
+t1, t5, t2, t6, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', '섹터 순환', '주봉 차트', '수집 점검'])
 
 # ---------------------------------------------------------------- 1. 오늘 시장
 with t1:
@@ -295,8 +347,8 @@ with t1:
                     with st.popover('읽는 법', width='stretch'):
                         st.markdown(f'**{key}**\n\n' + FG_HELP[key])
                 if len(raw):
-                    st.metric(r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2), chart_data=raw.tolist(), chart_type='area', help=r.get('원천값 설명'),
-                              label_visibility='visible')
+                    card(st, r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2), data=raw.tolist(), border=False,
+                         help=r.get('원천값 설명'))
                 if pd.notna(r.get('해석')):
                     st.caption(r['해석'])
 
@@ -304,27 +356,28 @@ with t1:
     c = st.columns(3)
     if len(m) and '코스피 50일 이격도' in m.index:
         r = m.loc['코스피 50일 이격도']
-        c[0].metric(f'{SIG_ICON.get(r["신호"], "")} 코스피 50일 이격도'.strip(), fmt(num(pd.Series([r['값']])).iloc[0], 1),
-                    chart_data=spark('매크로', '코스피 50일 이격도'), chart_type='area', border=True, height=195,
+        card(c[0], f'{SIG_ICON.get(r["신호"], "")} 코스피 50일 이격도'.strip(), fmt(num(pd.Series([r['값']])).iloc[0], 1),
+                    data=spark('매크로', '코스피 50일 이격도'),
                     help=f'125 이상 과열 주의, 130 이상 과열. {r["비고"] if pd.notna(r["비고"]) else ""}')
         if pd.notna(r['표시']):
             c[0].caption(r['표시'])
     vix = risk[risk['항목'] == 'VIX'] if len(risk) else pd.DataFrame()
     if len(vix):
         v = vix.iloc[0]
-        c[1].metric('VIX', fmt(num(pd.Series([v['값']])).iloc[0]),
+        card(c[1], 'VIX', fmt(num(pd.Series([v['값']])).iloc[0]),
                     f'{num(pd.Series([v["값"]])).iloc[0] - num(pd.Series([v["1주 전"]])).iloc[0]:+.2f} (1주 전 대비)',
-                    delta_color='normal', chart_data=spark('리스크', 'VIX'), chart_type='area', border=True, height=195)
+                    delta_color='normal', data=spark('리스크', 'VIX'))
     if mget('미국 10년') is not None:
         r = m.loc['미국 10년']
-        c[2].metric(f'{SIG_ICON.get(r["신호"], "")} 미국 10년'.strip(), fmt(mget('미국 10년'), 3, '%'),
-                    f'{mget("미국 10년", "1달"):+.2f}%p (1달)' if pd.notna(mget('미국 10년', '1달')) else None,
-                    delta_color='normal', chart_data=spark('매크로', '미국 10년'), chart_type='area', border=True, height=195)
+        card(c[2], f'{SIG_ICON.get(r["신호"], "")} 미국 10년'.strip(), fmt(mget('미국 10년'), 3, '%'),
+                    ' · '.join(f'{x:+.2f}%p {k}' for x, k in [(day_change(series('매크로', '미국 10년'), True), '1D'),
+                                                               (mget('미국 10년', '1달'), '1M')] if x is not None and pd.notna(x)) or None,
+                    delta_color='normal', data=spark('매크로', '미국 10년'))
 
     st.subheader('지수')
     if len(mac):
         ix = mac[(mac['구분'] == '지수') & (mac['항목'] != '코스피 50일 이격도')].copy()
-        ix['최근 1달'] = ix['항목'].map(lambda k: spark('매크로', k) or None)
+        ix['최근 1달'] = ix['항목'].map(lambda k: bars_svg(spark('매크로', k)))
         ix = ix[['항목', '값', '최근 1달', '기준일', 'YTD', '1달', '최고 대비(%)', '표시', '의장 기준(참고)']]
         for k in ['값', 'YTD', '1달', '최고 대비(%)']:
             ix[k] = num(ix[k])
@@ -334,7 +387,7 @@ with t1:
             ix.style.map(updown, subset=['YTD(%)', '1달(%)']).format(
                 {'값': '{:,.2f}', 'YTD(%)': '{:+.1f}', '1달(%)': '{:+.1f}', '사상 최고 대비(%)': '{:+.1f}'}, na_rep='—'),
             hide_index=True, width='stretch',
-            column_config={'최근 1달': st.column_config.LineChartColumn('최근 1달', width='small')})
+            column_config={'최근 1달': st.column_config.ImageColumn('최근 1달', width='medium')})
 
     def tiles(grp, dec=2):
         g = mac[mac['구분'] == grp] if len(mac) else pd.DataFrame()
@@ -347,35 +400,39 @@ with t1:
                 shown = fmt(v, 0 if unit == '천명' else dec, unit)
             pp = r['변화 단위'] == '%p'
             d1, ytd = num(pd.Series([r['1달'], r['YTD']]))
-            delta = f'{d1:+.{2 if pp else 1}f}{r["변화 단위"]} (1달)' if pd.notna(d1) else None
-            flat = pd.isna(d1) or round(d1, 2 if pp else 1) == 0
+            dd = None if grp in MONTHLY_GRP else day_change(series('매크로', r['항목']), pp)   # 월간 지표는 1D 없음
+            dec_ = 2 if pp else 1
+            parts = [f'{x:+.{dec_}f}{r["변화 단위"]} {k}' for x, k in [(dd, '1D'), (d1, '1M')] if x is not None and pd.notna(x)]
+            delta = ' · '.join(parts) or None
+            lead = dd if dd is not None and pd.notna(dd) else d1          # 화살표·색은 맨 앞 값(1D) 기준
+            flat = pd.isna(lead) or round(lead, dec_) == 0
             note = ' · '.join(str(x) for x in [r['표시'], r['비고'] if r['항목'] != '기준금리(범위)' else None,
                                                f'YTD {ytd:+.{2 if pp else 1}f}{r["변화 단위"]}' if pd.notna(ytd) else None,
                                                f'기준일 {r["기준일"]}'] if pd.notna(x) and x)
-            cols[i % 4].metric(f'{SIG_ICON.get(r["신호"], "")} {r["항목"]}'.strip(), shown, delta,
+            card(cols[i % 4], f'{SIG_ICON.get(r["신호"], "")} {r["항목"]}'.strip(), shown, delta,
                                delta_color='off' if flat else 'normal',
                                delta_arrow='off' if flat else 'auto', help=note or None,
-                               chart_data=spark('매크로', r['항목']), chart_type='area', border=True, height=195)
+                               data=spark('매크로', r['항목']))
 
     for grp, dec in [('환율', 2), ('금리', 3), ('물가', 2), ('성장·고용', 2), ('원자재', 1)]:
         st.subheader(grp)
         tiles(grp, dec)
-    st.caption('작은 선은 최근 1달 값입니다(월간·주간 지표는 최근 13번 발표). 🔴🟠🟢 표시는 의장 기준이 있는 항목에만 붙습니다. '
-               '칸 위에 마우스를 올리면 기준과 기준일이 보입니다. 월간 지표(물가·고용)의 1달은 직전 발표 대비입니다.')
+    st.caption('작은 막대(빈틈 없이 붙인 청록 막대)는 최근 1달 값입니다(월간·주간 지표는 최근 13번 발표). 🔴🟠🟢 표시는 의장 기준이 있는 항목에만 붙습니다. '
+               '칸 위에 마우스를 올리면 기준과 기준일이 보입니다. 1D는 직전 관측일 대비, 1M은 1달 전 대비입니다. 월간 지표(물가·고용)는 1D 없이 1M만, 1M은 직전 발표 대비입니다.')
 
     st.subheader('리스크')
     if len(risk):
         rk = risk.copy()
         rk['신호'] = rk['신호'].map(lambda x: f'{SIG_ICON[x]} {x}' if x in SIG_ICON else '')
         rk['기준·메모'] = rk[['표시', '의장 기준(참고)', '일반 기준(참고)']].bfill(axis=1).iloc[:, 0]
-        rk['최근 1달'] = rk['항목'].map(lambda k: spark('리스크', k) or None)
+        rk['최근 1달'] = rk['항목'].map(lambda k: bars_svg(spark('리스크', k)))
         rk = rk[['구분', '항목', '값', '최근 1달', '단위', '1주 전', '1달 전', '기준일', '신호', '기준·메모', '비고']]
         rk[['단위', '기준일', '기준·메모', '비고']] = rk[['단위', '기준일', '기준·메모', '비고']].fillna('')
         for k in ['값', '1주 전', '1달 전']:
             rk[k] = num(rk[k])
         st.dataframe(rk, hide_index=True, width='stretch', height=38 * (len(rk) + 1),
                      column_config={'기준·메모': st.column_config.TextColumn(width='large'),
-                                    '최근 1달': st.column_config.LineChartColumn('최근 1달', width='small')})
+                                    '최근 1달': st.column_config.ImageColumn('최근 1달', width='medium')})
 
 # ---------------------------------------------------------------- 2. 종목
 def stock_table():
@@ -444,6 +501,97 @@ with t2:
             hide_index=True, width='stretch', height=min(38 * (len(v) + 1), 900))
         st.caption(f'{len(v)}종목. PER TTM = 최근 4분기 순이익(DART·SEC), 없으면 한투(직전 연간). PER 연환산 = 최근 한 분기 × 4. '
                    'PER 선행 = 야후 애널리스트 예상(한국 종목은 참고). 음수 PER은 적자입니다. 표 머리를 누르면 정렬됩니다.')
+
+# ---------------------------------------------------------------- 섹터 순환
+QUAD_COLOR = {'선도': UP, '약화': '#e8a33d', '침체': DN, '개선': '#2a78d6'}
+
+
+def short(n):
+    for w in ('TIGER ', 'KODEX ', 'PLUS ', 'SOL ', 'RISE ', 'HANARO ', '코리아', '플러스', 'TOP10', 'TOP3', 'TOP2'):
+        n = n.replace(w, '')
+    return n.replace('미국필라델피아반도체나스닥', '미국반도체').replace('글로벌HBM반도체', 'HBM반도체').strip()
+
+
+with t6:
+    if not len(sec):
+        st.info('이 날짜의 섹터 파일이 없습니다(블록 9-섹터는 2026-10-29부터 만듭니다).')
+    else:
+        sec['이름'] = sec['종목'].map(short)
+        jd = sec['판정'].fillna('')
+        names_of = lambda w: ', '.join(sec.loc[jd.str.contains(w), '이름']) or '없음'
+        c = st.columns(4)
+        c[0].metric('20주선 위 섹터', f"{int((sec['20주선_위'] == '위').sum())} / {len(sec)}",
+                    help='국내 섹터 전체의 체력(시장 폭). 0이면 모든 섹터가 중기 하락 추세')
+        c[1].metric('라케시스 · 추세 강함', names_of('라케시스 추세 강함'))
+        c[2].metric('클로토 · 반전 후보', names_of('클로토 반전 후보'))
+        c[3].metric('아트로포스 · 과열·꺾임', str(int(jd.str.contains('아트로포스').sum())) + '개',
+                    help=names_of('아트로포스'))
+        st.caption('닉스 섹터 순환 룰 v1(2026-10-29 의장 승인). 비교 기준은 TIGER 200. 판정은 충족 여부와 근거만이며 비중 결정은 의장이 합니다.')
+
+        if len(sec_tr):
+            tr = sec_tr.merge(sec[['번호', '이름', 'RRG_사분면']], on='번호')
+            dflt = sec.loc[jd.str.contains('클로토 반전 후보|라케시스 추세 강함'), '이름'].tolist()
+            see = st.multiselect('8주 궤적을 볼 섹터', sec['이름'].tolist(), default=dflt,
+                                 placeholder='섹터를 고르면 최근 8주 움직임이 선으로 나옵니다')
+            rng = lambda k: (min(tr[k].min(), 97) - 2, max(tr[k].max(), 103) + 2)
+            (x0, x1), (y0, y1) = rng('RS_Ratio'), rng('RS_Momentum')
+            sx = alt.Scale(domain=[x0, x1], nice=False, zero=False)
+            sy = alt.Scale(domain=[y0, y1], nice=False, zero=False)
+            qc = alt.Color('RRG_사분면:N', scale=alt.Scale(domain=list(QUAD_COLOR), range=list(QUAD_COLOR.values())),
+                           legend=alt.Legend(orient='top', title='지금 사분면'))
+            x = alt.X('RS_Ratio:Q', scale=sx, title='RS-Ratio (100 위 = 반년 평균보다 시장 대비 강함)')
+            y = alt.Y('RS_Momentum:Q', scale=sy, title='RS-Momentum (100 위 = 좋아지는 중)')
+            tip = [alt.Tooltip('이름:N', title='섹터'), alt.Tooltip('주:N', title='주'),
+                   alt.Tooltip('RS_Ratio:Q', format='.1f'), alt.Tooltip('RS_Momentum:Q', format='.1f')]
+            path = alt.Chart(tr[tr['이름'].isin(see)]).mark_line(strokeWidth=2, opacity=0.6).encode(
+                x=x, y=y, color=qc, detail='번호:N', order=alt.Order('몇주전:Q', sort='descending'))
+            dots = alt.Chart(tr[tr['이름'].isin(see) & (tr['몇주전'] > 0)]).mark_circle(opacity=0.45).encode(x=x, y=y, color=qc, size=alt.value(25), tooltip=tip)
+            now = tr[tr['몇주전'] == 0]
+            head = alt.Chart(now).mark_circle(size=140, opacity=1).encode(x=x, y=y, color=qc, tooltip=tip)
+            label = alt.Chart(now).mark_text(align='left', dx=8, fontSize=12).encode(x=x, y=y, text='이름:N')
+            mid = pd.DataFrame({'v': [100]})
+            vline = alt.Chart(mid).mark_rule(color='#9aa0a6').encode(x='v:Q')
+            hline = alt.Chart(mid).mark_rule(color='#9aa0a6').encode(y='v:Q')
+            corner = pd.DataFrame({'x': [x1 - 0.5, x1 - 0.5, x0 + 0.5, x0 + 0.5], 'y': [y1 - 0.5, y0 + 0.5, y0 + 0.5, y1 - 0.5],
+                                   't': ['선도', '약화', '침체', '개선'], 'a': ['right', 'right', 'left', 'left'],
+                                   'b': ['top', 'bottom', 'bottom', 'top']})
+            qtext = alt.layer(*[alt.Chart(corner[corner['t'] == t]).mark_text(
+                fontSize=15, fontWeight='bold', opacity=0.35, align=r.a, baseline=r.b, color=QUAD_COLOR[t]).encode(
+                x=alt.X('x:Q', scale=sx), y=alt.Y('y:Q', scale=sy), text='t:N') for t, r in zip(corner['t'], corner.itertuples())])
+            st.altair_chart((vline + hline + qtext + path + dots + head + label).properties(height=520), width='stretch')
+            st.caption('섹터 로테이션 사분면(주봉, 최근 8주 궤적, 큰 점이 이번 주). 섹터는 대개 선도 → 약화 → 침체 → 개선 → 선도 '
+                       '순서로 시계방향으로 돕니다. 침체 → 개선은 바닥 반전, 선도 → 약화는 꺾임의 첫 신호입니다. '
+                       'RS = 섹터 ÷ TIGER 200, RS-Ratio = RS ÷ 26주 평균, RS-Momentum = RS-Ratio ÷ 4주 전 (원조 RRG 근사식).')
+
+        show = [k for k in ['번호', '이름', '모멘텀순위', '판정', '초과_1개월(%p)', '초과_3개월(%p)', '초과_6개월(%p)',
+                            '초과_12개월(%p)', 'RRG_4주전', 'RRG_사분면', '20주선_위', '20주선_기울기', '52주고점대비(%)',
+                            '3개월저점대비반등(%)', '일_RSI', '일_RSI_단순평균식', '주_RSI', '주_CCI', '주_STO_K',
+                            '주_볼린저_%B', '주_20주_이격도', '주_일목_구름위치', '주_패턴'] if k in sec]
+        tbl = sec[show].rename(columns={'일_RSI': '일 RSI', '일_RSI_단순평균식': '일 RSI(미래에셋식)', '주_RSI': '주 RSI',
+                                        '주_CCI': '주 CCI', '주_STO_K': '주 STO K', '주_볼린저_%B': '주 %B',
+                                        '주_20주_이격도': '20주 이격도', '주_일목_구름위치': '주 일목 구름', '주_패턴': '주봉 패턴'})
+        ex = [k for k in tbl if k.startswith('초과_') or k in ('52주고점대비(%)', '3개월저점대비반등(%)')]
+        for k in ex + ['일 RSI', '일 RSI(미래에셋식)', '주 RSI', '주 CCI', '주 STO K', '주 %B', '20주 이격도']:
+            if k in tbl:
+                tbl[k] = num(tbl[k])
+        qcol = lambda v: f'color:{QUAD_COLOR[v]};font-weight:600' if v in QUAD_COLOR else ''
+        st.dataframe(
+            tbl.style.map(updown, subset=ex).map(qcol, subset=[k for k in ('RRG_4주전', 'RRG_사분면') if k in tbl]).format(
+                {**{k: '{:+.1f}' for k in ex}, '일 RSI': '{:.1f}', '일 RSI(미래에셋식)': '{:.1f}', '주 RSI': '{:.1f}',
+                 '주 CCI': '{:.0f}', '주 STO K': '{:.1f}', '주 %B': '{:.2f}', '20주 이격도': '{:.1f}'}, na_rep='—'),
+            hide_index=True, width='stretch', height=38 * (len(tbl) + 1),
+            column_config={'판정': st.column_config.TextColumn(width='large'),
+                           '주봉 패턴': st.column_config.TextColumn(width='large')})
+        st.caption('모멘텀 순위 = 1·3·6개월 TIGER 200 대비 초과수익 순위의 평균. RSI는 와일더식(판정), 미래에셋식(단순평균) 병기. '
+                   '7개 기준 전체는 같은 날짜 수집데이터의 _섹터.csv에 있습니다.')
+        with st.expander('판정 기준 (룰 v1, 2026-10-29 의장 승인)'):
+            st.markdown(
+                '- **라케시스 추세 강함**: 사분면 선도 + 모멘텀 순위 상위 1/3 + 20주선 위·20주선 상승. 선도인데 20주선 아래면 "관찰".\n'
+                '- **클로토 반전 후보**: 52주 고점 대비 -20% 이하에서 반전 증거 3개 중 2개 이상(1개면 "관찰"). '
+                '① 상대강도 반전(개선, 또는 4주 전 침체·개선 → 선도) ② 주봉 MACD 오실레이터 음수권 상승 전환 '
+                '③ 주봉 바닥 패턴 넥라인 돌파 또는 지지 반등.\n'
+                '- **아트로포스 과열**: 주봉 RSI 70 이상, 20주 이격도 120 이상, 주봉 볼린저 상단 위 중 하나. '
+                '**꺾임 주의**: 4주 전 선도 → 지금 약화·침체, 주봉 MACD 양수권 하락 전환, 주봉 천장 넥라인 이탈 중 하나. 매도 가격은 제시하지 않습니다.')
 
 # ---------------------------------------------------------------- 3. 주봉 차트
 with t3:

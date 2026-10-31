@@ -65,6 +65,28 @@ def cross(a, b):
     return ''
 
 
+def candle(o, h, l, c):
+    """봉 한 개의 모양(2026-10-31 의장: 양봉·음봉을 보고, 음봉이라도 아랫꼬리가 길면 밑에서 강하게 밀어 올린 것).
+    꼬리 길다 = 꼬리가 고저폭의 40% 이상이면서 몸통의 1.5배 이상(가정치)."""
+    rng = h - l
+    if not rng or not np.isfinite(rng):
+        return '', np.nan, np.nan, np.nan
+    body = abs(c - o)
+    up, dn = h - max(o, c), min(o, c) - l
+    kind = '도지' if body <= rng * 0.1 else ('양봉' if c > o else '음봉')
+    long_dn = dn >= rng * 0.4 and dn >= body * 1.5
+    long_up = up >= rng * 0.4 and up >= body * 1.5
+    if long_dn and not long_up:
+        note = f'아랫꼬리 긴 {kind}(밑에서 밀어 올림)'
+    elif long_up and not long_dn:
+        note = f'윗꼬리 긴 {kind}(위에서 밀림)'
+    elif long_up and long_dn:
+        note = f'위아래 꼬리 긴 {kind}(공방)'
+    else:
+        note = kind
+    return note, round(body / rng * 100), round(up / rng * 100), round(dn / rng * 100)
+
+
 def to_week(d):
     g = d.groupby(d.index.to_period('W-FRI'))
     w = g.agg({'시가': 'first', '고가': 'max', '저가': 'min', '종가': 'last', '거래량': 'sum'})
@@ -310,6 +332,12 @@ def frame_row(df, tf, pre=''):
     out[f'{p}MACD오실레이터'] = round(mo.iloc[-1], 2)
     out[f'{p}MACD오실레이터_1봉전'] = round(mo.iloc[-2], 2)
     out[f'{p}MACD오실레이터_2봉전'] = round(mo.iloc[-3], 2)
+    # 봉 모양(이번 봉 + 최근 3봉)
+    o = df['시가']
+    note, b_, u_, d_ = candle(o.iloc[-1], h.iloc[-1], l.iloc[-1], px)
+    out[f'{p}봉모양'] = note
+    out[f'{p}봉_몸통(%)'], out[f'{p}봉_윗꼬리(%)'], out[f'{p}봉_아랫꼬리(%)'] = b_, u_, d_
+    out[f'{p}최근3봉'] = ' → '.join(candle(o.iloc[i], h.iloc[i], l.iloc[i], c.iloc[i])[0] for i in (-3, -2, -1))
     return out
 
 

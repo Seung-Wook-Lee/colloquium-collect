@@ -1,8 +1,12 @@
 # ======================================================================
 # [블록 9] 간밤 뉴스·오늘 일정 — 뉴스보이가 아침 회의에서 읽는 국제 뉴스와 실적·경제지표 일정
 #   하는 일  : (가) 간밤 뉴스, 어제 저녁 6시(한국) 이후 올라온 것만. 세 곳에서 각각 최대 NEWS_MAX건
-#                   ① 연합뉴스 국제 ② 야후 파이낸스 종목별 뉴스(미국 보유·관심 개별주, 한 종목 최대 2건, 보유 먼저)
+#                   ① 연합뉴스 국제 ② 야후 파이낸스 종목별 뉴스(한국·미국·일본 보유·관심 개별주, 한 종목 최대 2건, 보유 먼저)
 #                   ③ CNBC 주요 뉴스(Top News). 2026-10-29 의장 지시("국제 뉴스를 넓히자, 꼭 넣도록")
+#                   ⑤ 한국·일본 종목별 뉴스: 구글 뉴스 검색 RSS로 개별주 이름을 검색(보유 먼저, 한 종목 최대 2건).
+#                      2026-10-31 추가 — SK하이닉스 10/28 실적처럼 한국 종목 큰 뉴스가 수집에서 빠지던 구멍을 막는다.
+#                   ④ 아침 정리 기사: 국내 언론사의 '뉴욕증시 마감·간밤 해외증시·모닝 브리핑' 기사를 구글 뉴스 검색 RSS로 모은다.
+#                      한 언론사만 막혀도 다른 곳 기사가 잡히는 예비 통로. 2026-10-30 의장 "뉴스블록의 대안을 마련하자"
 #              (나) 국내 실적발표 일정: 한국 개별주의 DART 거래소공시 중 '기업설명회(IR) 개최'·'결산실적공시 예고'를
 #                   찾아 본문에서 날짜·시각을 읽는다. 오늘·어제 나온 '영업(잠정)실적' 공시도 함께 적는다.
 #              (다) 미국·일본 종목 실적발표 일정: 야후 실적 발표일(시각은 한국 시각으로 바꿈)
@@ -11,7 +15,7 @@
 #              (라) 미국 주요 경제지표 발표 일정: FRED 발표 달력(CPI·고용·PCE·GDP·FOMC 등).
 #                   FRED에는 발표 시각이 없어 통상 발표 시각(미국 동부)을 한국 시각으로 바꿔 '통상'이라 적는다.
 #              일정은 오늘부터 SCHED_DAYS일 안의 것만. 판정은 하지 않는다.
-#   소스     : 연합뉴스·야후 종목별·CNBC RSS(키 없음), DART OpenAPI(DART_KEY), 야후(키 없음), FRED API(FRED_KEY)
+#   소스     : 연합뉴스·야후 종목별·CNBC·구글 뉴스 검색 RSS(키 없음), DART OpenAPI(DART_KEY), 야후(키 없음), FRED API(FRED_KEY)
 #   읽는 것  : 수집데이터/00_누적/00_DART_고유번호.csv (블록 6이 만든 종목코드 → DART 고유번호)
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_뉴스.csv (시각, 제목, 요약, 링크, 출처, 종목)
 #              수집데이터/YYYYMMDD/YYYYMMDD_일정.csv (날짜, 시각, 구분, 대상, 내용, 출처)
@@ -26,8 +30,16 @@ from zoneinfo import ZoneInfo
 NEWS_RSS = 'https://www.yna.co.kr/rss/international.xml'
 YAHOO_RSS = 'https://feeds.finance.yahoo.com/rss/2.0/headline'
 CNBC_RSS = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'
+GNEWS_RSS = 'https://news.google.com/rss/search'
+MORNING_QUERIES = ['뉴욕증시 마감', '간밤 해외증시', '모닝 브리핑 증시', '뉴욕마감']   # 아침 정리 기사 검색어 (고칠 곳)
+MORNING_TITLE = r'뉴욕증시|뉴욕마감|뉴욕 마감|美증시|미 증시|미국 증시|간밤|해외증시|월가|글로벌 마켓'   # 제목에 이 말이 있는 것만
 NEWS_MAX = 10             # 출처마다 최대 건수
 YAHOO_PER_TICKER = 2      # 야후 종목별 뉴스에서 한 종목 최대 건수
+ASIA_PER_TICKER = 2       # 한국·일본 종목별(구글 뉴스)에서 한 종목 최대 건수
+ASIA_MAX = 20             # 한국·일본 종목별 전체 최대 건수
+ARCHIVE_PER_TICKER = 5    # 종목 뉴스 누적 파일에 한 종목 하루 최대 건수
+ARCHIVE_DAYS = 365        # 종목 뉴스 누적 파일 보관 기간(일)
+ARCHIVE = []              # 기업 카드용 종목 뉴스 누적(야후·구글, 브리핑 건수 제한 전)
 SCHED_DAYS = 7
 ET_TZ = ZoneInfo('America/New_York')
 US_RELEASES = {   # FRED 발표 이름(정확히 같아야 함) → (한국어 이름, 통상 발표 시각(미국 동부))
@@ -92,7 +104,7 @@ try:                                    # ① 연합뉴스 국제
 except Exception as e:
     msgs.append(f'연합뉴스 실패({type(e).__name__} {e})')
 try:                                    # ② 야후 종목별 — 보유 먼저, 한 종목 최대 YAHOO_PER_TICKER건
-    us = u[(u['시장'] == '미국') & (u['구분'] == '개별주')]
+    us = u[u['시장'].isin(['미국', '한국', '일본']) & (u['구분'] == '개별주')]   # 10/31: 한국(.KS)·일본(.T)도 야후 종목 뉴스가 있음
     us = pd.concat([us[us['보유/관심'] == '보유'], us[us['보유/관심'] != '보유']])
     pool, seen_link, n_fail = [], set(), 0
     for _, s in us.iterrows():
@@ -103,6 +115,7 @@ try:                                    # ② 야후 종목별 — 보유 먼저
         except Exception:
             n_fail += 1
             continue
+        ARCHIVE.extend(dict(x, 종목=s['정식 종목명'], 번호=s['번호']) for x in items[:ARCHIVE_PER_TICKER])
         k = 0
         for x in items:
             if x['링크'] in seen_link or x['제목'] in seen_link:
@@ -126,6 +139,73 @@ try:                                    # ③ CNBC 주요 뉴스
     msgs.append(f'CNBC {len(got)}건')
 except Exception as e:
     msgs.append(f'CNBC 실패({type(e).__name__} {e})')
+try:                                    # ④ 아침 정리 기사 — 구글 뉴스 검색(국내 언론사), 제목 끝 ' - 매체'를 출처로
+    pool, seen, n_fail = [], set(), 0
+    for q in MORNING_QUERIES:
+        try:
+            items = _rss(GNEWS_RSS, '아침 정리', params={'q': f'{q} when:1d', 'hl': 'ko', 'gl': 'KR', 'ceid': 'KR:ko'})
+        except Exception:
+            n_fail += 1
+            continue
+        for x in items:
+            title, _, media = x['제목'].rpartition(' - ')
+            title = title or x['제목']
+            if title in seen or not _re.search(MORNING_TITLE, title):
+                continue
+            seen.add(title)
+            x.update({'제목': title, '종목': media, '요약': ''})   # 구글 요약은 제목 반복이라 비움, 매체는 '종목' 칸에
+            pool.append(x)
+    got = sorted(pool, key=lambda x: x['시각(한국)'], reverse=True)[:NEWS_MAX]
+    news += got
+    msgs.append(f'아침 정리 {len(got)}건' + (f'(검색어 실패 {n_fail})' if n_fail else ''))
+except Exception as e:
+    msgs.append(f'아침 정리 실패({type(e).__name__} {e})')
+try:                                    # ⑤ 한국·일본 종목별 — 구글 뉴스 검색, 보유 먼저, 한 종목 최대 ASIA_PER_TICKER건
+    asia = u[u['시장'].isin(['한국', '일본']) & (u['구분'] == '개별주')]
+    asia = pd.concat([asia[asia['보유/관심'] == '보유'], asia[asia['보유/관심'] != '보유']])
+    pool, seen, n_fail = [], set(), 0
+    for _, s in asia.iterrows():
+        time.sleep(0.3)
+        name = s['정식 종목명']
+        try:
+            items = _rss(GNEWS_RSS, f'{s["시장"]} 종목별', name,
+                         params={'q': f'"{name}" when:1d', 'hl': 'ko', 'gl': 'KR', 'ceid': 'KR:ko'})
+        except Exception:
+            n_fail += 1
+            continue
+        k = 0
+        for x in items:
+            title, _, media = x['제목'].rpartition(' - ')
+            title = title or x['제목']
+            if title in seen or name.replace(' ', '') not in title.replace(' ', ''):   # 제목에 종목명이 있는 것만
+                continue
+            if k < ARCHIVE_PER_TICKER:
+                ARCHIVE.append(dict(x, 제목=f'{title} ({media})' if media else title, 요약='', 종목=name, 번호=s['번호']))
+            seen.add(title)
+            x.update({'제목': f'{title} ({media})' if media else title, '요약': '', '보유': s['보유/관심'] == '보유'})
+            pool.append(x)
+            k += 1
+            if k >= ASIA_PER_TICKER:
+                break
+    pool = sorted(pool, key=lambda x: x['시각(한국)'], reverse=True)
+    pool = sorted(pool, key=lambda x: not x.pop('보유'))
+    got = sorted(pool[:ASIA_MAX], key=lambda x: x['시각(한국)'], reverse=True)
+    news += got
+    msgs.append(f'한국·일본 종목별 {len(got)}건' + (f'(조회 실패 {n_fail}종목)' if n_fail else ''))
+except Exception as e:
+    msgs.append(f'한국·일본 종목별 실패({type(e).__name__} {e})')
+try:                                    # 기업 카드용 누적: 00_누적/00_종목뉴스.csv (링크·제목 중복 제거, ARCHIVE_DAYS일 보관)
+    f_arc = f'{KEEP}/00_종목뉴스.csv'
+    arc_cols = ['날짜', '번호', '종목', '시각(한국)', '제목', '요약', '출처', '링크']
+    new_arc = pd.DataFrame([dict(x, 날짜=TODAY) for x in ARCHIVE], columns=arc_cols)
+    old_arc = pd.read_csv(f_arc, dtype=str, encoding='utf-8-sig') if os.path.exists(f_arc) else pd.DataFrame(columns=arc_cols)
+    arc = pd.concat([old_arc, new_arc], ignore_index=True).drop_duplicates(['번호', '링크']).drop_duplicates(['번호', '제목'])
+    cut = (NOW - dt.timedelta(days=ARCHIVE_DAYS)).strftime('%Y%m%d')
+    arc = arc[arc['날짜'].astype(str) >= cut].sort_values(['날짜', '시각(한국)'], ascending=False)
+    arc.to_csv(f_arc, index=False, encoding='utf-8-sig')
+    msgs.append(f'종목뉴스 누적 +{len(arc) - len(old_arc)}건(전체 {len(arc)})')
+except Exception as e:
+    msgs.append(f'종목뉴스 누적 실패({type(e).__name__} {e})')
 pd.DataFrame(news, columns=NEWS_COLS).to_csv(f'{DAY}/{TODAY}_뉴스.csv', index=False, encoding='utf-8-sig')
 news_msg = ', '.join(msgs)
 

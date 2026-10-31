@@ -81,8 +81,8 @@ try:
         RIO_FG.loc[pd.Timestamp(NOW.date())] = float(FG['score'])
         RIO_FG = RIO_FG.sort_index()
     rows, prev = [], []
-    for name, get, unit, bad, thr, kind, src in RIO_ITEMS:
-        s = get()
+    for name, fetch, unit, bad, thr, kind, src in RIO_ITEMS:
+        s = fetch()
         r = {'항목': name, '나쁜 쪽': '오르면' if bad == 'up' else '내리면', '값': '데이터 없음', '기준일': None,
              '1주 전': None, '1달 전': None, '최근 고점': None, '최근 저점': None,
              '좋아질 기미': '', '나빠질 기미': '', '문턱(가정치)': '', '출처': src}
