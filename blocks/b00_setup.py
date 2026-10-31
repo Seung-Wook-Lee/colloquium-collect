@@ -4,8 +4,7 @@
 #              GitHub에서 돌 때: 드라이브 창구(drive.py)로 필요한 파일을 내려받아 work/ 폴더에 두고,
 #                                마지막 블록 11이 결과를 드라이브에 올린다.
 #              코랩에서 돌 때  : 드라이브를 연결해 그대로 읽고 쓴다.
-#   읽는 것  : 드라이브 포트폴리오/콜로키움100_유니버스_YYYYMMDD.csv (날짜가 가장 늦은 파일)
-#              2026-10-31 의장이 포트폴리오를 최상위로 뺌. 옛 위치 콜로키움/포트폴리오도 찾아본다.
+#   읽는 것  : 드라이브 콜로키움/포트폴리오/콜로키움100_유니버스_YYYYMMDD.csv (날짜가 가장 늦은 파일)
 #              (2026-10-28 의장: 표는 csv. 예전 .xlsx도 읽지만 같은 날짜면 csv가 먼저)
 #              드라이브 콜로키움 수집데이터/00_누적/ (가격 이력, 실적 저장본 등 이어 쓰는 파일 전부)
 #   키       : KIS_APP_KEY, KIS_APP_SECRET, FRED_KEY, DART_KEY, SEC_EMAIL (+ GitHub에서는 DRIVE_URL, DRIVE_TOKEN)
@@ -92,17 +91,10 @@ if not IN_COLAB:
     if not gdrive.ready():
         raise RuntimeError('DRIVE_URL·DRIVE_TOKEN 없음 (GitHub Secrets 확인)')
     # 1) 콜로키움 100 종목표: 가장 최신 것 하나만
-    names = []
-    for d_univ in ['포트폴리오', f'{D_ROOT}/포트폴리오']:   # 새 위치(최상위) 먼저, 없으면 옛 위치
-        try:
-            names = sorted((f['name'] for f in gdrive.ls(d_univ) if _is_univ(f['name'])), key=_univ_key)
-        except RuntimeError as e:   # 드라이브 창구가 아직 '포트폴리오'를 허용하지 않을 때
-            log(f'[준비] {d_univ} 못 읽음: {e}')
-        if names:
-            break
+    names = sorted((f['name'] for f in gdrive.ls(f'{D_ROOT}/포트폴리오') if _is_univ(f['name'])), key=_univ_key)
     if not names:
-        raise FileNotFoundError('드라이브 포트폴리오(또는 콜로키움/포트폴리오)에 콜로키움100_유니버스 csv가 없습니다')
-    _pull(d_univ, names[-1], f'{UNIV_DIR}/{names[-1]}')
+        raise FileNotFoundError('드라이브 콜로키움/포트폴리오에 콜로키움100_유니버스 csv가 없습니다')
+    _pull(f'{D_ROOT}/포트폴리오', names[-1], f'{UNIV_DIR}/{names[-1]}')
     # 2) 00_누적 전부 (드라이브 수정 시각을 그대로 붙여 '며칠마다 새로 받기' 판단이 맞게)
     for f in gdrive.ls(f'{D_DATA}/00_누적'):
         local = f'{KEEP}/{f["name"]}'
