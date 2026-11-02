@@ -103,6 +103,31 @@ try:
         YS['100엔당 원'] = (x.iloc[:, 0] / x.iloc[:, 1] * 100).round(2)
 except Exception as e:
     print('  야후 실패:', e)
+# (가-2) 네이버 지수: 네이버 증권 일봉(최근 약 6개월)으로 야후 값을 덮어쓴다. 네이버가 막히면 야후 그대로.
+#   (2026-11-02 의장 "네이버가 정확하고 좋다, 막히면 야후로". 공식 API가 아니라 네이버 화면이 쓰는 주소라 바뀔 수 있음)
+#   야후의 긴 이력(사상 최고·50일 이격도용) 위에 네이버 날짜를 겹쳐 쓴다(같은 날짜는 네이버 값).
+NAVER_IDX = {   # 이름 → (국내/해외, 네이버 코드)
+    '코스피': ('domestic', 'KOSPI'), '코스닥': ('domestic', 'KOSDAQ'),
+    'S&P500': ('foreign', '.INX'), '나스닥': ('foreign', '.IXIC'), '다우': ('foreign', '.DJI'),
+    '필라델피아 반도체(SOX)': ('foreign', '.SOX'), '니케이225': ('foreign', '.N225'), '대만 가권': ('foreign', '.TWII'),
+}
+YSRC = {k: f'야후 {t}' for k, t in YF_SERIES.items()}
+NAVER_FAIL = []
+for k, (kind, code) in NAVER_IDX.items():
+    try:
+        r = requests.get(f'https://api.stock.naver.com/chart/{kind}/index/{code}?periodType=dayCandle',
+                         headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://m.stock.naver.com/'}, timeout=15)
+        pts = r.json().get('priceInfos') or []
+        nv = pd.Series({pd.to_datetime(p['localDate']): float(p['closePrice']) for p in pts if p.get('closePrice')}).sort_index()
+        if len(nv) < 5:
+            raise ValueError(f'{len(nv)}개')
+        old = YS.get(k)
+        YS[k] = nv if old is None else pd.concat([old[old.index < nv.index[0]], nv])
+        YSRC[k] = f'네이버 {code}' + (' (이전 이력은 야후)' if old is not None else '')
+    except Exception as e:
+        NAVER_FAIL.append(f'{k}({type(e).__name__})')
+if NAVER_FAIL:
+    print('  네이버 지수 실패 → 야후 사용:', ', '.join(NAVER_FAIL))
 miss_y = [k for k in YF_SERIES if k not in YS]
 
 # (나) FRED -----------------------------------------------------------------
