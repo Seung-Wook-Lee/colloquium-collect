@@ -56,6 +56,19 @@ def asof_fields(dates, o):
     return base
 
 
+def implied_shares(std, key):
+    s = std[(std['ticker'] == key) & (std['period_type'] == 'Q')]
+    ni = s[s['item'] == 'net_income'][['period_end', 'value', 'filed']]
+    for e in ['eps_diluted', 'eps_basic']:
+        ep = s[s['item'] == e][['period_end', 'value', 'filed']]
+        if len(ep):
+            break
+    m = ni.merge(ep, on='period_end', suffixes=('_ni', '_eps'))
+    m = m[(m['value_eps'].abs() > 1e-9) & (m['value_ni'] * m['value_eps'] > 0)]
+    return pd.DataFrame({'period_end': m['period_end'], 'value': m['value_ni'] / m['value_eps'],
+                         'filed': m[['filed_ni', 'filed_eps']].max(axis=1)})
+
+
 def shares_series(t, cur, us_std, kr_sh):
     if cur == 'USD':
         s = us_std[(us_std['ticker'] == t) & (us_std['item'] == 'shares_outstanding')]
@@ -115,6 +128,22 @@ def part_valuation():
         else:
             v['shares_adj'] = np.nan
             v['shares_src'] = '없음'
+        # 주식수 보완: 공시 주식수가 비는 날은 '분기 순이익 ÷ 분기 EPS'로 역산한 주식수(같은 분기, 근사)
+        imp = implied_shares(std, key)
+        if len(imp) and v['shares_adj'].isna().any():
+            imp = imp.assign(available=imp['filed'] + pd.Timedelta(days=1)).sort_values('available')
+            w = pd.merge_asof(v[['date']].sort_values('date'), imp[['available', 'value', 'period_end']].rename(
+                columns={'available': 'date', 'value': 'imp_sh', 'period_end': 'imp_pe'}), on='date', direction='backward')
+            sp = p[['date', 'split']].copy()
+            cum = sp.assign(c=sp['split'].fillna(0).replace(0, 1.0).astype(float).cumprod()).set_index('date')['c']
+            ref = cum.reindex(pd.to_datetime(w['imp_pe']), method='ffill').values
+            w['imp_adj'] = w['imp_sh'].values * v['date'].map(cum).values / np.where(np.isnan(ref), 1.0, ref)
+            w.loc[(w['date'] - w['imp_pe']).dt.days > STALE_DAYS, 'imp_adj'] = np.nan
+            fill = v['shares_adj'].isna() & w['imp_adj'].notna().values
+            v.loc[fill, 'shares_adj'] = w.loc[fill.values, 'imp_adj'].values
+            v.loc[fill, 'shares_src'] = '역산(분기 순이익÷분기 EPS)'
+        if 'equity' in v and 'equity_incl_nci' in v:
+            v['equity'] = v['equity'].fillna(v['equity_incl_nci'])
         v['market_cap'] = v['close_raw'] * v['shares_adj']
         g = lambda c: v[c] if c in v else pd.Series(np.nan, index=v.index)
         debt = pd.concat([g('short_term_debt'), g('long_term_debt')], axis=1).sum(axis=1, min_count=1)
@@ -194,6 +223,7 @@ def part_events():
             add(d, 'market', 'DFEDTARU', '미국 기준금리 변경', x, f'상단 {s[d]}%', 'FRED')
     rel = load('raw/market_events/fred_release_dates.parquet')
     if rel is not None:
+        rel = rel[rel['release_id'].astype(int) != 101]     # 1차 실행에서 잘못 넣은 번호(FOMC 아님) 제외
         for _, r in rel.iterrows():
             add(r['date'], 'market', 'US', f'지표 발표일: {r["label"]}', None, r.get('fred_release_name'), 'FRED release dates')
     fo = load('raw/market_events/fomc_meetings.parquet')
@@ -290,7 +320,7 @@ def part_quality():
     st = pd.DataFrame(STATUS)
     prev = load('metadata/run_status.parquet')          # 앞 실행의 결과는 남기고, 이번에 다시 돈 단계만 바꾼다
     if prev is not None and len(prev):
-        st = pd.concat([prev[~prev['part'].isin(set(st['part']) if len(st) else set())], st])
+        st = pd.concat([prev, st]).drop_duplicates(['part', 'item'], keep='last')
     save(st, 'metadata/run_status.parquet')
     st.to_csv(os.path.join(OUT, 'metadata/run_status.csv'), index=False, encoding='utf-8-sig')
     src = pd.DataFrame([
@@ -346,3 +376,22 @@ def part_summary():
             print(d.groupby(['code', 'adjusted'])['date'].agg(['min', 'max', 'count']).to_string())
         else:
             print(d.head(15).to_string())
+
+
+def part_diag_kr():
+    """한국 금융사 재무가 2023년 이전 비는 원인 확인용(로그에만 찍음)"""
+    raw = load('raw/fundamentals/dart_fnltt_all.parquet')
+    fill = load('raw/fundamentals/dart_major_accounts_fill.parquet')
+    for code in ['055550', '032830', '005380']:
+        for nm, d in [('전체재무', raw), ('주요계정', fill)]:
+            if d is None:
+                continue
+            g = d[d['ticker'] == code]
+            print(f'\n### {code} {nm}: 보고서 수(연도)', g.groupby('bsns_year')['reprt_code'].nunique().to_dict())
+            x = g[(g['bsns_year'].astype(str) == '2018') & (g['reprt_code'].astype(str) == '11011')]
+            cols = [c for c in ['sj_div', 'account_id', 'account_nm', 'thstrm_amount'] if c in x]
+            print(x[cols].head(45).to_string())
+    sh = load('raw/fundamentals/dart_shares_outstanding.parquet')
+    if sh is not None:
+        g = sh[sh['ticker'] == '005380']
+        print('\n### 005380 주식총수 se 값', g['se'].value_counts().to_dict(), g.groupby('bsns_year').size().to_dict())

@@ -10,10 +10,10 @@ import market, fundamentals, build
 PARTS = [('prices', market.part_prices), ('prices_process', market.part_prices_process), ('fomc', market.part_fomc), ('etf', market.part_etf), ('macro', market.part_macro),
          ('fund_us', fundamentals.part_fund_us), ('fund_us_std', fundamentals.part_fund_us_std), ('fund_kr', fundamentals.part_fund_kr), ('fund_kr_fix', fundamentals.part_fund_kr_fix), ('fund_jp', fundamentals.part_fund_jp),
          ('earnings_dates', fundamentals.part_earnings_dates),
-         ('valuation', build.part_valuation), ('events', build.part_events), ('quality', build.part_quality), ('summary', build.part_summary)]
+         ('valuation', build.part_valuation), ('events', build.part_events), ('quality', build.part_quality), ('summary', build.part_summary), ('diag_kr', build.part_diag_kr)]
 
 want = [a for a in sys.argv[1:] if a.strip()]
-FIX_ONLY = {'prices_process', 'fund_us_std'}    # 이어받은 원본을 다시 가공할 때만 (전체 실행에선 앞 단계가 이미 함)
+FIX_ONLY = {'prices_process', 'fund_us_std', 'diag_kr'}    # 이어받은 원본을 다시 가공할 때만 (전체 실행에선 앞 단계가 이미 함)
 for name, fn in PARTS:
     if (not want and name not in FIX_ONLY) or name in want:
         run_part(name, fn)

@@ -483,7 +483,11 @@ def part_fund_kr_fix():
     root = ET.fromstring(z.read(z.namelist()[0]))
     cc = {(e.findtext('stock_code') or '').strip(): e.findtext('corp_code') for e in root.iter('list')}
     extra = []
-    for code in U.loc[(U['country'] == '한국') & (U['kind'] == 'stock'), 'code']:
+    done = load('raw/fundamentals/dart_major_accounts_fill.parquet')
+    if done is not None:        # 이미 받아 둔 주요계정이 있으면 다시 받지 않는다
+        extra = [done]
+    codes = [] if done is not None else U.loc[(U['country'] == '한국') & (U['kind'] == 'stock'), 'code']
+    for code in codes:
         corp = cc.get(code)
         got = have.get(code, set())
         n = 0
@@ -504,8 +508,9 @@ def part_fund_kr_fix():
         status('fundamentals', f'DART 주요계정 보완 {code}', True, n, note=f'채운 보고서 {n}건')
     if extra:
         e = pd.concat(extra)
-        e['filed'] = pd.to_datetime(e['rcept_no'].str[:8], errors='coerce')
-        save(e, 'raw/fundamentals/dart_major_accounts_fill.parquet')
+        e['filed'] = pd.to_datetime(e['rcept_no'].astype(str).str[:8], errors='coerce')
+        if done is None:
+            save(e, 'raw/fundamentals/dart_major_accounts_fill.parquet')
         raw = pd.concat([raw.assign(api='fnlttSinglAcntAll'), e], ignore_index=True)
     stds = [dart_std(g, t) for t, g in raw.groupby('ticker')]
     save(pd.concat([x for x in stds if len(x)]), 'processed/fundamentals/kr_standardized_pit.parquet')
