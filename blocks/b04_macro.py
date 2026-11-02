@@ -87,7 +87,7 @@ try:
             ks = YS['코스피']
             disp = ks / ks.rolling(50).mean() * 100
             mrow('지수', '코스피 50일 이격도', None, value=float(disp.iloc[-1]), date=ks.index[-1].strftime('%Y-%m-%d'),
-                 src='야후 ^KS11 계산', line=disp, note=f'1년 최고 {disp.iloc[-250:].max():.1f} / 최저 {disp.iloc[-250:].min():.1f}')
+                 src='코스피 지수 계산', line=disp, note=f'1년 최고 {disp.iloc[-250:].max():.1f} / 최저 {disp.iloc[-250:].min():.1f}')
     # 환율
     for k in ['원/달러', '엔/달러', '100엔당 원', '달러지수']:
         mrow('환율', k, YS.get(k), src='야후 원/달러 ÷ 엔/달러 계산' if k == '100엔당 원' else f'야후 {YF_SERIES[k]}')
