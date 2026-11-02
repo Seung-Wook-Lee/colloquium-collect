@@ -17,5 +17,9 @@ FIX_ONLY = {'prices_process', 'fund_us_std', 'diag_kr'}    # 이어받은 원본
 for name, fn in PARTS:
     if (not want and name not in FIX_ONLY) or name in want:
         run_part(name, fn)
+import shutil, glob
+os.makedirs(os.path.join(OUT, 'metadata'), exist_ok=True)
+for f in glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs', '*.txt')):
+    shutil.copy(f, os.path.join(OUT, 'metadata', os.path.basename(f)))   # 보고서·폴더 설명도 함께 올린다
 n = upload_all()
 log(f'끝. 드라이브에 올린 파일 {n}개 (창구 준비: {q_ready()}), 로컬 {OUT}')
