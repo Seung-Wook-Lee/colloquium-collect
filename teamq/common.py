@@ -117,22 +117,36 @@ MIME = {'.parquet': 'application/octet-stream', '.csv': 'text/csv', '.txt': 'tex
 
 
 def upload_all(only_prefix=None):
+    """작은 파일부터 올리고, 실패한 파일은 건너뛰고 끝에 목록을 남긴다."""
     if not q_ready():
         log('팀 Q 드라이브 창구(TEAMQ_DRIVE_URL·TOKEN)가 없어 드라이브에 올리지 않음 → Actions 산출물(teamq_out)로만 남김')
         return 0
-    n = 0
-    for root, _, files in os.walk(OUT):
-        for f in sorted(files):
+    try:
+        j = _drive(KEY['TEAMQ_DRIVE_URL'], KEY['TEAMQ_DRIVE_TOKEN'], {'action': 'list', 'path': DRIVE_ROOT}, retry=1)
+        log(f'  창구 연결 확인: Team_Q__chatgpt 안 파일 {len(j.get("files", []))}개')
+    except Exception as e:
+        log(f'  창구 연결 실패(주소·배포·토큰 확인 필요): {e}')
+        raise
+    files = []
+    for root, _, fs in os.walk(OUT):
+        for f in fs:
             full = os.path.join(root, f)
             rel = os.path.relpath(full, OUT).replace(os.sep, '/')
-            if only_prefix and not rel.startswith(only_prefix):
-                continue
+            if not only_prefix or rel.startswith(only_prefix):
+                files.append((os.path.getsize(full), rel, full))
+    n, bad = 0, []
+    for size, rel, full in sorted(files):
+        try:
             data = open(full, 'rb').read()
             _drive(KEY['TEAMQ_DRIVE_URL'], KEY['TEAMQ_DRIVE_TOKEN'],
-                   {'action': 'put', 'path': f'{DRIVE_ROOT}/{rel}', 'mime': MIME.get(os.path.splitext(f)[1], 'application/octet-stream'),
-                    'data': base64.b64encode(data).decode()})
+                   {'action': 'put', 'path': f'{DRIVE_ROOT}/{rel}', 'mime': MIME.get(os.path.splitext(rel)[1], 'application/octet-stream'),
+                    'data': base64.b64encode(data).decode()}, retry=2)
             n += 1
-            log(f'  올림 {rel} ({len(data)/1e6:.1f}MB)')
+            log(f'  올림 {rel} ({size/1e6:.1f}MB)')
+        except Exception as e:
+            bad.append((rel, size))
+            log(f'  실패 {rel} ({size/1e6:.1f}MB): {e}')
+    log(f'  드라이브 올리기: 성공 {n}개, 실패 {len(bad)}개 {bad}')
     return n
 
 
