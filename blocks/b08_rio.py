@@ -17,7 +17,8 @@ RIO_ITEMS = [
      'FRED DGS10 (없으면 야후 ^TNX)'),
     ('실질금리(10년 TIPS)', lambda: FS.get('DFII10'), '%', 'up', 0.15, 'pp', 'FRED DFII10'),
     ('유가(WTI)', lambda: YS.get('WTI'), '$', 'up', 8, 'pct', '야후 CL=F'),
-    ('공포탐욕', lambda: RIO_FG, '', 'down', 10, 'pp', 'CNN'),
+    # 공포탐욕은 거꾸로 본다(2026-11-02 의장): 공포 쪽으로 내려가면 오를 때가 다가오는 것, 탐욕 쪽으로 오르면 조정이 다가오는 것
+    ('공포탐욕', lambda: RIO_FG, '', 'up', 10, 'pp', 'CNN (역발상: 오르면 나쁨)'),
     ('금융 스트레스', lambda: FS.get('STLFSI4') if FS.get('STLFSI4') is not None else FS.get('NFCI'), '', 'up', None, 'week',
      'FRED STLFSI4 (없으면 NFCI), 주간'),
 ]
@@ -57,12 +58,13 @@ def rio_turn(s, bad, thr, kind):
 
 
 def rio_phase(risk_rows, fg):
-    """나쁨: 리스크 표 빨강·주황 3개 이상 또는 공포탐욕 44 이하 / 좋음: 빨강 0이고 공포탐욕 56 이상 / 그 밖 중립"""
+    """나쁨: 리스크 표 빨강·주황 3개 이상 또는 공포탐욕 75 이상(극단 탐욕) / 좋음: 빨강 0이고 주황 1개 이하, 공포탐욕 75 미만 / 그 밖 중립
+    공포탐욕이 낮은 것(공포)은 나쁨으로 치지 않는다(2026-11-02 의장 "공포는 오를 시점이 다가온 것")."""
     red = sum(r['신호'] == '빨강' for r in risk_rows)
     warm = sum(r['신호'] in ('빨강', '주황') for r in risk_rows)
-    if warm >= 3 or (fg is not None and fg <= 44):
+    if warm >= 3 or (fg is not None and fg >= 75):
         ph = '나쁨'
-    elif red == 0 and fg is not None and fg >= 56:
+    elif red == 0 and warm <= 1:
         ph = '좋음'
     else:
         ph = '중립'
@@ -116,7 +118,7 @@ try:
     RIO = {'국면': ph, '좋아질': g, '나빠질': b, '반대 신호': opp, '한 줄': line}
     rows.append({'항목': '요약', '나쁜 쪽': '', '값': line, '기준일': TODAY, '1주 전': None, '1달 전': None,
                  '최근 고점': None, '최근 저점': None, '좋아질 기미': g, '나빠질 기미': b,
-                 '문턱(가정치)': '국면: 빨강·주황 3개 이상 또는 공포탐욕 ≤ 44 = 나쁨, 빨강 0이고 공포탐욕 ≥ 56 = 좋음',
+                 '문턱(가정치)': '국면: 빨강·주황 3개 이상 또는 공포탐욕 ≥ 75 = 나쁨, 빨강 0·주황 1개 이하 = 좋음 (공포탐욕은 역발상)',
                  '출처': '계산'})
     rio = pd.DataFrame(rows)
     rio['수집시각(KST)'] = stamp()

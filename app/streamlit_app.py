@@ -298,34 +298,82 @@ with t1:
         except Exception:
             return None
 
-    # ---- 이번 주 일정 · 간밤 주요 뉴스 (맨 위, 2026-11-02 의장 "첫 페이지에 넣자")
-    c_s, c_n = st.columns([1, 1])
+    # ---- 이번 주 일정 · 간밤 주요 뉴스 (맨 위, 2026-11-02 의장 "첫 페이지에 넣자", "한국어 간밤 뉴스만, 표 말고 보기 좋게")
+    import html as _h
+    import re as _re
+    CARD = ('<div style="font-family:inherit;border:1px solid rgba(128,128,128,.25);border-radius:12px;'
+            'padding:6px 16px 10px;">{}</div>')
+    c_s, c_n = st.columns([1, 1], gap='large')
     with c_s:
         st.subheader('이번 주 일정')
         if len(sched_df):
             sd = sched_df.copy()
-            sd['일시'] = sd['날짜'].astype(str).str[5:] + '(' + sd['요일'].astype(str) + ') ' + sd['시각(한국)'].astype(str)
             sd['보유/관심'] = sd['보유/관심'].fillna('')
             timed = set(zip(sd.loc[sd['시각(한국)'] != '미정', '날짜'], sd.loc[sd['시각(한국)'] != '미정', '대상']))
             sd = sd[~((sd['시각(한국)'] == '미정') & pd.Series([(d, w) in timed for d, w in zip(sd['날짜'], sd['대상'])], index=sd.index))]   # 같은 날 시각 있는 줄이 있으면 '미정' 줄은 뺀다
-            show = sd[['일시', '대상', '보유/관심', '구분', '내용']]
-            st.dataframe(show, hide_index=True, width='stretch', height=min(36 * (len(show) + 1) + 4, 560),
-                         column_config={'내용': st.column_config.TextColumn(width='medium')})
-            st.caption('한국 시각. 미국 실적 시각은 야후 예정 시각이라 분 단위가 다를 수 있음(예: 16:00 → 06:00, 실제 06:05·06:30).')
+            body = ''
+            for (d, wd), g in sd.groupby(['날짜', '요일'], sort=True):
+                body += (f'<div style="margin:12px 0 4px;font-weight:700;font-size:.95rem;">'
+                         f'{str(d)[5:].replace("-", "/")} ({wd})</div>')
+                for _, r in g.iterrows():
+                    mark = r['보유/관심']
+                    tag = (f'<span style="font-size:.72rem;padding:1px 7px;border-radius:9px;margin-left:6px;'
+                           f'background:{"#2f8f8a" if mark == "보유" else "rgba(128,128,128,.25)"};'
+                           f'color:{"#fff" if mark == "보유" else "inherit"};">{_h.escape(mark)}</span>') if mark else ''
+                    body += (f'<div style="display:flex;gap:12px;padding:5px 0;border-top:1px solid rgba(128,128,128,.12);">'
+                             f'<div style="min-width:64px;color:#6b7280;font-variant-numeric:tabular-nums;font-size:.88rem;">'
+                             f'{_h.escape(str(r["시각(한국)"]))}</div>'
+                             f'<div style="font-size:.92rem;"><b>{_h.escape(str(r["대상"]))}</b>{tag}'
+                             f'<span style="color:#6b7280;"> · {_h.escape(str(r["구분"]))}</span></div></div>')
+            st.html(CARD.format(body))
+            st.caption('한국 시각. 미국 실적은 야후 예정 시각이라 분 단위가 다를 수 있음(예: 06:00경 → 실제 06:05·06:30).')
         else:
             st.info('오늘 일정 파일이 없습니다.')
     with c_n:
         st.subheader('간밤 주요 뉴스')
-        if len(news_df):
-            nd = news_df.copy()
-            nd['출처'] = nd['출처'].fillna('') + nd['종목'].fillna('').map(lambda x: f' · {x}' if x else '')
+        nd = news_df.copy() if len(news_df) else pd.DataFrame(columns=['시각(한국)', '제목', '링크', '출처', '종목'])
+        if len(nd):
+            # 2026-11-02 의장 "영어 뉴스·지난 뉴스는 빼고 간밤 것만": 한국어 제목, 전날 18시 이후,
+            # 연합뉴스는 기사 주소의 날짜(AKR20261030…)가 전날 이전이면 뺌(재송고된 옛 기사),
+            # 월요일엔 '아침 정리'(지난 금요일 뉴욕 마감)를 뺌. 국제 5 + 아침 정리 3 + 종목 6건까지.
+            day0 = pd.to_datetime(DAY)
+            prev = (day0 - pd.Timedelta(days=1)).strftime('%m-%d') + ' 18:00'
+            nd = nd[nd['제목'].astype(str).str.contains('[가-힣]', regex=True)]
+            nd = nd[nd['시각(한국)'].astype(str) >= prev]
+            nd = nd[~nd['제목'].astype(str).str.contains('블로그|Blog|카페', regex=True)]   # 블로그 글 제외
+            akr = nd['링크'].astype(str).str.extract(r'AKR(\d{8})')[0]
+            nd = nd[akr.isna() | (akr >= (day0 - pd.Timedelta(days=1)).strftime('%Y%m%d'))]
+            if day0.weekday() == 0:
+                nd = nd[nd['출처'].astype(str) != '아침 정리']
+            nd = nd.drop_duplicates('제목').sort_values('시각(한국)', ascending=False)
+            cap = {'아침 정리': 3}
+            grp = nd['출처'].astype(str).map(lambda x: '국제' if '연합' in x else x if x == '아침 정리' else '종목')
+            nd = nd.groupby(grp, group_keys=False).apply(lambda g: g.head(cap.get(g.name, 5 if g.name == '국제' else 6)))
             nd = nd.sort_values('시각(한국)', ascending=False)
-            show = nd[['시각(한국)', '출처', '제목', '링크']]
-            st.dataframe(show, hide_index=True, width='stretch', height=560,
-                         column_config={'제목': st.column_config.TextColumn(width='large'),
-                                        '링크': st.column_config.LinkColumn('링크', display_text='열기', width='small')})
+            nd['묶음'] = grp.reindex(nd.index)
+        if len(nd):
+            body = ''
+            SRC = '<span style="color:#6b7280;font-size:.8rem;"> · {}</span>'
+            for gname, glabel in (('국제', '간밤 국제'), ('아침 정리', '뉴욕 마감 정리'), ('종목', '보유·관심 종목')):
+                g = nd[nd['묶음'] == gname]
+                if not len(g):
+                    continue
+                body += f'<div style="margin:12px 0 2px;font-weight:700;font-size:.95rem;">{glabel}</div>'
+                for _, r in g.iterrows():
+                    src = str(r.get('종목') or '') if gname != '국제' else '연합뉴스'
+                    src = '' if src == 'nan' else src
+                    link = str(r.get('링크') or '')
+                    title = _h.escape(_re.sub(r'\s+(\([^()]+\)|[-–]\s+[^-–]+)$', '', str(r['제목'])))   # 끝의 '(매체)'·'- 매체' 떼기
+                    ttl = (f'<a href="{_h.escape(link)}" target="_blank" style="color:inherit;text-decoration:none;">{title}</a>'
+                           if link.startswith('http') else title)
+                    body += (f'<div style="display:flex;gap:12px;padding:6px 0;border-top:1px solid rgba(128,128,128,.12);">'
+                             f'<div style="min-width:44px;color:#6b7280;font-variant-numeric:tabular-nums;font-size:.85rem;">'
+                             f'{_h.escape(str(r["시각(한국)"])[6:])}</div>'
+                             f'<div style="font-size:.92rem;line-height:1.4;">{ttl}'
+                             f'{SRC.format(_h.escape(src)) if src else ""}</div></div>')
+            st.html(CARD.format(body))
         else:
-            st.info('오늘 뉴스 파일이 없습니다.')
+            st.info('간밤(전날 18시 이후) 한국어 뉴스가 없습니다.')
     st.divider()
 
     # ---- 공포와 탐욕 (맨 위, 가장 자세히)
