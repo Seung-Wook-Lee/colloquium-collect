@@ -58,7 +58,14 @@ def mrow(grp, name, s, unit='', pct=True, high=False, src='', value=None, date=N
     r = {'구분': grp, '항목': name, '값': round(v, 3) if v is not None else '데이터 없음', '단위': unit, '기준일': d,
          'YTD': ytd(s, pct) if s is not None else None, '1달': m1(s, pct) if s is not None else None,
          '변화 단위': '%' if pct else '%p', '사상 최고': None, '최고일': None, '최고 대비(%)': None,
-         '신호': '', '표시': '', '의장 기준(참고)': CHAIR_NOTE.get(name, ''), '비고': note, '출처': src}
+         '신호': '', '표시': '', '의장 기준(참고)': CHAIR_NOTE.get(name, ''), '비고': note, '출처': src,
+         '전일 값': None, '1주 전 값': None, '1달 전 값': None}
+    if s is not None and len(s) > 1 and value is None:   # 의장 11/2 "어제·1주 전·1달 전 값을 그냥 보여줘"
+        d0 = s.index[-1]
+        r['전일 값'] = round(float(s.iloc[-2]), 3)
+        w, mo = at_or_before(s, d0 - pd.Timedelta(days=7)), at_or_before(s, d0 - pd.DateOffset(months=1))
+        r['1주 전 값'] = None if w is None else round(w, 3)
+        r['1달 전 값'] = None if mo is None else round(mo, 3)
     if high and s is not None and len(s):
         mx, mxd = float(s.max()), s.idxmax().strftime('%Y-%m-%d')
         r.update({'사상 최고': round(mx, 3), '최고일': mxd, '최고 대비(%)': round((v / mx - 1) * 100, 2)})
@@ -72,13 +79,15 @@ def mrow(grp, name, s, unit='', pct=True, high=False, src='', value=None, date=N
 
 try:
     # 지수
-    for k in ['S&P500', '나스닥', '코스피', '니케이225', '필라델피아 반도체(SOX)', '대만 가권', '유로스톡스50']:
-        mrow('지수', k, YS.get(k), high=True, src=f'야후 {YF_SERIES[k]}')
+    for k in ['S&P500', '나스닥', '다우', '코스피', '코스닥', '니케이225', '필라델피아 반도체(SOX)', '대만 가권', '유로스톡스50']:
+        if k not in YS and k not in YF_SERIES:
+            continue
+        mrow('지수', k, YS.get(k), high=True, src=YSRC.get(k, ''))
         if k == '코스피' and '코스피' in YS and len(YS['코스피']) >= 50:
             ks = YS['코스피']
             disp = ks / ks.rolling(50).mean() * 100
             mrow('지수', '코스피 50일 이격도', None, value=float(disp.iloc[-1]), date=ks.index[-1].strftime('%Y-%m-%d'),
-                 src='야후 ^KS11 계산', line=disp, note=f'1년 최고 {disp.iloc[-250:].max():.1f} / 최저 {disp.iloc[-250:].min():.1f}')
+                 src='코스피 지수 계산', line=disp, note=f'1년 최고 {disp.iloc[-250:].max():.1f} / 최저 {disp.iloc[-250:].min():.1f}')
     # 환율
     for k in ['원/달러', '엔/달러', '100엔당 원', '달러지수']:
         mrow('환율', k, YS.get(k), src='야후 원/달러 ÷ 엔/달러 계산' if k == '100엔당 원' else f'야후 {YF_SERIES[k]}')

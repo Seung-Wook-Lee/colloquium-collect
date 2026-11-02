@@ -352,6 +352,18 @@ def analyze(d):
     row.update(frame_row(d, '일', '일_'))
     if len(w) >= 60:
         row.update(frame_row(w, '주', '주_'))
+        # 라케시스 v0.5 하락 국면 후보(2026-11-02 의장 승인): 50주선 위 + 52주 고점 -15~-40% + (주봉 지지 반등 또는 주봉 MACD 음수권 상승 전환)
+        #   시장 국면(시장 5개월선 아래 = 하락 국면)은 회의 원고에서 TIGER 200·SPYM으로 따로 본다.
+        wc = w['종가']
+        mline = wc.ewm(span=12, adjust=False).mean() - wc.ewm(span=26, adjust=False).mean()
+        turn = bool(mline.iloc[-1] < 0 and mline.iloc[-1] > mline.iloc[-2] and mline.iloc[-2] <= mline.iloc[-3])
+        rise = bool(mline.iloc[-1] < 0 and mline.iloc[-1] > mline.iloc[-2])
+        bounce = '반등' in str(row.get('주_지지상태', ''))
+        x50, ddp = row.get('주_50주_이격도'), row['52주고점대비(%)']
+        ok = x50 is not None and x50 >= 100 and -40 <= ddp <= -15 and (bounce or rise)
+        row['주_MACD선'] = round(float(mline.iloc[-1]), 2)
+        row['라케시스_v05'] = ('후보: ' + ' + '.join(t for t, f in (('주봉 지지 반등', bounce),
+                               ('MACD 음수권 상승 전환' if turn else 'MACD 음수권 상승', rise)) if f)) if ok else ''
     mon = d['종가'].groupby(d.index.to_period('M')).last()
     row['월_5개월선'] = mon.rolling(5).mean().iloc[-1]
     return row

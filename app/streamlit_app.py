@@ -170,6 +170,11 @@ def series(kind, name):
     return pd.Series(num(t['값']).values, index=pd.to_datetime(t['날짜'])).sort_index().dropna()
 
 
+def at_or_before(s, when):
+    x = s[s.index <= pd.Timestamp(when)]
+    return float(x.iloc[-1]) if len(x) else None
+
+
 MONTHLY_GRP = ('물가', '성장·고용')
 
 
@@ -425,9 +430,13 @@ with t1:
                 if key in FG_HELP:
                     with st.popover('읽는 법', width='stretch'):
                         st.markdown(f'**{key}**\n\n' + FG_HELP[key])
-                if len(raw):
-                    card(st, r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2), data=raw.tolist(), border=False,
-                         help=r.get('원천값 설명'))
+                if len(raw):   # 2026-11-02 의장: 막대 대신 어제·1주 전·1달 전 값을 숫자로
+                    d0 = raw.index[-1]
+                    past = [('전일', raw.iloc[-2] if len(raw) > 1 else None),
+                            ('1주 전', at_or_before(raw, d0 - pd.Timedelta(days=7))),
+                            ('1달 전', at_or_before(raw, d0 - pd.DateOffset(months=1)))]
+                    st.metric(r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2), help=r.get('원천값 설명'))
+                    st.caption(' · '.join(f'{k} {fmt(v, 2)}' for k, v in past if v is not None and pd.notna(v)))
                 if pd.notna(r.get('해석')):
                     st.caption(r['해석'])
 
@@ -456,17 +465,23 @@ with t1:
     st.subheader('지수')
     if len(mac):
         ix = mac[(mac['구분'] == '지수') & (mac['항목'] != '코스피 50일 이격도')].copy()
-        ix['최근 1달'] = ix['항목'].map(lambda k: bars_svg(spark('매크로', k)))
-        ix = ix[['항목', '값', '최근 1달', '기준일', 'YTD', '1달', '최고 대비(%)', '표시', '의장 기준(참고)']]
-        for k in ['값', 'YTD', '1달', '최고 대비(%)']:
+        for k in ['전일 값', '1주 전 값', '1달 전 값', '출처']:   # 옛 파일엔 없는 칸
+            if k not in ix:
+                ix[k] = None
+        # 2026-11-02 의장: 멋으로 그린 막대 대신 어제·1주 전·1달 전 값을 숫자로
+        ix = ix[['항목', '값', '전일 값', '1주 전 값', '1달 전 값', '기준일', 'YTD', '1달', '최고 대비(%)', '표시', '출처']]
+        for k in ['값', '전일 값', '1주 전 값', '1달 전 값', 'YTD', '1달', '최고 대비(%)']:
             ix[k] = num(ix[k])
-        ix[['표시', '의장 기준(참고)']] = ix[['표시', '의장 기준(참고)']].fillna('')
-        ix = ix.rename(columns={'YTD': 'YTD(%)', '1달': '1달(%)', '최고 대비(%)': '사상 최고 대비(%)', '의장 기준(참고)': '의장 기준'})
+        ix['출처'] = ix['출처'].fillna('').str.split(' ').str[0]
+        ix['표시'] = ix['표시'].fillna('')
+        ix = ix.rename(columns={'값': '현재', '전일 값': '전일', '1주 전 값': '1주 전', '1달 전 값': '1달 전',
+                                'YTD': 'YTD(%)', '1달': '1달(%)', '최고 대비(%)': '사상 최고 대비(%)'})
         st.dataframe(
             ix.style.map(updown, subset=['YTD(%)', '1달(%)']).format(
-                {'값': '{:,.2f}', 'YTD(%)': '{:+.1f}', '1달(%)': '{:+.1f}', '사상 최고 대비(%)': '{:+.1f}'}, na_rep='—'),
-            hide_index=True, width='stretch',
-            column_config={'최근 1달': st.column_config.ImageColumn('최근 1달', width='medium')})
+                {'현재': '{:,.2f}', '전일': '{:,.2f}', '1주 전': '{:,.2f}', '1달 전': '{:,.2f}',
+                 'YTD(%)': '{:+.1f}', '1달(%)': '{:+.1f}', '사상 최고 대비(%)': '{:+.1f}'}, na_rep='—'),
+            hide_index=True, width='stretch')
+        st.caption('지수는 네이버 증권 일봉 우선, 네이버가 막히면 야후. 사상 최고는 야후의 긴 이력과 이어 붙여 계산.')
 
     def tiles(grp, dec=2):
         g = mac[mac['구분'] == grp] if len(mac) else pd.DataFrame()
