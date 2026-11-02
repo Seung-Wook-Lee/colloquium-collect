@@ -305,7 +305,7 @@ try:
                     k = pd.Timestamp(ts)
                     k = k.tz_localize(ET_TZ) if k.tzinfo is None else k
                     kk = k.tz_convert(KST)
-                    hm = '' if (k.hour, k.minute) == (0, 0) else kk.strftime('%H:%M')
+                    hm = '' if (k.hour, k.minute) == (0, 0) else kk.strftime('%H:%M') + '경'   # 야후 시각은 정각 반올림(실제 06:05·06:30 등)
                     eps, est = row.get('Reported EPS'), row.get('EPS Estimate')
                     if today <= kk.date() <= until and kk <= NOW and pd.notna(eps):
                         what = f'간밤 발표: EPS 실제 {eps:.2f} / 예상 {est:.2f}' if pd.notna(est) else f'간밤 발표: EPS 실제 {eps:.2f}'

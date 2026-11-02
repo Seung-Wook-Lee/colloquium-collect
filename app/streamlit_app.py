@@ -3,7 +3,7 @@
 #   읽는 것  : 드라이브 '콜로키움 수집데이터/YYYYMMDD/' 의 CSV·PDF·점검 파일, '00_누적/00_가격이력.csv'
 #              드라이브는 수집 프로그램과 같은 창구(drive.py, 비밀값 DRIVE_URL·DRIVE_TOKEN)로 읽는다.
 #              PC에서 돌릴 때는 환경변수 COLLOQ_DATA 에 '콜로키움 수집데이터' 폴더 경로를 넣으면 그 폴더를 바로 읽는다.
-#   화면     : 오늘 시장 / 회의록 / 종목 / 섹터 순환 / 주봉 차트 / 수집 점검
+#   화면     : 오늘 시장(맨 위 이번 주 일정·간밤 뉴스) / 회의록 / 종목 / 섹터 순환 / 주봉 차트 / 수집 점검
 #              회의록은 드라이브 '콜로키움/오늘의 시장해석/' 의 txt(회의록_YYYYMMDD.txt 등)를 그대로 보여 준다.
 #              색과 문구는 수집 블록이 적은 '신호'·'표시' 칸(의장 기준)만 따른다. 화면이 따로 판정하지 않는다.
 #   실행     : streamlit run app/streamlit_app.py
@@ -133,6 +133,7 @@ fg, mac, risk = csv(DAY, '공포탐욕'), csv(DAY, '매크로'), csv(DAY, '리�
 price, val = csv(DAY, '시세'), csv(DAY, '밸류에이션')
 dart, secr = csv(DAY, 'DART실적'), csv(DAY, 'SEC실적')
 trend_df = csv(DAY, '추이')
+sched_df, news_df = csv(DAY, '일정'), csv(DAY, '뉴스')
 FG_BANDS = [(0, 25, '#c0392b', '극단적 공포'), (25, 45, '#e67e22', '공포'), (45, 55, '#9aa0a6', '중립'),
             (55, 75, '#7cb342', '탐욕'), (75, 100, '#2e7d32', '극단적 탐욕')]
 
@@ -296,6 +297,36 @@ with t1:
             return num(pd.Series([m.loc[name, col]])).iloc[0]
         except Exception:
             return None
+
+    # ---- 이번 주 일정 · 간밤 주요 뉴스 (맨 위, 2026-11-02 의장 "첫 페이지에 넣자")
+    c_s, c_n = st.columns([1, 1])
+    with c_s:
+        st.subheader('이번 주 일정')
+        if len(sched_df):
+            sd = sched_df.copy()
+            sd['일시'] = sd['날짜'].astype(str).str[5:] + '(' + sd['요일'].astype(str) + ') ' + sd['시각(한국)'].astype(str)
+            sd['보유/관심'] = sd['보유/관심'].fillna('')
+            timed = set(zip(sd.loc[sd['시각(한국)'] != '미정', '날짜'], sd.loc[sd['시각(한국)'] != '미정', '대상']))
+            sd = sd[~((sd['시각(한국)'] == '미정') & pd.Series([(d, w) in timed for d, w in zip(sd['날짜'], sd['대상'])], index=sd.index))]   # 같은 날 시각 있는 줄이 있으면 '미정' 줄은 뺀다
+            show = sd[['일시', '대상', '보유/관심', '구분', '내용']]
+            st.dataframe(show, hide_index=True, width='stretch', height=min(36 * (len(show) + 1) + 4, 560),
+                         column_config={'내용': st.column_config.TextColumn(width='medium')})
+            st.caption('한국 시각. 미국 실적 시각은 야후 예정 시각이라 분 단위가 다를 수 있음(예: 16:00 → 06:00, 실제 06:05·06:30).')
+        else:
+            st.info('오늘 일정 파일이 없습니다.')
+    with c_n:
+        st.subheader('간밤 주요 뉴스')
+        if len(news_df):
+            nd = news_df.copy()
+            nd['출처'] = nd['출처'].fillna('') + nd['종목'].fillna('').map(lambda x: f' · {x}' if x else '')
+            nd = nd.sort_values('시각(한국)', ascending=False)
+            show = nd[['시각(한국)', '출처', '제목', '링크']]
+            st.dataframe(show, hide_index=True, width='stretch', height=560,
+                         column_config={'제목': st.column_config.TextColumn(width='large'),
+                                        '링크': st.column_config.LinkColumn('링크', display_text='열기', width='small')})
+        else:
+            st.info('오늘 뉴스 파일이 없습니다.')
+    st.divider()
 
     # ---- 공포와 탐욕 (맨 위, 가장 자세히)
     st.subheader('공포와 탐욕')
