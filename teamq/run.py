@@ -10,13 +10,11 @@ import market, fundamentals, build
 PARTS = [('prices', market.part_prices), ('etf', market.part_etf), ('macro', market.part_macro),
          ('fund_us', fundamentals.part_fund_us), ('fund_kr', fundamentals.part_fund_kr), ('fund_jp', fundamentals.part_fund_jp),
          ('earnings_dates', fundamentals.part_earnings_dates),
-         ('valuation', build.part_valuation), ('events', build.part_events), ('quality', build.part_quality)]
+         ('valuation', build.part_valuation), ('events', build.part_events), ('quality', build.part_quality), ('summary', build.part_summary)]
 
 want = [a for a in sys.argv[1:] if a.strip()]
 for name, fn in PARTS:
     if not want or name in want:
         run_part(name, fn)
-if 'quality' not in want and want:
-    build.part_quality()          # 현황표는 늘 새로
 n = upload_all()
 log(f'끝. 드라이브에 올린 파일 {n}개 (창구 준비: {q_ready()}), 로컬 {OUT}')

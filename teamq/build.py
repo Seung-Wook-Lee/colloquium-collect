@@ -281,6 +281,9 @@ def part_quality():
     f.to_csv(os.path.join(OUT, 'metadata/coverage_fundamentals.csv'), index=False, encoding='utf-8-sig')
 
     st = pd.DataFrame(STATUS)
+    prev = load('metadata/run_status.parquet')          # 앞 실행의 결과는 남기고, 이번에 다시 돈 단계만 바꾼다
+    if prev is not None and len(prev):
+        st = pd.concat([prev[~prev['part'].isin(set(st['part']) if len(st) else set())], st])
     save(st, 'metadata/run_status.parquet')
     st.to_csv(os.path.join(OUT, 'metadata/run_status.csv'), index=False, encoding='utf-8-sig')
     src = pd.DataFrame([
@@ -297,3 +300,42 @@ def part_quality():
     src['collected_at'] = COLLECTED_AT
     save(src, 'metadata/sources.parquet')
     src.to_csv(os.path.join(OUT, 'metadata/sources.csv'), index=False, encoding='utf-8-sig')
+
+
+def part_summary():
+    """실행 로그에 확보 현황을 찍는다(산출물을 내려받지 못할 때 확인용)."""
+    pd.set_option('display.width', 250); pd.set_option('display.max_rows', 500); pd.set_option('display.max_columns', 30)
+    for rel in ['metadata/run_status.parquet', 'metadata/quality_prices.parquet', 'metadata/coverage_fundamentals.parquet']:
+        d = load(rel)
+        print(f'\n##### {rel}')
+        if d is None:
+            print('없음'); continue
+        if 'run_status' in rel:
+            print(d.groupby('part')['ok'].agg(['sum', 'count']))
+            print(d[~d['ok']][['part', 'item', 'note']].to_string())
+        else:
+            print(d.drop(columns=[c for c in ['name'] if c in d]).to_string())
+    v = load('processed/valuation/daily_valuation_pit.parquet')
+    if v is not None:
+        print('\n##### valuation: 종목별 첫 PER 날짜와 마지막 날 값')
+        last = v.sort_values('date').groupby('yticker').tail(1).set_index('yticker')
+        first = v[v['PER'].notna()].groupby('yticker')['date'].min()
+        cols = [c for c in ['date', 'shares_src', 'market_cap', 'PER', 'PBR', 'PSR', 'EV_EBITDA', 'ROE', 'ROIC', 'debt_ratio', 'dividend_yield', 'FCF_yield'] if c in last]
+        print(last[cols].assign(first_PER=first).round(3).to_string())
+    for rel in ['processed/market_events/events.parquet', 'raw/corporate_actions/dart_disclosures.parquet', 'raw/corporate_actions/sec_filings.parquet']:
+        d = load(rel)
+        if d is not None:
+            col = 'event_type' if 'event_type' in d else 'event'
+            print(f'\n##### {rel} 종류별 건수'); print(d[col].value_counts().head(40).to_string())
+    for rel in ['raw/prices/kis_kr_daily_10y.parquet', 'raw/macro/fred_latest_values.parquet', 'processed/macro/alfred_first_release.parquet',
+                'raw/fundamentals/yahoo_japan_financials_reference.parquet', 'raw/etf/yahoo_etf_info_current.parquet']:
+        d = load(rel)
+        if d is None:
+            print(f'\n##### {rel}: 없음'); continue
+        print(f'\n##### {rel}: {len(d):,}행')
+        if 'series_id' in d:
+            print(d.groupby('series_id')['date'].agg(['min', 'max', 'count']).to_string())
+        elif 'code' in d:
+            print(d.groupby(['code', 'adjusted'])['date'].agg(['min', 'max', 'count']).to_string())
+        else:
+            print(d.head(15).to_string())

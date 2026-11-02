@@ -9,6 +9,10 @@ on:
         description: '돌릴 단계(띄어쓰기). 비우면 전부: prices etf macro fund_us fund_kr fund_jp earnings_dates valuation events quality'
         required: false
         default: ''
+      from_run:
+        description: '앞 실행 번호(run id). 넣으면 그 실행의 결과(teamq_out)를 받아 이어서 가공'
+        required: false
+        default: ''
   push:
     paths:
       - 'teamq/trigger.txt'
@@ -19,11 +23,27 @@ jobs:
   teamq:
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: 앞 실행 결과 읽기(선택)
+        id: prev
+        run: |
+          RUN="${{ github.event.inputs.from_run }}"
+          if [ -z "$RUN" ] && [ "${{ github.event_name }}" = "push" ]; then RUN=$(sed -n 2p teamq/trigger.txt | tr -d ' '); fi
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+      - if: steps.prev.outputs.run != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: teamq_out
+          path: teamq_out
+          run-id: ${{ steps.prev.outputs.run }}
+          github-token: ${{ github.token }}
       - name: 라이브러리 설치
         run: pip install -r teamq/requirements.txt
       - name: 과거 데이터 수집
@@ -44,7 +64,7 @@ jobs:
           KRX_PW: ${{ secrets.KRX_PW }}
           PARTS: ${{ github.event.inputs.parts }}
         run: |
-          if [ -z "$PARTS" ] && [ "${{ github.event_name }}" = "push" ]; then PARTS=$(cat teamq/trigger.txt); fi
+          if [ -z "$PARTS" ] && [ "${{ github.event_name }}" = "push" ]; then PARTS=$(sed -n 1p teamq/trigger.txt); fi
           [ "$PARTS" = "all" ] && PARTS=""
           python teamq/run.py $PARTS
       - name: 결과 보관(드라이브 창구가 없을 때 대비, 7일)
