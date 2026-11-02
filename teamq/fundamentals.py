@@ -24,7 +24,7 @@ STD_US = {
                       'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments',
                       'ProfitLossBeforeTax'],
     'income_tax': ['IncomeTaxExpenseBenefit', 'IncomeTaxExpenseContinuingOperations'],
-    'net_income': ['NetIncomeLoss', 'ProfitLossAttributableToOwnersOfParent', 'ProfitLoss'],
+    'net_income': ['NetIncomeLoss', 'NetIncomeLossAvailableToCommonStockholdersBasic', 'ProfitLossAttributableToOwnersOfParent', 'ProfitLoss'],
     'eps_basic': ['EarningsPerShareBasic', 'BasicEarningsLossPerShare'],
     'eps_diluted': ['EarningsPerShareDiluted', 'DilutedEarningsLossPerShare'],
     'total_assets': ['Assets'],
@@ -38,7 +38,9 @@ STD_US = {
     'cfi': ['NetCashProvidedByUsedInInvestingActivities', 'CashFlowsFromUsedInInvestingActivities'],
     'cff': ['NetCashProvidedByUsedInFinancingActivities', 'CashFlowsFromUsedInFinancingActivities'],
     'capex': ['PaymentsToAcquirePropertyPlantAndEquipment', 'PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities'],
-    'dep_amort': ['DepreciationDepletionAndAmortization', 'DepreciationAndAmortization', 'DepreciationAmortizationAndAccretionNet'],
+    'dep_amort': ['DepreciationDepletionAndAmortization', 'DepreciationAndAmortization', 'DepreciationAmortizationAndAccretionNet',
+                  'DepreciationAmortizationAndOther', 'Depreciation', 'DepreciationDepletionAndAmortizationPropertyPlantAndEquipment',
+                  'DepreciationPropertyPlantAndEquipmentAndAmortizationOfIntangibleAssets', 'DepreciationAndAmortisationExpense'],
     'dividends_paid': ['PaymentsOfDividendsCommonStock', 'PaymentsOfDividends', 'DividendsPaidClassifiedAsFinancingActivities'],
     'dps_declared': ['CommonStockDividendsPerShareDeclared', 'CommonStockDividendsPerShareCashPaid'],
     'buyback': ['PaymentsForRepurchaseOfCommonStock'],
@@ -77,36 +79,64 @@ def to_quarters(f):
     return q.sort_values('period_end') if len(q) else q
 
 
+NONADD = {'shares_diluted_wavg'}     # 더할 수 없는 값: 3개월 직접 값만 쓴다
+
+
 def std_long(raw, std_map, ticker, src):
-    """raw(concept,unit,start,end,val,filed,form) → 표준 항목 긴 표: 분기(Q)·연간(FY)·시점(I)"""
+    """raw(concept,unit,start,end,val,filed,form) → 표준 항목 긴 표: 분기(Q)·연간(FY)·시점(I).
+    후보 태그를 모두 모은 뒤 같은 기간이면 앞쪽(우선) 태그 값을 쓴다(회사가 중간에 태그를 바꿔도 이어지게)."""
     rows = []
     for item, tags in std_map.items():
-        sub = None
-        for t in tags:
-            s = raw[raw['concept'] == t]
-            if len(s):
-                sub, tag = s, t
-                break
-        if sub is None:
+        sub = raw[raw['concept'].isin(tags)].copy()
+        if not len(sub):
             continue
         unit = sub['unit'].value_counts().index[0]
         sub = sub[sub['unit'] == unit]
+        sub['prio'] = sub['concept'].map({t: i for i, t in enumerate(tags)})
+        sub = sub.sort_values(['prio', 'filed']).drop_duplicates(['start', 'end'], keep='first')
+        tag = '|'.join(sub['concept'].unique())
         if item in FLOW:
-            q = to_quarters(sub)
+            if item in NONADD:
+                d3 = sub.dropna(subset=['start'])
+                d3 = d3[(d3['end'] - d3['start']).dt.days.between(80, 100)]
+                q = d3.rename(columns={'end': 'period_end', 'val': 'value'})[['period_end', 'value', 'filed']].assign(method='direct')
+            else:
+                q = to_quarters(sub)
             for _, r in q.iterrows():
                 rows.append({'ticker': ticker, 'item': item, 'period_type': 'Q', 'period_start': None, 'period_end': r['period_end'],
                              'value': r['value'], 'unit': unit, 'filed': r['filed'], 'method': r['method'], 'tag': tag, 'source': src})
             fy = sub.dropna(subset=['start'])
-            fy = fy[((fy['end'] - fy['start']).dt.days.between(350, 380))].sort_values('filed').drop_duplicates(['start', 'end'])
+            fy = fy[((fy['end'] - fy['start']).dt.days.between(350, 380))]
             for _, r in fy.iterrows():
                 rows.append({'ticker': ticker, 'item': item, 'period_type': 'FY', 'period_start': r['start'], 'period_end': r['end'],
-                             'value': r['val'], 'unit': unit, 'filed': r['filed'], 'method': 'direct', 'tag': tag, 'source': src})
+                             'value': r['val'], 'unit': unit, 'filed': r['filed'], 'method': 'direct', 'tag': r['concept'], 'source': src})
         else:
-            ins = sub.sort_values('filed').drop_duplicates(['end'], keep='first')
+            ins = sub.sort_values(['prio', 'filed']).drop_duplicates(['end'], keep='first')
             for _, r in ins.iterrows():
                 rows.append({'ticker': ticker, 'item': item, 'period_type': 'I', 'period_start': None, 'period_end': r['end'],
-                             'value': r['val'], 'unit': unit, 'filed': r['filed'], 'method': 'direct', 'tag': tag, 'source': src})
+                             'value': r['val'], 'unit': unit, 'filed': r['filed'], 'method': 'direct', 'tag': r['concept'], 'source': src})
     return pd.DataFrame(rows)
+
+
+def part_fund_us_std():
+    """이미 받은 SEC 원본(raw/fundamentals/sec_companyfacts/*.parquet)으로 표준 표만 다시 만든다."""
+    std_all = []
+    for t in U.loc[(U['country'] == '미국') & (U['kind'] == 'stock'), 'yticker']:
+        raw = load(f'raw/fundamentals/sec_companyfacts/{t}.parquet')
+        if raw is None or not len(raw):
+            continue
+        for c in ['start', 'end', 'filed']:
+            raw[c] = pd.to_datetime(raw[c], errors='coerce')
+        raw['val'] = pd.to_numeric(raw['val'], errors='coerce')
+        s = std_long(raw[raw['end'] >= '2013-01-01'], STD_US, t, 'SEC companyfacts')
+        std_all.append(s)
+        status('fundamentals', f'SEC 표준화 {t}', len(s) > 0, len(s), note=f'표준항목 {s["item"].nunique() if len(s) else 0}개')
+    save(pd.concat([x for x in std_all if len(x)]), 'processed/fundamentals/us_standardized_pit.parquet')
+    f = load('raw/corporate_actions/sec_filings.parquet')
+    if f is not None:
+        keep = ~f['form'].astype(str).str.match(r'^(424B|FWP)')
+        save(f[keep], 'raw/corporate_actions/sec_filings.parquet')
+        log(f'  SEC 공시 목록: 증권 발행 설명서(424B·FWP) {int((~keep).sum()):,}건 제외')
 
 
 def part_fund_us():
@@ -158,6 +188,7 @@ def part_fund_us():
     if std_all:
         save(pd.concat(std_all), 'processed/fundamentals/us_standardized_pit.parquet')
     if subs:
+        subs = [x[~x['form'].astype(str).str.match(r'^(424B|FWP)')] for x in subs]
         s = pd.concat(subs)
         s['filingDate'] = pd.to_datetime(s['filingDate'])
         s = s[s['filingDate'] >= START]
@@ -189,6 +220,31 @@ STD_KR = {
     'capex': ['ifrs-full_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities', 'ifrs_PurchaseOfPropertyPlantAndEquipment'],
     'dividends_paid': ['ifrs-full_DividendsPaidClassifiedAsFinancingActivities', 'ifrs_DividendsPaidClassifiedAsFinancingActivities'],
 }
+# account_id가 표준이 아닌 옛 보고서(대략 2019년 이전)와 주요계정 API를 위한 계정명 대응(공백·'(손실)' 등 괄호 제거 후 비교, 앞쪽 우선)
+NAME_KR = {
+    'revenue': ['매출액', '수익(매출액)', '매출', '영업수익'], 'cost_of_revenue': ['매출원가', '영업비용'], 'gross_profit': ['매출총이익'],
+    'operating_income': ['영업이익'], 'pretax_income': ['법인세비용차감전순이익', '법인세차감전순이익', '법인세비용차감전계속영업이익'],
+    'income_tax': ['법인세비용'],
+    'net_income': ['지배기업의소유주에게귀속되는당기순이익', '지배기업소유주지분', '지배기업소유주', '당기순이익'],
+    'eps_basic': ['기본주당이익', '기본주당순이익', '기본및희석주당이익'], 'eps_diluted': ['희석주당이익', '희석주당순이익'],
+    'total_assets': ['자산총계'], 'total_liabilities': ['부채총계'],
+    'equity': ['지배기업의소유주에게귀속되는자본', '지배기업소유주지분', '자본총계'], 'cash': ['현금및현금성자산'],
+    'short_term_debt': ['단기차입금'], 'long_term_debt': ['장기차입금'],
+    'cfo': ['영업활동현금흐름', '영업활동으로인한현금흐름'], 'cfi': ['투자활동현금흐름', '투자활동으로인한현금흐름'],
+    'cff': ['재무활동현금흐름', '재무활동으로인한현금흐름'], 'capex': ['유형자산의취득', '유형자산취득'],
+    'dividends_paid': ['배당금의지급', '배당금지급'],
+}
+
+
+BS_KR = {'total_assets', 'total_liabilities', 'equity', 'cash', 'short_term_debt', 'long_term_debt'}
+CF_KR = {'cfo', 'cfi', 'cff', 'capex', 'dividends_paid'}
+IS_KR = ['IS', 'CIS']
+
+
+def _nm(x):
+    return re.sub(r'\(.*?\)|\s|[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]\.?|^[IVX]+\.|^\d+\.', '', str(x or ''))
+
+
 REPRT = {'11013': ('Q1', 3), '11012': ('H1', 6), '11014': ('Q3', 9), '11011': ('FY', 12)}
 
 
@@ -220,21 +276,26 @@ def dart_std(raw, code):
     """DART 원본 → 표준 항목. 손익은 분기 3개월 값(thstrm_amount, 연간은 연간−3분기 누적), 현금흐름은 누적의 차이, 재무상태는 시점."""
     rows = []
     raw = raw[raw['sj_div'] != 'SCE']
+    raw = raw.copy()
+    raw['nm'] = raw['account_nm'].map(_nm) if 'account_nm' in raw else ''
     for item, ids in STD_KR.items():
-        sub = None
-        for i in ids:
-            s = raw[raw['account_id'] == i]
-            if len(s):
-                sub, tag = s, i
-                break
-        if sub is None:
+        parts = []
+        for i, aid in enumerate(ids):                     # 1) 표준 account_id
+            parts.append(raw[raw['account_id'] == aid].assign(prio=i, tag=aid))
+        for i, nm in enumerate(NAME_KR.get(item, [])):    # 2) 계정명(옛 보고서·주요계정)
+            parts.append(raw[raw['nm'] == _nm(nm)].assign(prio=100 + i, tag='name:' + nm))
+        sub = pd.concat(parts)
+        want = ['BS'] if item in BS_KR else ['CF'] if item in CF_KR else IS_KR
+        sub = sub[sub['sj_div'].isin(want)]      # 같은 이름이 다른 표(현금흐름표의 '당기순이익' 등)에 있어도 섞지 않게
+        if not len(sub):
             continue
-        sub = sub.sort_values('sj_div', key=lambda c: c.map({'BS': 0, 'IS': 0, 'CF': 0, 'CIS': 1})).drop_duplicates(['bsns_year', 'reprt_code'])
+        sub = sub.sort_values(['prio']).drop_duplicates(['bsns_year', 'reprt_code', 'sj_div'], keep='first')
+        sub = sub.assign(_o=sub['sj_div'].map({'BS': 0, 'IS': 0, 'CF': 0, 'CIS': 1}).fillna(2)).sort_values(['_o', 'prio']).drop_duplicates(['bsns_year', 'reprt_code'])
         for _, r in sub.iterrows():
             yr, (lab, months) = int(r['bsns_year']), REPRT[r['reprt_code']]
             pe = pd.Timestamp(year=yr, month=12, day=31) if months == 12 else pd.Timestamp(year=yr, month=months, day=1) + pd.offsets.MonthEnd(0)
             base = {'ticker': code, 'item': item, 'period_end': pe, 'unit': r.get('currency') or 'KRW', 'filed': r['filed'],
-                    'tag': tag, 'source': f'DART fnlttSinglAcntAll {r["fs_div"]}', 'fiscal_label': f'{yr}{lab}'}
+                    'tag': r['tag'], 'source': f'DART {r.get("api", "fnlttSinglAcntAll")} {r["fs_div"]}', 'fiscal_label': f'{yr}{lab}'}
             if r['sj_div'] == 'BS':
                 rows.append({**base, 'period_type': 'I', 'value': amt(r['thstrm_amount']), 'method': 'direct'})
             elif r['sj_div'] in ('IS', 'CIS'):
@@ -406,3 +467,45 @@ def part_earnings_dates():
         d['earnings_datetime'] = d['earnings_datetime'].astype(str)
         d['source'] = 'yahoo get_earnings_dates'
         save(d, 'raw/corporate_actions/yahoo_earnings_dates.parquet')
+
+
+def part_fund_kr_fix():
+    """1차 실행에서 2019년 3분기 이전이 비어 있던 것 보완: (1) 받은 원본에서 계정명으로 다시 표준화,
+    (2) 원본에 없는 연도·보고서는 DART '주요계정'(fnlttSinglAcnt, 2015~)으로 채운다."""
+    raw = load('raw/fundamentals/dart_fnltt_all.parquet')
+    raw['filed'] = pd.to_datetime(raw['filed'])
+    have = raw.groupby('ticker').apply(lambda g: set(zip(g['bsns_year'].astype(str), g['reprt_code'].astype(str)))).to_dict()
+    print('원본 보유 연도별 보고서 수(첫 종목 3개):')
+    for t in list(have)[:3]:
+        print(' ', t, sorted(have[t])[:8], '...', len(have[t]))
+    r = dart('corpCode.xml')
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    root = ET.fromstring(z.read(z.namelist()[0]))
+    cc = {(e.findtext('stock_code') or '').strip(): e.findtext('corp_code') for e in root.iter('list')}
+    extra = []
+    for code in U.loc[(U['country'] == '한국') & (U['kind'] == 'stock'), 'code']:
+        corp = cc.get(code)
+        got = have.get(code, set())
+        n = 0
+        for y in range(int(START[:4]), int(TODAY[:4]) + 1):
+            for rc in REPRT:
+                if (str(y), rc) in got:
+                    continue
+                j = dart('fnlttSinglAcnt.json', corp_code=corp, bsns_year=str(y), reprt_code=rc)
+                if j and j.get('status') == '000' and j.get('list'):
+                    d = pd.DataFrame(j['list'])
+                    fs = 'CFS' if (d['fs_div'] == 'CFS').any() else 'OFS'
+                    d = d[d['fs_div'] == fs]
+                    d['account_id'] = None
+                    d['api'] = 'fnlttSinglAcnt(주요계정)'
+                    d.insert(0, 'ticker', code)
+                    extra.append(d)
+                    n += 1
+        status('fundamentals', f'DART 주요계정 보완 {code}', True, n, note=f'채운 보고서 {n}건')
+    if extra:
+        e = pd.concat(extra)
+        e['filed'] = pd.to_datetime(e['rcept_no'].str[:8], errors='coerce')
+        save(e, 'raw/fundamentals/dart_major_accounts_fill.parquet')
+        raw = pd.concat([raw.assign(api='fnlttSinglAcntAll'), e], ignore_index=True)
+    stds = [dart_std(g, t) for t, g in raw.groupby('ticker')]
+    save(pd.concat([x for x in stds if len(x)]), 'processed/fundamentals/kr_standardized_pit.parquet')

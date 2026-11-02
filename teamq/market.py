@@ -9,6 +9,7 @@
 #            FRED 지표 발표일, 야후 지수·환율·변동성, 일본 재무성 국채, 한국은행 ECOS(키 있을 때)
 # ======================================================================
 import io, time
+import numpy as np
 import pandas as pd
 import yfinance as yf
 from common import *
@@ -149,22 +150,7 @@ def part_prices():
     kis['collected_at'] = COLLECTED_AT
     save(kis, 'raw/prices/kis_kr_daily_10y.parquet')
 
-    # 가공본
-    p = split_back(px).merge(U[['yticker', 'id', 'name', 'country', 'kind', 'currency', 'code']], on='yticker', how='left')
-    p['trading_value'] = p['close_raw'] * p['volume_raw']
-    p['trading_value_src'] = '추정(원주가 종가×거래량)'
-    k = kis[kis['adjusted'] == False][['code', 'date', 'close', 'trading_value']].rename(
-        columns={'close': 'kis_close_raw', 'trading_value': 'kis_trading_value'})
-    if len(k):
-        p = p.merge(k, on=['code', 'date'], how='left')
-        hit = p['kis_trading_value'].notna()
-        p.loc[hit, 'trading_value'] = p.loc[hit, 'kis_trading_value']
-        p.loc[hit, 'trading_value_src'] = '한투 실제 거래대금'
-        p['raw_close_diff_pct'] = (p['close_raw'] / p['kis_close_raw'] - 1) * 100
-    p['ret_adj'] = p.groupby('yticker')['adj_close'].pct_change()
-    p['listing_first_date'] = p.groupby('yticker')['date'].transform('min')
-    p['note'] = 'close=분할 반영, close_raw=당시 실제 가격(분할 역산), adj_close=배당·분할 반영. 시가총액·발행주식수는 valuation 참고'
-    save(p, 'processed/prices/daily_prices_10y.parquet')
+    process_prices(px, kis)
 
     # 배당·분할 (corporate_actions 로)
     ca = px[(px['dividend'].fillna(0) != 0) | (px['split'].fillna(0) != 0)][['yticker', 'date', 'dividend', 'split']]
@@ -272,7 +258,7 @@ FRED_IDS = {
     'IRSTCI01JPM156N': '일본 콜금리(월)', 'JPNCPIALLMINMEI': '일본 CPI', 'LRHUTTTTJPM156S': '일본 실업률',
 }
 ALFRED_IDS = ['CPIAUCSL', 'CPILFESL', 'PCEPILFE', 'UNRATE', 'PAYEMS', 'GDPC1', 'INDPRO', 'ICSA']
-FRED_RELEASES = {10: 'CPI', 50: '고용상황(비농업)', 53: 'GDP', 54: '개인소득·PCE', 101: 'FOMC 성명'}
+FRED_RELEASES = {10: 'CPI', 50: '고용상황(비농업)', 53: 'GDP', 54: '개인소득·PCE'}
 YAHOO_MACRO = {'^GSPC': 'S&P500', '^IXIC': '나스닥', '^NDX': '나스닥100', '^KS11': '코스피', '^KQ11': '코스닥', '^N225': '니케이225',
                '^SOX': '필라델피아 반도체', '^TWII': '대만 가권', '^VIX': 'VIX', '^VIX3M': 'VIX3M', '^MOVE': 'MOVE',
                '^TNX': '미국 10년(야후)', 'KRW=X': '원/달러', 'JPY=X': '엔/달러', 'JPYKRW=X': '원/엔', 'DX-Y.NYB': '달러지수',
@@ -388,3 +374,86 @@ def part_macro():
         save(pd.DataFrame(ec).assign(source='한국은행 ECOS'), 'raw/macro/ecos_korea.parquet')
     else:
         status('macro', '한국은행 ECOS', False, note='ECOS_KEY 없음 → 한국 일별 국고채·기준금리는 결측(FRED 월간 한국 금리로 대체 가능)')
+
+
+def process_prices(px, kis):
+    """가공본. 한국은 야후 '종가'가 유상증자·분할(인적분할 등) 권리락까지 조정해 당시 실제 가격과 다를 수 있어
+    (1차 실행 확인: SK텔레콤 중앙값 31.6%, 삼성중공업 5.7%, 두산에너빌리티 4.0% 차이) 한투 원주가를 원가 기준으로 쓴다.
+    야후에만 있고 한투에 없는 한국 날짜(거래량 0인 휴장일 행)는 뺀다. 한투에만 있는 날짜는 넣는다."""
+    p = split_back(px).merge(U[['yticker', 'id', 'name', 'country', 'kind', 'currency', 'code']], on='yticker', how='left')
+    p['price_src'] = 'yahoo(분할 역산)'
+    p['trading_value'] = p['close_raw'] * p['volume_raw']
+    p['trading_value_src'] = '추정(원주가 종가×거래량)'
+    kr_codes = set(kis['code']) if len(kis) else set()
+    if kr_codes:
+        kr_raw = kis[kis['adjusted'] == False][['code', 'date', 'open', 'high', 'low', 'close', 'volume', 'trading_value']]
+        kr_adj = kis[kis['adjusted'] == True][['code', 'date', 'close']].rename(columns={'close': 'kis_close_adj'})
+        k = kr_raw.rename(columns={c: f'kis_{c}' for c in ['open', 'high', 'low', 'close', 'volume', 'trading_value']}).merge(kr_adj, on=['code', 'date'], how='left')
+        y = p[p['code'].isin(kr_codes)]
+        rest = p[~p['code'].isin(kr_codes)]
+        m = k.merge(y, on=['code', 'date'], how='outer', indicator=True)
+        drop = m['_merge'] == 'right_only'
+        log(f'  한국: 야후에만 있는 행 {int(drop.sum())}개 제외(대부분 거래량 0 휴장일), 한투에만 있는 행 {int((m["_merge"]=="left_only").sum())}개 추가')
+        m = m[~drop].copy()
+        info = U.set_index('code')
+        for c in ['yticker', 'id', 'name', 'country', 'kind', 'currency']:
+            m[c] = m[c].fillna(m['code'].map(info[c]))
+        m['raw_close_diff_pct'] = (m['close_raw'] / m['kis_close'] - 1) * 100   # 야후 역산 vs 한투 원주가 (진단용)
+        for c in ['open', 'high', 'low', 'close']:
+            m[f'{c}_raw'] = m[f'kis_{c}']
+        m['volume_raw'] = m['kis_volume']
+        m['close'] = m['close'].fillna(m['kis_close_adj'])
+        m['volume'] = m['volume'].fillna(m['kis_volume'])
+        m['trading_value'] = m['kis_trading_value']
+        m['trading_value_src'] = '한투 실제 거래대금'
+        m['price_src'] = np.where(m['_merge'] == 'left_only', '한투만(야후 결측일)', '한투 원주가 + 야후 수정종가')
+        p = pd.concat([rest, m.drop(columns=['_merge'])], ignore_index=True)
+    p = p.sort_values(['yticker', 'date'])
+    p['ret_adj'] = p.groupby('yticker')['adj_close'].pct_change()
+    p['listing_first_date'] = p.groupby('yticker')['date'].transform('min')
+    p['note'] = 'close_raw=당시 실제 가격(한국=한투 원주가, 그 밖=야후 분할 역산), close=분할 반영, adj_close=배당·분할 반영(야후). 시가총액은 valuation'
+    save(p, 'processed/prices/daily_prices_10y.parquet')
+
+
+def part_prices_process():
+    px, kis = load('raw/prices/yahoo_daily_10y.parquet'), load('raw/prices/kis_kr_daily_10y.parquet')
+    for c in ['date']:
+        px[c] = pd.to_datetime(px[c]); kis[c] = pd.to_datetime(kis[c])
+    kis['adjusted'] = kis['adjusted'].astype(str).str.lower().isin(['true', '1'])
+    process_prices(px, kis)
+
+
+MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+
+def part_fomc():
+    """FOMC 회의일: 연준 홈페이지(2015~2020 연도별 기록 + 최근 5년 달력). 회의 마지막 날 = 성명 발표일."""
+    import re
+    rows = []
+    UA = {'User-Agent': 'Mozilla/5.0 (research; TeamQ)'}
+    pat = re.compile(r'(' + '|'.join(MONTHS) + r')(?:/(' + '|'.join(MONTHS) + r'))?\s+(\d{1,2})(?:\s*-\s*(\d{1,2}))?\s+(?:Meeting|\(unscheduled\))')
+    for y in range(2015, 2021):
+        r = get(f'https://www.federalreserve.gov/monetarypolicy/fomchistorical{y}.htm', headers=UA, retry=2)
+        if r is None or not r.ok:
+            continue
+        for m in pat.finditer(r.text):
+            mon = m.group(2) or m.group(1)
+            day = int(m.group(4) or m.group(3))
+            rows.append({'date': pd.Timestamp(year=y, month=MONTHS.index(mon) + 1, day=day), 'label': m.group(0).strip(), 'source': r.url})
+    r = get('https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', headers=UA, retry=2)
+    if r is not None and r.ok:
+        html = r.text
+        parts = re.split(r'>(\d{4}) FOMC Meetings<', html)
+        for i in range(1, len(parts) - 1, 2):
+            y = int(parts[i]); body = parts[i + 1]
+            for m in re.finditer(r'fomc-meeting__month[^>]*>\s*<strong>([A-Za-z/]+)</strong>.*?fomc-meeting__date[^>]*>\s*([0-9]{1,2})(?:\s*-\s*([0-9]{1,2}))?', body, re.S):
+                mon = m.group(1).split('/')[-1]
+                if mon[:3] not in [x[:3] for x in MONTHS]:
+                    continue
+                mi = [x[:3] for x in MONTHS].index(mon[:3]) + 1
+                rows.append({'date': pd.Timestamp(year=y, month=mi, day=int(m.group(3) or m.group(2))), 'label': f'{m.group(1)} {m.group(2)}' + (f'-{m.group(3)}' if m.group(3) else ''), 'source': r.url})
+    d = pd.DataFrame(rows).drop_duplicates('date').sort_values('date') if rows else pd.DataFrame(columns=['date', 'label', 'source'])
+    d['note'] = '회의 마지막 날(성명 발표일). 2015~2020은 연도별 기록, 2021~ 달력 페이지(예정 회의 포함 가능)'
+    save(d, 'raw/market_events/fomc_meetings.parquet')
+    cnt = d.groupby(d['date'].dt.year).size().to_dict() if len(d) else {}
+    status('macro', 'FOMC 회의일(연준)', len(d) > 0, len(d), note=f'연도별 {cnt}')

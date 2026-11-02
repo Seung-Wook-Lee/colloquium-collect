@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from common import *
 
+STALE_DAYS = 450   # 분기말로부터 450일(약 15개월)이 지나면 그 값은 결측 처리
 ITEMS_TTM = ['revenue', 'operating_income', 'net_income', 'cfo', 'capex', 'dep_amort', 'income_tax', 'pretax_income', 'dividends_paid']
 ITEMS_I = ['equity', 'total_assets', 'total_liabilities', 'cash', 'short_term_debt', 'long_term_debt', 'liab_and_equity', 'equity_incl_nci']
 
@@ -50,6 +51,8 @@ def asof_fields(dates, o):
         g = g[g['period_end'] == g['pe_max']]
         base = pd.merge_asof(base, g[['available', 'value', 'period_end']].rename(
             columns={'available': 'date', 'value': f, 'period_end': f'{f}__pe'}), on='date', direction='backward')
+        stale = (base['date'] - base[f'{f}__pe']).dt.days > STALE_DAYS     # 새 공시가 끊긴 옛 값은 이어 쓰지 않는다
+        base.loc[stale, f] = np.nan
     return base
 
 
@@ -193,6 +196,10 @@ def part_events():
     if rel is not None:
         for _, r in rel.iterrows():
             add(r['date'], 'market', 'US', f'지표 발표일: {r["label"]}', None, r.get('fred_release_name'), 'FRED release dates')
+    fo = load('raw/market_events/fomc_meetings.parquet')
+    if fo is not None:
+        for _, r in fo.iterrows():
+            add(r['date'], 'market', 'FOMC', 'FOMC 회의(성명 발표일)', None, r['label'], 'federalreserve.gov')
     ec = load('raw/macro/ecos_korea.parquet')
     if ec is not None and len(ec):
         b = ec[ec['name'] == '한국은행 기준금리'].copy()
