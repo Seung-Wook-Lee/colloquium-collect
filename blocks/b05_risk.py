@@ -116,7 +116,14 @@ def rk(grp, name, s, unit='', chair='', general='', src='', value=None, date=Non
         mo1 = at_or_before(s, pd.Timestamp(d) - pd.DateOffset(months=1)) if mo1 is None else mo1
     r = {'구분': grp, '항목': name, '값': round(v, 4) if v is not None else '데이터 없음', '단위': unit, '기준일': d,
          '1주 전': round(w1, 4) if w1 is not None else None, '1달 전': round(mo1, 4) if mo1 is not None else None,
-         '신호': '', '표시': '', '의장 기준(참고)': chair, '일반 기준(참고)': general, '비고': note, '출처': src}
+         '신호': '', '표시': '', '의장 기준(참고)': chair, '일반 기준(참고)': general, '비고': note, '출처': src,
+         '전일': None, '작년 말': None, '1년 전': None}
+    if s is not None and len(s) > 1 and d and value is None:   # 11/3 의장: 전일·1달·YTD·1년 네 칸
+        d0 = pd.Timestamp(d)
+        ye, y1 = at_or_before(s, f'{d0.year - 1}-12-31'), at_or_before(s, d0 - pd.DateOffset(years=1))
+        r['전일'] = round(float(s.iloc[-2]), 4)
+        r['작년 말'] = None if ye is None else round(ye, 4)
+        r['1년 전'] = None if y1 is None or s.index[0] > d0 - pd.DateOffset(years=1) - pd.Timedelta(days=10) else round(y1, 4)
     if v is not None and name in RISK_RULES:
         r['신호'], r['표시'] = RISK_RULES[name](v)
     RISK.append(r)

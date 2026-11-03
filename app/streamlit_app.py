@@ -452,92 +452,101 @@ with t1:
                     st.caption(r['해석'])
 
     st.divider()
-    c = st.columns(3)
-    if len(m) and '코스피 50일 이격도' in m.index:
-        r = m.loc['코스피 50일 이격도']
-        card(c[0], f'{SIG_ICON.get(r["신호"], "")} 코스피 50일 이격도'.strip(), fmt(num(pd.Series([r['값']])).iloc[0], 1),
-                    data=spark('매크로', '코스피 50일 이격도'),
-                    help=f'125 이상 과열 주의, 130 이상 과열. {r["비고"] if pd.notna(r["비고"]) else ""}')
-        if pd.notna(r['표시']):
-            c[0].caption(r['표시'])
-    vix = risk[risk['항목'] == 'VIX'] if len(risk) else pd.DataFrame()
-    if len(vix):
-        v = vix.iloc[0]
-        card(c[1], 'VIX', fmt(num(pd.Series([v['값']])).iloc[0]),
-                    f'{num(pd.Series([v["값"]])).iloc[0] - num(pd.Series([v["1주 전"]])).iloc[0]:+.2f} (1주 전 대비)',
-                    delta_color='normal', data=spark('리스크', 'VIX'))
-    if mget('미국 10년') is not None:
-        r = m.loc['미국 10년']
-        card(c[2], f'{SIG_ICON.get(r["신호"], "")} 미국 10년'.strip(), fmt(mget('미국 10년'), 3, '%'),
-                    ' · '.join(f'{x:+.2f}%p {k}' for x, k in [(day_change(series('매크로', '미국 10년'), True), '1D'),
-                                                               (mget('미국 10년', '1달'), '1M')] if x is not None and pd.notna(x)) or None,
-                    delta_color='normal', data=spark('매크로', '미국 10년'))
+    # 2026-11-03 의장: "그래프들이 사실상 큰 효과가 없다. 공포탐욕 빼고 모두 표로, 하루 전·한 달 전·YTD·1년 전 4개에 비해
+    # 얼마나 오르고 내렸는지 숫자로. 섹터별로 묶어서 표로." → 매크로·리스크 항목을 묶음별 표 하나씩.
+    def _chg(now, past, pp):
+        """past 대비 변화: %p 항목은 차이, 나머지는 %"""
+        if now is None or past is None or pd.isna(now) or pd.isna(past):
+            return None
+        if pp:
+            return now - past
+        return None if past == 0 else (now / past - 1) * 100
 
-    st.subheader('지수')
+    def _txt(v, pp, dec):
+        if v is None or pd.isna(v):
+            return '—'
+        return f'{v:+.{dec}f}{"%p" if pp else "%"}'
+
+    def _color(x):
+        x = str(x)
+        return f'color:{UP}' if x.startswith('+') and x.strip('+0.%p') else f'color:{DN}' if x.startswith('-') else ''
+
+    def _row(name, now, unit, d1, mo, ye, y1, pp, dec, day, memo, ytd_ready=None, mo_ready=None):
+        ytd_v = _chg(now, ye, pp) if ye is not None else ytd_ready
+        mo_v = _chg(now, mo, pp) if mo is not None else mo_ready
+        return {'항목': name, '현재': fmt(now, dec, unit if unit in ('%', '천명', '건') else ''),
+                '전일 대비': _txt(_chg(now, d1, pp), pp, 2 if pp else 2),
+                '1달 전 대비': _txt(mo_v, pp, 2 if pp else 1),
+                'YTD(작년 말 대비)': _txt(ytd_v, pp, 2 if pp else 1),
+                '1년 전 대비': _txt(_chg(now, y1, pp), pp, 2 if pp else 1),
+                '기준일': day or '', '신호·메모': memo}
+
+    def _show(title, rows, note=None):
+        if not rows:
+            return
+        st.subheader(title)
+        df = pd.DataFrame(rows)
+        st.dataframe(df.style.map(_color, subset=['전일 대비', '1달 전 대비', 'YTD(작년 말 대비)', '1년 전 대비']),
+                     hide_index=True, width='stretch', height=36 * (len(df) + 1) + 4,
+                     column_config={'신호·메모': st.column_config.TextColumn(width='large')})
+        if note:
+            st.caption(note)
+
+    DEC = {'지수': 2, '환율': 2, '금리': 3, '물가': 2, '성장·고용': 2, '원자재': 1}
     if len(mac):
-        ix = mac[(mac['구분'] == '지수') & (mac['항목'] != '코스피 50일 이격도')].copy()
-        for k in ['전일 값', '1주 전 값', '1달 전 값', '출처']:   # 옛 파일엔 없는 칸
-            if k not in ix:
-                ix[k] = None
-        # 2026-11-02 의장: 멋으로 그린 막대 대신 어제·1주 전·1달 전 값을 숫자로
-        ix = ix[['항목', '값', '전일 값', '1주 전 값', '1달 전 값', '기준일', 'YTD', '1달', '최고 대비(%)', '표시', '출처']]
-        for k in ['값', '전일 값', '1주 전 값', '1달 전 값', 'YTD', '1달', '최고 대비(%)']:
-            ix[k] = num(ix[k])
-        ix['출처'] = ix['출처'].fillna('').str.split(' ').str[0]
-        ix['표시'] = ix['표시'].fillna('')
-        ix = ix.rename(columns={'값': '현재', '전일 값': '전일', '1주 전 값': '1주 전', '1달 전 값': '1달 전',
-                                'YTD': 'YTD(%)', '1달': '1달(%)', '최고 대비(%)': '사상 최고 대비(%)'})
-        st.dataframe(
-            ix.style.map(updown, subset=['YTD(%)', '1달(%)']).format(
-                {'현재': '{:,.2f}', '전일': '{:,.2f}', '1주 전': '{:,.2f}', '1달 전': '{:,.2f}',
-                 'YTD(%)': '{:+.1f}', '1달(%)': '{:+.1f}', '사상 최고 대비(%)': '{:+.1f}'}, na_rep='—'),
-            hide_index=True, width='stretch')
-        st.caption('지수는 네이버 증권 일봉 우선, 네이버가 막히면 야후. 사상 최고는 야후의 긴 이력과 이어 붙여 계산.')
-
-    def tiles(grp, dec=2):
-        g = mac[mac['구분'] == grp] if len(mac) else pd.DataFrame()
-        cols = st.columns(4)
-        for i, (_, r) in enumerate(g.iterrows()):
-            v, unit = num(pd.Series([r['값']])).iloc[0], r['단위'] if r['단위'] in ('%', '천명') else ''
-            if r['항목'] == '기준금리(범위)' and pd.notna(r['비고']):
-                shown = r['비고']
-            else:
-                shown = fmt(v, 0 if unit == '천명' else dec, unit)
-            pp = r['변화 단위'] == '%p'
-            d1, ytd = num(pd.Series([r['1달'], r['YTD']]))
-            dd = None if grp in MONTHLY_GRP else day_change(series('매크로', r['항목']), pp)   # 월간 지표는 1D 없음
-            dec_ = 2 if pp else 1
-            parts = [f'{x:+.{dec_}f}{r["변화 단위"]} {k}' for x, k in [(dd, '1D'), (d1, '1M')] if x is not None and pd.notna(x)]
-            delta = ' · '.join(parts) or None
-            lead = dd if dd is not None and pd.notna(dd) else d1          # 화살표·색은 맨 앞 값(1D) 기준
-            flat = pd.isna(lead) or round(lead, dec_) == 0
-            note = ' · '.join(str(x) for x in [r['표시'], r['비고'] if r['항목'] != '기준금리(범위)' else None,
-                                               f'YTD {ytd:+.{2 if pp else 1}f}{r["변화 단위"]}' if pd.notna(ytd) else None,
-                                               f'기준일 {r["기준일"]}'] if pd.notna(x) and x)
-            card(cols[i % 4], f'{SIG_ICON.get(r["신호"], "")} {r["항목"]}'.strip(), shown, delta,
-                               delta_color='off' if flat else 'normal',
-                               delta_arrow='off' if flat else 'auto', help=note or None,
-                               data=spark('매크로', r['항목']))
-
-    for grp, dec in [('환율', 2), ('금리', 3), ('물가', 2), ('성장·고용', 2), ('원자재', 1)]:
-        st.subheader(grp)
-        tiles(grp, dec)
-    st.caption('작은 막대(빈틈 없이 붙인 청록 막대)는 최근 1달 값입니다(월간·주간 지표는 최근 13번 발표). 🔴🟠🟢 표시는 의장 기준이 있는 항목에만 붙습니다. '
-               '칸 위에 마우스를 올리면 기준과 기준일이 보입니다. 1D는 직전 관측일 대비, 1M은 1달 전 대비입니다. 월간 지표(물가·고용)는 1D 없이 1M만, 1M은 직전 발표 대비입니다.')
-
-    st.subheader('리스크')
+        for grp in ['지수', '환율', '금리', '물가', '성장·고용', '원자재']:
+            g = mac[mac['구분'] == grp]
+            rows = []
+            for _, r in g.iterrows():
+                now = num(pd.Series([r['값']])).iloc[0]
+                pp = r.get('변화 단위') == '%p'
+                monthly = grp in MONTHLY_GRP
+                hist = series('매크로', r['항목'])
+                d1 = None if monthly else num(pd.Series([r.get('전일 값')])).iloc[0]
+                if (d1 is None or pd.isna(d1)) and not monthly and len(hist) > 1:
+                    d1 = float(hist.iloc[-2])
+                mo = num(pd.Series([r.get('1달 전 값')])).iloc[0]
+                ye = num(pd.Series([r.get('작년 말 값')])).iloc[0]
+                y1 = num(pd.Series([r.get('1년 전 값')])).iloc[0]
+                shown_unit = r['단위'] if pd.notna(r.get('단위')) else ''
+                memo = ' · '.join(str(x) for x in [SIG_ICON.get(r.get('신호'), ''), r.get('표시'), r.get('비고')]
+                                  if pd.notna(x) and str(x).strip())
+                rows.append(_row(r['항목'], now, shown_unit,
+                                 d1, None if pd.isna(mo) else mo, None if pd.isna(ye) else ye, None if pd.isna(y1) else y1,
+                                 pp, DEC[grp], r.get('기준일'), memo,
+                                 ytd_ready=num(pd.Series([r.get('YTD')])).iloc[0],
+                                 mo_ready=num(pd.Series([r.get('1달')])).iloc[0]))
+                if r['항목'] == '기준금리(범위)' and pd.notna(r.get('비고')):
+                    rows[-1]['현재'] = str(r['비고'])
+            _show(grp, rows, '물가·고용은 월간 발표라 전일 칸이 없고, 1달 전 칸은 직전 발표 대비입니다.' if grp in MONTHLY_GRP else None)
     if len(risk):
-        rk = risk.copy()
-        rk['신호'] = rk['신호'].map(lambda x: f'{SIG_ICON[x]} {x}' if x in SIG_ICON else '')
-        rk['기준·메모'] = rk[['표시', '의장 기준(참고)', '일반 기준(참고)']].bfill(axis=1).iloc[:, 0]
-        rk['최근 1달'] = rk['항목'].map(lambda k: bars_svg(spark('리스크', k)))
-        rk = rk[['구분', '항목', '값', '최근 1달', '단위', '1주 전', '1달 전', '기준일', '신호', '기준·메모', '비고']]
-        rk[['단위', '기준일', '기준·메모', '비고']] = rk[['단위', '기준일', '기준·메모', '비고']].fillna('')
-        for k in ['값', '1주 전', '1달 전']:
-            rk[k] = num(rk[k])
-        st.dataframe(rk, hide_index=True, width='stretch', height=38 * (len(rk) + 1),
-                     column_config={'기준·메모': st.column_config.TextColumn(width='large'),
-                                    '최근 1달': st.column_config.ImageColumn('최근 1달', width='medium')})
+        for grp in risk['구분'].dropna().unique():
+            g = risk[risk['구분'] == grp]
+            rows = []
+            for _, r in g.iterrows():
+                now = num(pd.Series([r['값']])).iloc[0]
+                hist = series('리스크', r['항목'])
+                d1 = num(pd.Series([r.get('전일')])).iloc[0] if '전일' in r else None
+                if (d1 is None or pd.isna(d1)) and len(hist) > 1:
+                    d1 = float(hist.iloc[-2])
+                mo = num(pd.Series([r.get('1달 전')])).iloc[0]
+                ye = num(pd.Series([r.get('작년 말')])).iloc[0] if '작년 말' in r else None
+                y1 = num(pd.Series([r.get('1년 전')])).iloc[0] if '1년 전' in r else None
+                unit = r['단위'] if pd.notna(r.get('단위')) else ''
+                pp = unit in ('%', '%p') or str(r['항목']).find('−') >= 0 or grp in ('금융 스트레스', '침체 신호', '자금 경색')
+                memo = ' · '.join(str(x) for x in [SIG_ICON.get(r.get('신호'), ''), r.get('표시'),
+                                                   r.get('의장 기준(참고)'), r.get('일반 기준(참고)')]
+                                  if pd.notna(x) and str(x).strip())
+                rr = _row(r['항목'], now, unit, d1, None if pd.isna(mo) else mo,
+                          None if ye is None or pd.isna(ye) else ye, None if y1 is None or pd.isna(y1) else y1,
+                          pp, 2, r.get('기준일'), memo)
+                if pp:   # 수준 지표(스프레드·스트레스 지수)는 차이로, 단위를 붙여 읽기 쉽게
+                    for k in ['전일 대비', '1달 전 대비', 'YTD(작년 말 대비)', '1년 전 대비']:
+                        rr[k] = rr[k].replace('%p', 'p' if unit not in ('%', '%p') else '%p')
+                rows.append(rr)
+            _show(f'리스크 · {grp}', rows)
+    st.caption('등락은 초록 = 올라감, 빨강 = 내려감(값 자체의 방향, 좋고 나쁨이 아님). 금리·스프레드·지수형 지표는 차이(%p·p), 나머지는 %. '
+               'YTD·1년 전 칸이 "—"인 항목은 다음 07시 수집부터 채워집니다(11/3 추가). 🔴🟠🟢는 의장 기준이 있는 항목.')
 
 # ---------------------------------------------------------------- 2. 종목
 def stock_table():
