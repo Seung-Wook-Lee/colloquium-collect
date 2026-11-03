@@ -327,6 +327,18 @@ with t1:
             sd['보유/관심'] = sd['보유/관심'].fillna('')
             timed = set(zip(sd.loc[sd['시각(한국)'] != '미정', '날짜'], sd.loc[sd['시각(한국)'] != '미정', '대상']))
             sd = sd[~((sd['시각(한국)'] == '미정') & pd.Series([(d, w) in timed for d, w in zip(sd['날짜'], sd['대상'])], index=sd.index))]   # 같은 날 시각 있는 줄이 있으면 '미정' 줄은 뺀다
+            def _chk(r):   # 11/3: 확인 정도 — 확정·발표됨은 회색, 예상은 연한 글씨, 날짜 다름은 주황
+                c = str(r.get('확인') or '')
+                if not c or c == 'nan':
+                    return ''
+                col = '#d97706' if '다름' in c else '#6b7280'
+                return f'<span style="font-size:.75rem;color:{col};margin-left:6px;">({_h.escape(c)})</span>'
+
+            def _memo(r):  # 간밤 실적은 숫자(EPS·매출)를 한 줄 더
+                if '간밤' not in str(r.get('구분')):
+                    return ''
+                return f'<div style="font-size:.82rem;color:#6b7280;">{_h.escape(str(r.get("내용") or ""))}</div>'
+
             def _sched_html(sd):
               body = ''
               for (d, wd), g in sd.groupby(['날짜', '요일'], sort=True):
@@ -341,7 +353,8 @@ with t1:
                              f'<div style="min-width:64px;color:#6b7280;font-variant-numeric:tabular-nums;font-size:.88rem;">'
                              f'{_h.escape(str(r["시각(한국)"]))}</div>'
                              f'<div style="font-size:.92rem;"><b>{_h.escape(str(r["대상"]))}</b>{tag}'
-                             f'<span style="color:#6b7280;"> · {_h.escape(str(r["구분"]))}</span></div></div>')
+                             f'<span style="color:#6b7280;"> · {_h.escape(str(r["구분"]))}</span>'
+                             f'{_chk(r)}{_memo(r)}</div></div>')
               return body
             sd = sd.sort_values(['날짜', '시각(한국)'])
             today = f'{DAY[:4]}-{DAY[4:6]}-{DAY[6:]}'
