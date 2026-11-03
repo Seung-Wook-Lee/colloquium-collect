@@ -134,6 +134,12 @@ price, val = csv(DAY, '시세'), csv(DAY, '밸류에이션')
 dart, secr = csv(DAY, 'DART실적'), csv(DAY, 'SEC실적')
 trend_df = csv(DAY, '추이')
 sched_df, news_df = csv(DAY, '일정'), csv(DAY, '뉴스')
+NEWS_DROP = (r'칼럼|인터뷰|기고|사설|르포|포토|화보|\[인사\]|부고|브랜드평판|브랜드 평판|ESG 브랜드|사회공헌|사회적 가치|'
+             r'개막전|스포츠|\d+대\d+ |봉사|후원|기부|캠페인|시상식|축제|사진=|기사와 직접|^["“].*["”]$')
+NEWS_KEEP = (r'증시|주가|급등|급락|금리|연준|Fed|채권|국채|유가|원유|달러|환율|관세|무역|실적|매출|영업이익|순이익|인수|합병|'
+             r'반도체|AI|인공지능|메모리|HBM|칩|데이터센터|전쟁|이란|이스라엘|우크라|중동|휴전|제재|선거|트럼프|대통령|의회|'
+             r'경기|침체|물가|인플레|고용|일자리|GDP|수출|투자|조달|증자|채권 발행|IPO|상장|파산|부도|신용|'
+             r'애플|엔비디아|테슬라|마벨|팔란티어|마이크론|알파벳|구글|마이크로소프트|메타|아마존|오라클|삼성|SK|현대')
 FG_BANDS = [(0, 25, '#c0392b', '극단적 공포'), (25, 45, '#e67e22', '공포'), (45, 55, '#9aa0a6', '중립'),
             (55, 75, '#7cb342', '탐욕'), (75, 100, '#2e7d32', '극단적 탐욕')]
 
@@ -346,6 +352,11 @@ with t1:
             nd = nd[nd['제목'].astype(str).str.contains('[가-힣]', regex=True)]
             nd = nd[nd['시각(한국)'].astype(str) >= prev]
             nd = nd[~nd['제목'].astype(str).str.contains('블로그|Blog|카페', regex=True)]   # 블로그 글 제외
+            # 2026-11-03 의장 "홍보 기사를 주요뉴스라고 붙이는 건 판단력 부재": 칼럼·인터뷰·홍보·스포츠 빼고,
+            # 연합뉴스는 시장과 닿는 말이 제목에 있는 것만(07시 수집 b09와 같은 기준)
+            nd = nd[~nd['제목'].astype(str).str.contains(NEWS_DROP, regex=True)]
+            is_yna = nd['출처'].astype(str).str.contains('연합')
+            nd = nd[~is_yna | nd['제목'].astype(str).str.contains(NEWS_KEEP, regex=True)]
             akr = nd['링크'].astype(str).str.extract(r'AKR(\d{8})')[0]
             nd = nd[akr.isna() | (akr >= (day0 - pd.Timedelta(days=1)).strftime('%Y%m%d'))]
             if day0.weekday() == 0:

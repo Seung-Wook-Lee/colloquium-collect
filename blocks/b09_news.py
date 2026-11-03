@@ -28,6 +28,14 @@ from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
 NEWS_RSS = 'https://www.yna.co.kr/rss/international.xml'
+NEWS_RSS_ECON = 'https://www.yna.co.kr/rss/economy.xml'   # 국제 면 시장 기사가 모자라면 채움(2026-11-03)
+# 2026-11-03 의장 "이따위 홍보 기사를 주요뉴스라고 붙이는 건 판단력 부재": 칼럼·인터뷰·홍보는 빼고 시장 기사만 (고칠 곳)
+NEWS_DROP = (r'칼럼|인터뷰|기고|사설|르포|포토|화보|\[인사\]|부고|브랜드평판|브랜드 평판|ESG 브랜드|사회공헌|사회적 가치|'
+             r'개막전|스포츠|\d+대\d+ |봉사|후원|기부|캠페인|시상식|축제|사진=|기사와 직접|^["“].*["”]$')
+NEWS_KEEP = (r'증시|주가|급등|급락|금리|연준|Fed|채권|국채|유가|원유|달러|환율|관세|무역|실적|매출|영업이익|순이익|인수|합병|'
+             r'반도체|AI|인공지능|메모리|HBM|칩|데이터센터|전쟁|이란|이스라엘|우크라|중동|휴전|제재|선거|트럼프|대통령|의회|'
+             r'경기|침체|물가|인플레|고용|일자리|GDP|수출|투자|조달|증자|채권 발행|IPO|상장|파산|부도|신용')
+NEWS_POOL = 40            # 거르기 전 연합뉴스에서 받는 건수
 YAHOO_RSS = 'https://feeds.finance.yahoo.com/rss/2.0/headline'
 CNBC_RSS = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'
 GNEWS_RSS = 'https://news.google.com/rss/search'
@@ -98,9 +106,21 @@ def _rss(url, src, who='', params=None):
 
 news, msgs = [], []
 try:                                    # ① 연합뉴스 국제
-    got = _rss(NEWS_RSS, '연합뉴스 국제')[:NEWS_MAX]
+    def _market(items):
+        return [x for x in items if not _re.search(NEWS_DROP, x['제목'])
+                and (_re.search(NEWS_KEEP, x['제목']) or any(nm and nm in x['제목'] for nm in NAMES_KO))]
+    NAMES_KO = [str(x) for x in u['정식 종목명'].dropna() if _re.search('[가-힣]', str(x)) and len(str(x)) >= 2]
+    raw = _rss(NEWS_RSS, '연합뉴스 국제')[:NEWS_POOL]
+    got = _market(raw)[:NEWS_MAX]
+    n_drop = len(raw) - len(_market(raw))
+    if len(got) < 5:                    # 국제 면에 시장 기사가 적으면 경제 면에서 채움
+        try:
+            more = [x for x in _market(_rss(NEWS_RSS_ECON, '연합뉴스 경제')[:NEWS_POOL]) if x['제목'] not in {g['제목'] for g in got}]
+            got += more[:NEWS_MAX - len(got)]
+        except Exception:
+            pass
     news += got
-    msgs.append(f'연합뉴스 국제 {len(got)}건')
+    msgs.append(f'연합뉴스 {len(got)}건(시장과 무관한 {n_drop}건 뺌)')
 except Exception as e:
     msgs.append(f'연합뉴스 실패({type(e).__name__} {e})')
 try:                                    # ② 야후 종목별 — 보유 먼저, 한 종목 최대 YAHOO_PER_TICKER건
@@ -178,6 +198,8 @@ try:                                    # ⑤ 한국·일본 종목별 — 구�
             title, _, media = x['제목'].rpartition(' - ')
             title = title or x['제목']
             if title in seen or name.replace(' ', '') not in title.replace(' ', ''):   # 제목에 종목명이 있는 것만
+                continue
+            if _re.search(NEWS_DROP, title):    # 홍보·스포츠·사회공헌 기사 빼기(2026-11-03)
                 continue
             if k < ARCHIVE_PER_TICKER:
                 ARCHIVE.append(dict(x, 제목=f'{title} ({media})' if media else title, 요약='', 종목=name, 번호=s['번호']))
