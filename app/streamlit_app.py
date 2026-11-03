@@ -26,6 +26,7 @@ try:                                        # 스트림릿 클라우드: Secrets
 except Exception:
     pass
 import drive  # noqa: E402
+from interp import interpret  # noqa: E402
 
 D_DATA = '콜로키움 수집데이터'
 D_MEET = '콜로키움/오늘의 시장해석'          # 회의록·시장해석 txt
@@ -471,10 +472,13 @@ with t1:
         x = str(x)
         return f'color:{UP}' if x.startswith('+') and x.strip('+0.%p') else f'color:{DN}' if x.startswith('-') else ''
 
-    def _row(name, now, unit, d1, mo, ye, y1, pp, dec, day, memo, ytd_ready=None, mo_ready=None):
+    def _row(name, now, unit, d1, mo, ye, y1, pp, dec, day, memo, ytd_ready=None, mo_ready=None, grp='', hi_gap=None):
         ytd_v = _chg(now, ye, pp) if ye is not None else ytd_ready
         mo_v = _chg(now, mo, pp) if mo is not None else mo_ready
-        return {'항목': name, '현재': fmt(now, dec, unit if unit in ('%', '천명', '건') else ''),
+        why = interpret(grp, name, now, mo_v, pp, hi_gap)   # 11/3 의장 "숫자만 쓰면 무슨 의미?" → 수준 + 방향 뜻
+        if grp in MONTHLY_GRP:
+            why = why.replace('한 달 새', '직전 발표보다')
+        return {'항목': name, '현재': fmt(now, dec, unit if unit in ('%', '천명', '건') else ''), '해석': why,
                 '전일 대비': _txt(_chg(now, d1, pp), pp, 2 if pp else 2),
                 '1달 전 대비': _txt(mo_v, pp, 2 if pp else 1),
                 'YTD(작년 말 대비)': _txt(ytd_v, pp, 2 if pp else 1),
@@ -488,7 +492,8 @@ with t1:
         df = pd.DataFrame(rows)
         st.dataframe(df.style.map(_color, subset=['전일 대비', '1달 전 대비', 'YTD(작년 말 대비)', '1년 전 대비']),
                      hide_index=True, width='stretch', height=36 * (len(df) + 1) + 4,
-                     column_config={'신호·메모': st.column_config.TextColumn(width='large')})
+                     column_config={'해석': st.column_config.TextColumn(width='large'),
+                                    '신호·메모': st.column_config.TextColumn(width='medium')})
         if note:
             st.caption(note)
 
@@ -515,7 +520,8 @@ with t1:
                                  d1, None if pd.isna(mo) else mo, None if pd.isna(ye) else ye, None if pd.isna(y1) else y1,
                                  pp, DEC[grp], r.get('기준일'), memo,
                                  ytd_ready=num(pd.Series([r.get('YTD')])).iloc[0],
-                                 mo_ready=num(pd.Series([r.get('1달')])).iloc[0]))
+                                 mo_ready=num(pd.Series([r.get('1달')])).iloc[0], grp=grp,
+                                 hi_gap=num(pd.Series([r.get('최고 대비(%)')])).iloc[0]))
                 if r['항목'] == '기준금리(범위)' and pd.notna(r.get('비고')):
                     rows[-1]['현재'] = str(r['비고'])
             _show(grp, rows, '물가·고용은 월간 발표라 전일 칸이 없고, 1달 전 칸은 직전 발표 대비입니다.' if grp in MONTHLY_GRP else None)
@@ -535,11 +541,11 @@ with t1:
                 unit = r['단위'] if pd.notna(r.get('단위')) else ''
                 pp = unit in ('%', '%p') or str(r['항목']).find('−') >= 0 or grp in ('금융 스트레스', '침체 신호', '자금 경색')
                 memo = ' · '.join(str(x) for x in [SIG_ICON.get(r.get('신호'), ''), r.get('표시'),
-                                                   r.get('의장 기준(참고)'), r.get('일반 기준(참고)')]
+                                                   r.get('의장 기준(참고)')]
                                   if pd.notna(x) and str(x).strip())
                 rr = _row(r['항목'], now, unit, d1, None if pd.isna(mo) else mo,
                           None if ye is None or pd.isna(ye) else ye, None if y1 is None or pd.isna(y1) else y1,
-                          pp, 2, r.get('기준일'), memo)
+                          pp, 2, r.get('기준일'), memo, grp=grp)
                 if pp:   # 수준 지표(스프레드·스트레스 지수)는 차이로, 단위를 붙여 읽기 쉽게
                     for k in ['전일 대비', '1달 전 대비', 'YTD(작년 말 대비)', '1년 전 대비']:
                         rr[k] = rr[k].replace('%p', 'p' if unit not in ('%', '%p') else '%p')
