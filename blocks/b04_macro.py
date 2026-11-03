@@ -59,13 +59,16 @@ def mrow(grp, name, s, unit='', pct=True, high=False, src='', value=None, date=N
          'YTD': ytd(s, pct) if s is not None else None, '1달': m1(s, pct) if s is not None else None,
          '변화 단위': '%' if pct else '%p', '사상 최고': None, '최고일': None, '최고 대비(%)': None,
          '신호': '', '표시': '', '의장 기준(참고)': CHAIR_NOTE.get(name, ''), '비고': note, '출처': src,
-         '전일 값': None, '1주 전 값': None, '1달 전 값': None}
+         '전일 값': None, '1주 전 값': None, '1달 전 값': None, '작년 말 값': None, '1년 전 값': None}
     if s is not None and len(s) > 1 and value is None:   # 의장 11/2 "어제·1주 전·1달 전 값을 그냥 보여줘"
         d0 = s.index[-1]
         r['전일 값'] = round(float(s.iloc[-2]), 3)
         w, mo = at_or_before(s, d0 - pd.Timedelta(days=7)), at_or_before(s, d0 - pd.DateOffset(months=1))
         r['1주 전 값'] = None if w is None else round(w, 3)
         r['1달 전 값'] = None if mo is None else round(mo, 3)
+        ye, y1 = at_or_before(s, f'{d0.year - 1}-12-31'), at_or_before(s, d0 - pd.DateOffset(years=1))   # 11/3 의장: 전일·1달·YTD·1년 네 칸
+        r['작년 말 값'] = None if ye is None else round(ye, 3)
+        r['1년 전 값'] = None if y1 is None or s.index[0] > d0 - pd.DateOffset(years=1) - pd.Timedelta(days=10) else round(y1, 3)
     if high and s is not None and len(s):
         mx, mxd = float(s.max()), s.idxmax().strftime('%Y-%m-%d')
         r.update({'사상 최고': round(mx, 3), '최고일': mxd, '최고 대비(%)': round((v / mx - 1) * 100, 2)})
