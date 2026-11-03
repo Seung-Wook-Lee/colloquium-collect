@@ -75,9 +75,12 @@ def _text(s):
     return _re.sub(r'\s+', ' ', _h.unescape(_re.sub(r'<[^>]+>', ' ', s or ''))).strip()
 
 
-def _add(day, hm, kind, who, what, src, mark=''):
+def _add(day, hm, kind, who, what, src, mark='', check=''):
+    # 11/3 의장 "일정 체크 오류 많음": 이미 발표한 실적은 '간밤 실적'으로 따로, 날짜마다 확인 정도(확정/예상/다름)를 붙인다
+    if str(what).startswith(('간밤 발표', '공시됨')):
+        kind, check = (kind.replace('실적', '').strip() + ' 간밤 실적' if '실적' in kind else kind), '발표됨'
     SCHED.append({'날짜': day.strftime('%Y-%m-%d'), '요일': WD[day.weekday()], '시각(한국)': hm or '미정',
-                  '구분': kind, '대상': who, '보유/관심': mark, '내용': what, '출처': src})
+                  '구분': kind, '대상': who, '보유/관심': mark, '확인': check, '내용': what, '출처': src})
 
 
 # (가) 간밤 뉴스 — 연합뉴스 국제 · 야후 종목별 · CNBC --------------------------
@@ -300,10 +303,11 @@ try:
             except Exception as e:
                 print(f'  DART 본문 실패 {s["정식 종목명"]} {x["rcept_no"]}: {e}')
                 continue
-            if not w or w[0] > until or (w[0], s['코드']) in seen:
+            if not w or w[0] > until or w[0] < today or (w[0], s['코드']) in seen:   # 지난 IR 날짜는 일정에서 뺀다
                 continue
             seen.add((w[0], s['코드']))
-            _add(w[0], w[1], '한국 실적', s['정식 종목명'], nm.strip(), f'DART {x["rcept_no"]}', s['보유/관심'])
+            _add(w[0], w[1], '한국 실적', s['정식 종목명'], nm.strip(), f'DART {x["rcept_no"]}', s['보유/관심'],
+                 check='확정(DART 공시)')
             n_found += 1
     kr_msg = f'국내 실적 일정 {n_found}건'
 except Exception as e:
@@ -311,6 +315,43 @@ except Exception as e:
 
 # (다) 미국·일본 종목 실적발표 — 야후 -------------------------------------------
 yf_msg = ''
+# 두 번째 출처: Finnhub 실적 달력(무료 키 FINNHUB_KEY). 야후 날짜와 대조해 확정/예상/다름을 붙이고,
+# 간밤 발표 종목은 매출 실제·예상도 함께 적는다. 키가 없으면 야후 하나로만(확인 칸 '예상(야후만)').
+FH = {}
+if SEC.get('FINNHUB_KEY'):
+    try:
+        r = get('https://finnhub.io/api/v1/calendar/earnings', retry=1,
+                params={'from': (today - dt.timedelta(days=3)).isoformat(), 'to': until.isoformat(), 'token': SEC['FINNHUB_KEY']})
+        for x in ((r.json() if r is not None else {}) or {}).get('earningsCalendar') or []:
+            if x.get('symbol') and x.get('date'):
+                FH.setdefault(x['symbol'], []).append(x)
+    except Exception as e:
+        print(f'  Finnhub 실적 달력 실패: {e}')
+
+
+def _fh_check(sym, d):
+    """야후 미국 날짜 d를 Finnhub와 대조 → (확인 글, Finnhub 행)"""
+    if not FH:
+        return '예상(야후만, Finnhub 없음)', None
+    rows = FH.get(sym) or []
+    for x in rows:
+        if x['date'] == d.isoformat():
+            return '확정(야후·Finnhub 일치)', x
+    if rows:
+        return f'날짜 다름(야후 {d:%m/%d}, Finnhub {rows[0]["date"][5:].replace("-", "/")})', rows[0]
+    return '예상(야후만)', None
+
+
+def _fh_numbers(x):
+    """Finnhub 한 줄 → '매출 실제 ○ / 예상 ○' (십억 달러)"""
+    if not x:
+        return ''
+    ra, re_ = x.get('revenueActual'), x.get('revenueEstimate')
+    if ra:
+        return f' · 매출 실제 {ra / 1e9:.2f}B$' + (f' / 예상 {re_ / 1e9:.2f}B$' if re_ else '') + '(Finnhub)'
+    return ''
+
+
 try:
     n_found, n_fail = 0, 0
     for _, s in u[(u['시장'].isin(['미국', '일본'])) & (u['구분'] == '개별주')].iterrows():
@@ -345,9 +386,24 @@ try:
                     hits[d] = (today, '', f'간밤 발표(미국 {d:%m-%d}, 야후 calendar) — 결과는 뉴스 확인')
                 elif today <= d <= until:
                     hits[d] = (d, '', '실적 발표(야후 calendar, 미국 날짜·시각 미정)')
+            sym = str(s['yfinance 티커'])
+            if s['시장'] == '미국' and not hits and FH.get(sym):   # 야후에 없고 Finnhub에만 있는 날짜
+                for x in FH[sym]:
+                    fd = dt.date.fromisoformat(x['date'])
+                    kd = fd + dt.timedelta(days=1) if x.get('hour') == 'amc' else fd   # 장 뒤 발표 = 한국 다음 날 아침
+                    if today <= kd <= until:
+                        hits[fd] = (kd, '', '실적 발표(Finnhub 예정일, 야후에 없음)')
             for d in sorted(hits)[:2]:
                 day_k, hm, what = hits[d]
-                _add(day_k, hm, f'{s["시장"]} 실적', s['정식 종목명'], what, '야후', s['보유/관심'])
+                if s['시장'] == '미국':
+                    chk, x = _fh_check(sym, d)
+                    if '(Finnhub 예정일' in what:
+                        chk = '예상(Finnhub만)'
+                    if what.startswith('간밤 발표'):
+                        what += _fh_numbers(x)
+                else:
+                    chk = '예상(야후만)'
+                _add(day_k, hm, f'{s["시장"]} 실적', s['정식 종목명'], what, '야후' + ('·Finnhub' if FH else ''), s['보유/관심'], check=chk)
                 n_found += 1
         except Exception as e:
             n_fail += 1
@@ -383,13 +439,13 @@ try:
             continue
         SCHED.append({'날짜': kst.strftime('%Y-%m-%d'), '요일': WD[kst.weekday()],
                       '시각(한국)': kst.strftime('%H:%M') + ' 통상', '구분': '미국 지표', '대상': ko,
-                      '보유/관심': '', '내용': name, '출처': src})
+                      '보유/관심': '', '확인': '확정(' + src + ')', '내용': name, '출처': src})
         n_found += 1
     us_msg = f'미국 지표 일정 {n_found}건'
 except Exception as e:
     us_msg = f'미국 지표 일정 실패({type(e).__name__} {e})'
 
-cols = ['날짜', '요일', '시각(한국)', '구분', '대상', '보유/관심', '내용', '출처']
+cols = ['날짜', '요일', '시각(한국)', '구분', '대상', '보유/관심', '확인', '내용', '출처']
 sched = pd.DataFrame(SCHED, columns=cols)
 if len(sched):
     sched = sched.sort_values(['날짜', '시각(한국)', '구분']).reset_index(drop=True)

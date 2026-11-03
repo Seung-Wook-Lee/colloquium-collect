@@ -36,20 +36,23 @@ def _cards():
     return 'prompts/위원총괄.txt', open('prompts/위원총괄.txt', encoding='utf-8').read()
 
 
-def _pick_model():
-    """키로 쓸 수 있는 모델 중 최신 Flash(정식판 우선). 모델 이름이 해마다 바뀌어 고정하지 않는다."""
+def _pick_model(exclude=None):
+    """키로 쓸 수 있는 모델 중 최신 Flash(정식판 우선). 모델 이름이 해마다 바뀌어 고정하지 않는다.
+    exclude를 주면 그 모델을 뺀 다음 후보(과부하 예비, lite도 허용)를 돌려준다."""
     r = requests.get(f'{API}/models', headers={'x-goog-api-key': GEMINI_KEY}, params={'pageSize': 1000}, timeout=60)
     r.raise_for_status()
-    skip = ('lite', 'image', 'tts', 'audio', 'live', 'exp', 'embedding', 'thinking', 'latest')
+    skip = ('image', 'tts', 'audio', 'live', 'exp', 'embedding', 'thinking', 'latest') + (() if exclude else ('lite',))
     names = [m['name'].split('/')[-1] for m in r.json().get('models', [])
              if 'generateContent' in m.get('supportedGenerationMethods', [])]
-    flash = [n for n in names if n.startswith('gemini-') and 'flash' in n and not any(k in n for k in skip)]
+    flash = [n for n in names if n.startswith('gemini-') and 'flash' in n and not any(k in n for k in skip) and n != exclude]
 
     def key(n):
         ver = re.search(r'gemini-(\d+(?:\.\d+)?)', n)
         return ('preview' not in n, float(ver.group(1)) if ver else 0, -len(n))
     if flash:
         return max(flash, key=key)
+    if exclude:
+        return None
     return 'gemini-flash-latest' if 'gemini-flash-latest' in names else names[0]
 
 
@@ -88,21 +91,51 @@ COMMON = '''너는 '프로젝트 콜로키움' 아침 정례 회의의 위원이
 
 
 def _member(who, task, data, search=False):
+    global GEMINI_MODEL
     prompt = (COMMON.format(day=f'{TODAY[:4]}-{TODAY[4:6]}-{TODAY[6:]}') +
               f'\n[이번에 쓸 위원] {who}\n[할 일]\n{task}\n\n[위원 총괄 — {CARDS_NAME}]\n{CARDS}\n\n[오늘 자료]\n{data}')
-    return _ask(prompt, search)
+    try:
+        return _ask(prompt, search)
+    except RuntimeError as e:
+        # 11/3: 503(수요 과다)로 원고 셋이 모두 빠짐 → 다시 해도 안 되면 다른 Flash 모델로 한 번 더
+        if not any(c in str(e) for c in ('503', '500', '429', 'UNAVAILABLE', 'overloaded')) or search:
+            raise
+        alt = _pick_model(exclude=GEMINI_MODEL)
+        if not alt:
+            raise
+        print(f'  {who}: {GEMINI_MODEL} 실패({str(e)[:60]}) → {alt}로 다시')
+        main, GEMINI_MODEL = GEMINI_MODEL, alt
+        try:
+            return _ask(prompt, search) + f'\n\n(오늘은 {main} 과부하로 {alt}가 썼습니다)'
+        finally:
+            GEMINI_MODEL = main
 
 
-NEWS_TASK = '''뉴스 국장으로 오늘 회의 첫 발언을 쓴다.
-(2026-11-03 의장: 지수·금리·환율 숫자를 줄줄이 읽지 않는다 — 의장은 숫자를 스트림릿으로 본다. 해석을 가져온다.)
-1) 간밤 시장을 움직인 사건 3~5개: 사건마다 무슨 일인지 한 줄 + 무슨 뜻인지(어느 업종·종목에 왜) 한 줄, 끝에 (매체, 시각).
-   고르는 순서(11/3 의장 "아무도 주목 안 하는 것에 집중하는 건 시스템이 잘못"): ① 브리핑 종목표에서 크게 움직인 종목과 그 원인 ② 여러 매체가 되풀이한 사건(제목 건수) ③ ETF 자금 쏠림.
-   숫자는 해석에 필요한 것만. 브리핑 목록에 없는 것은 지어내지 말고 "피드에 없음"(구글 검색은 쓰지 않는다: 무료 한도 429, 2026-10-29 의장).
-2) 오늘·이번 주 일정 중 위 사건과 이어지는 것만 1~2줄. 거시 지표는 '이번 발표의 무게'를 판단해 한 줄(월가 통념은 중요하지만 같은 지표도 매번 무게가 다르다: 지금 시장 화두와 이어지는가, 놀랄 여지가 있는가).
-3) 스페이스X·테슬라 뉴스가 있으면 두 종목과 일론 머스크 발언(X 포함)을 함께 확인한다.
-4) 오늘의 한 종목(2026-10-31 의장, 매일): 맨 끝에 뉴스 국장: "[주목] 종목명 — 간밤 뉴스·일정에서 고른 이유 2줄(매체, 시각)" 한 종목. 콜로키움 100 안에서.
-말투(11/3 의장 "이따위 부정적인 반응이면 돈 못 벌텐데"): 나쁜 뉴스는 이미 가격에 들어간 정도(고점 대비 하락폭)와 함께, 일정은 위협이 아니라 확인 지점으로. 부정적 표현은 꼭 필요할 때만 쓴다. 매수를 몰아붙이는 말("반드시 담아야", "최적의 타점")도 쓰지 않는다. 마지막 줄은 "오늘 확인할 것:".
-밸류에이션 판단과 매매 의견은 하지 않는다. 12줄 안팎.'''
+NEWS_TASK = '''뉴스 국장으로 오늘 회의 첫 발언을 쓴다. 틀은 고정, 10줄 안(2026-11-03 의장 "허술하고 난잡함, 일정 체크 오류 많음").
+숫자를 줄줄이 읽지 않는다(의장은 숫자를 스트림릿으로 본다). 해석을 가져온다.
+
+뉴스 국장: "
+[간밤 사건 3개]
+1. (사건 한 줄) → (그래서 무슨 뜻인지: 어느 업종·종목에 왜, 한 줄) (매체, 시각)
+2. …
+3. …
+[확인할 일정 3개]
+- 날짜 시각 대상 (확인 칸 그대로: 확정/예상/날짜 다름/발표됨) — 왜 보는지 한 줄
+[국장 의견] 한 줄.
+[주목] 종목명 — 고른 이유 한 줄(매체, 시각)
+"
+
+고르는 법
+- 사건: 같은 사건을 다룬 기사는 하나로 묶고 기사 수를 센다. 순서는 ① 브리핑 종목표에서 크게 움직인 종목과 그 원인
+  ② 여러 매체가 되풀이한 사건(기사 수) ③ ETF 자금 쏠림. 칼럼·인터뷰·홍보 기사는 사건이 아니다.
+- 일정: 브리핑 '일정' 표에 있는 것만 쓴다. 날짜·시각은 표 그대로 옮기고, '확인' 칸(확정/예상/날짜 다름/발표됨)을 꼭 괄호로 붙인다.
+  '발표됨'·'간밤 실적'은 앞으로 볼 일정이 아니다 → 일정 칸에 넣지 말고 사건 칸에서 숫자(EPS·매출, 예상 대비)로 말한다.
+  '날짜 다름'이면 "날짜가 출처마다 다릅니다(야후 ○○, Finnhub ○○)"라고 그대로 쓴다. 표에 없는 날짜를 지어내지 않는다.
+  거시 지표는 '이번 발표의 무게'를 판단해 넣는다(지금 시장 화두와 이어지는가, 놀랄 여지가 있는가). 무게가 없으면 넣지 않는다.
+- 스페이스X·테슬라 뉴스가 있으면 일론 머스크 발언(X 포함)을 함께 본다.
+- 브리핑 목록에 없는 것은 지어내지 말고 "피드에 없음"(구글 검색은 쓰지 않는다).
+말투(11/3 의장): 나쁜 뉴스는 이미 가격에 들어간 정도와 함께, 일정은 위협이 아니라 확인 지점으로. 부정적 표현은 꼭 필요할 때만 쓴다.
+매수를 몰아붙이는 말("반드시 담아야", "최적의 타점")도 쓰지 않는다. 밸류에이션 판단과 매매 의견은 하지 않는다.'''
 
 PETER_TASK = '''피터(산업분석 데스크장)로 밸류에이션 보고를 쓰고, 이어서 섹터 데스크 발언을 쓴다.
 1) 피터: 눈에 띄는 종목 3~5개를 한 줄씩. 선정 기준은 PER·PBR의 큰 변화, 실적 발표 직후, 업종 대비 눈에 띄는 수준. PER은 TTM / 최근 분기×4 / 선행 세 칸을 구분해 말한다. 역사적 밴드 데이터는 아직 없으니 "밴드 하단" 같은 말은 쓰지 않는다. 해당이 없으면 "특이 밸류에이션 변화 없음".
