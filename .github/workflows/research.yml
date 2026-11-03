@@ -7,6 +7,9 @@ on:
         description: 'research/ 아래 실행할 파일 이름(예: putcall_history.py)'
         required: true
 
+permissions:
+  contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -24,4 +27,17 @@ jobs:
           SCRIPT: ${{ github.event.inputs.script }}
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          QUIET: '1'
         run: python "research/$(basename "$SCRIPT")"
+      - name: 결과 파일 저장(research/out이 있으면 같은 브랜치에 커밋)
+        if: always()
+        run: |
+          if [ -d research/out ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add research/out
+            git commit -m "조사 결과 파일 저장: $SCRIPT" || exit 0
+            git push
+          fi
+        env:
+          SCRIPT: ${{ github.event.inputs.script }}
