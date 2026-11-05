@@ -6,11 +6,12 @@
 #              "Total money market fund assets increased by $X billion to $Y trillion for the week ended Wednesday, Month D"
 #   만드는 것: 수집데이터/00_누적/00_MMF잔고.csv (주마다 한 줄, 같은 주 다시 받으면 덮어씀)
 #              수집데이터/YYYYMMDD/YYYYMMDD_MMF.csv (최근 1줄: 기준일·잔고·1주 변화·4주 변화)
-#   주의     : 4주 변화는 기록이 4주 쌓인 뒤부터. 문장 모양이 바뀌면 '실패'로 남는다(고칠 곳 MMF_RE).
+#   주의     : ICI는 GitHub Actions 서버 접속을 막는다(2026-11-05 시험 403). 막히면 '실패'로 남고, 그 주는 뉴스 국장이 웹 검색으로 보고.
+#              4주 변화는 기록이 4주 쌓인 뒤부터. 문장 모양이 바뀌면 '실패'로 남는다(고칠 곳 MMF_RE).
 #   쓰는 위원: 리오
 # ======================================================================
 MMF_URL = 'https://www.ici.org/research/stats/mmf'
-MMF_RE = (r'Total money market fund assets\s+(increased|decreased)\s+by\s+\$([\d.,]+)\s+billion\s+to\s+'
+MMF_RE = (r'Total money market fund assets\s+(?:\d\s+)?(increased|decreased)\s+by\s+\$([\d.,]+)\s+billion\s+to\s+'
           r'\$([\d.,]+)\s+trillion\s+for\s+the\s+[\w\- ]*?(?:week|period)\s+ended\s+(?:Wednesday,\s+)?([A-Z][a-z]+\.?\s+\d{1,2})(?:,\s*(\d{4}))?')
 MMF_FILE = f'{KEEP}/00_MMF잔고.csv'
 try:
