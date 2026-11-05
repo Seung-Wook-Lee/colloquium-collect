@@ -1,9 +1,9 @@
 # ======================================================================
-# [블록 8-리오] 매크로 체크리스트 — 7개 항목의 '꺾임'과 반대 신호 n/7
-#   하는 일  : 하이일드·MOVE·10년물·실질금리·유가·공포탐욕·금융 스트레스가 최근 20영업일(스트레스는 4주)
+# [블록 8-리오] 매크로 체크리스트 — 8개 항목의 '꺾임'과 반대 신호 n/8 (11/5 하이일드 실효수익률 추가)
+#   하는 일  : 하이일드(스프레드·실효수익률)·MOVE·10년물·실질금리·유가·공포탐욕·금융 스트레스가 최근 20영업일(스트레스는 4주)
 #              고점·저점에서 꺾였는지 센다. 국면(나쁨·중립·좋음)을 정하고, 그 국면의 반대 신호 수를 적는다.
 #              (2026-10-29 의장 "좋을 때는 나빠질 것을, 나쁠 때는 좋아질 것을 찾도록". 기획안/리오_역할강화안_20261029.txt)
-#   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_매크로체크리스트.csv (항목 7줄 + 요약 1줄)
+#   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_매크로체크리스트.csv (항목 8줄 + 요약 1줄)
 #   쓰는 위원: 리오 (회의 둘째 순서)
 #   고칠 곳  : 문턱 값은 RIO_ITEMS 표, 국면 기준은 rio_phase (모두 v1 가정치, 복기 때 조정)
 # ======================================================================
@@ -12,6 +12,8 @@ RIO_WIN = 20   # 일간 항목은 최근 20영업일 고점·저점
 # (항목, 시계열 찾기, 단위, 나쁜 쪽 'up'=오르면 나쁨 'down'=내리면 나쁨, 문턱, 문턱 종류 'pp'=차이 'pct'=%, 출처)
 RIO_ITEMS = [
     ('하이일드 스프레드', lambda: FS.get('BAMLH0A0HYM2'), '%', 'up', 0.15, 'pp', 'FRED BAMLH0A0HYM2'),
+    # 2026-11-05 의장 "위기 관리용 지표 추가": 하이일드 실효수익률(회사가 실제로 내는 금리 = 국채금리 + 스프레드)
+    ('하이일드 실효수익률', lambda: FS.get('BAMLH0A0HYM2EY'), '%', 'up', 0.25, 'pp', 'FRED BAMLH0A0HYM2EY'),
     ('MOVE', lambda: YS.get('MOVE'), '', 'up', 10, 'pct', '야후 ^MOVE'),
     ('미국 10년물', lambda: FS.get('DGS10') if FS.get('DGS10') is not None else YS.get('미국 10년'), '%', 'up', 0.15, 'pp',
      'FRED DGS10 (없으면 야후 ^TNX)'),
@@ -109,10 +111,11 @@ try:
     g, b, opp = rio_count(rows, ph)
     pg, pb, popp = rio_count(prev, ph)
     have = sum(r['값'] != '데이터 없음' for r in rows)
+    N = len(RIO_ITEMS)
     if opp is None:
-        line = f'국면 중립 | 좋아질 기미 {g}/7, 나빠질 기미 {b}/7'
+        line = f'국면 중립 | 좋아질 기미 {g}/{N}, 나빠질 기미 {b}/{N}'
     else:
-        line = (f'국면 {ph} | 반대 신호({"좋아질" if ph == "나쁨" else "나빠질"} 기미) {opp}/7'
+        line = (f'국면 {ph} | 반대 신호({"좋아질" if ph == "나쁨" else "나빠질"} 기미) {opp}/{N}'
                 + (f', 어제보다 {opp - popp:+d}' if prev else ''))
     line += f' | 리스크 표 빨강 {red}·주황 포함 {warm}개, 공포탐욕 {FG["score"]:.1f}' if FG else f' | 리스크 표 빨강 {red}·주황 포함 {warm}개'
     RIO = {'국면': ph, '좋아질': g, '나빠질': b, '반대 신호': opp, '한 줄': line}
@@ -123,7 +126,7 @@ try:
     rio = pd.DataFrame(rows)
     rio['수집시각(KST)'] = stamp()
     rio.to_csv(f'{DAY}/{TODAY}_매크로체크리스트.csv', index=False, encoding='utf-8-sig')
-    log(f'[8 매크로 체크리스트] {line} | 데이터 {have}/7')
+    log(f'[8 매크로 체크리스트] {line} | 데이터 {have}/{N}')
 except Exception as e:
     traceback.print_exc()
     log(f'[8 매크로 체크리스트] 실패: {type(e).__name__} {e}')
