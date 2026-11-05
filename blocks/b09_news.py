@@ -45,7 +45,7 @@ GOV_QUERIES = ['Texas governor data center', 'Hinojosa data center', 'Abbott dat
                'Iowa governor data center', 'Iowa governor-elect data center',
                'Georgia governor data center', 'Georgia governor-elect data center', 'Kemp data center']
 GOV_TITLE = r'(?i)data ?cent(er|re)|데이터 ?센터'
-GOV_STATE = r'(?i)texas|iowa|georgia|hinojosa|abbott|kemp|reynolds|텍사스|아이오와|조지아'
+GOV_STATE = r'(?i)governor|주지사|texas|iowa|georgia|hinojosa|abbott|kemp|reynolds|텍사스|아이오와|조지아'
 MORNING_TITLE = r'뉴욕증시|뉴욕마감|뉴욕 마감|美증시|미 증시|미국 증시|간밤|해외증시|월가|글로벌 마켓'   # 제목에 이 말이 있는 것만
 NEWS_MAX = 10             # 출처마다 최대 건수
 YAHOO_PER_TICKER = 2      # 야후 종목별 뉴스에서 한 종목 최대 건수
