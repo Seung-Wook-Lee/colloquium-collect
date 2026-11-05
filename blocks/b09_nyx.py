@@ -7,6 +7,7 @@
 #              패턴(이중·삼중 바닥/천장, 헤드앤숄더, 역헤드앤숄더)
 #   소스     : 수집데이터/00_누적/00_가격이력.csv (블록 1)
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_닉스.csv (종목 한 줄, 일_·주_·월_ 머리말로 봉 구분)
+#              YYYYMMDD_닉스요약.txt (회의용: 위원별 신호 + 핵심30 한 줄, 핵심30 명단은 prompts/핵심30.csv)
 #   쓰는 위원: 클로토·라케시스·아트로포스 (2026-10-28 의장: 이 7개 기준을 놓고 매번 말한다)
 #   고칠 곳  : 띠 폭·패턴 기준은 nyx.py 맨 위 CFG (룰 변경은 의장 승인 뒤)
 #   실패하면 : 점검 파일에 '실패'로 남기고 다음 블록은 계속 실행
@@ -27,6 +28,15 @@ try:
         pd.DataFrame(rows), on='yfinance 티커', how='left')
     nx['계산시각(KST)'] = NOW.strftime('%Y-%m-%d %H:%M')
     nx.to_csv(f'{DAY}/{TODAY}_닉스.csv', index=False, encoding='utf-8-sig')
+    # 닉스 요약(2026-11-05 의장): 회의용 짧은 txt — 위원별 신호 + 핵심30 한 줄씩(nyx_summary.py)
+    try:
+        import nyx_summary
+        core = pd.read_csv('prompts/핵심30.csv', encoding='utf-8-sig')['번호'].tolist()
+        with open(f'{DAY}/{TODAY}_닉스요약.txt', 'w', encoding='utf-8') as f:
+            f.write(nyx_summary.build(nx, core, NOW.strftime('%Y-%m-%d %H:%M')))
+    except Exception as e:
+        traceback.print_exc()
+        log(f'[9 닉스] 요약 실패: {type(e).__name__} {e}')
 
     cnt = lambda col, word: int(nx[col].fillna('').str.startswith(word).sum()) if col in nx else 0
     pat = lambda col: int(nx[col].fillna('').ne('').sum()) if col in nx else 0

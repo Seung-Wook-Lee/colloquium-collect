@@ -350,6 +350,7 @@ def analyze(d):
     row = {'기준일': d.index[-1].date(), '종가': d['종가'].iloc[-1],
            '52주고점대비(%)': round((d['종가'].iloc[-1] / d['고가'].iloc[-250:].max() - 1) * 100, 1)}
     row.update(frame_row(d, '일', '일_'))
+    row['일_저가'] = d['저가'].iloc[-1]   # 클로토 ③ 볼린저 하단 터치(저가 ≤ 하단) 판정용(nyx_summary.py)
     if len(w) >= 60:
         row.update(frame_row(w, '주', '주_'))
         # 라케시스 v0.5 하락 국면 후보(2026-11-02 의장 승인): 50주선 위 + 52주 고점 -15~-40% + (주봉 지지 반등 또는 주봉 MACD 음수권 상승 전환)
@@ -362,6 +363,8 @@ def analyze(d):
         x50, ddp = row.get('주_50주_이격도'), row['52주고점대비(%)']
         ok = x50 is not None and x50 >= 100 and -40 <= ddp <= -15 and (bounce or rise)
         row['주_MACD선'] = round(float(mline.iloc[-1]), 2)
+        w50 = wc.rolling(50).mean()
+        row['주_50주선_하락'] = bool(w50.iloc[-1] < w50.iloc[-2])   # 아트로포스 이탈 2단계용
         row['라케시스_v05'] = ('후보: ' + ' + '.join(t for t, f in (('주봉 지지 반등', bounce),
                                ('MACD 음수권 상승 전환' if turn else 'MACD 음수권 상승', rise)) if f)) if ok else ''
     mon = d['종가'].groupby(d.index.to_period('M')).last()

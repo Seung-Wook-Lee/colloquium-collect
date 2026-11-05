@@ -33,7 +33,7 @@ def _latest():
              f'먼저 읽을 것: 최신_브리핑.txt (그날 전체 요약), 최신_수집점검.txt (수집 성공·실패)\n'
              f'세부 숫자 파일(같은 폴더):\n' + ''.join(f'  - {n}\n' for n in names))
     copies = [('최신_안내.txt', guide.encode('utf-8'))]
-    for src, dst in ((f'{TODAY}_브리핑.txt', '최신_브리핑.txt'), (f'{TODAY}_수집점검.txt', '최신_수집점검.txt')):
+    for src, dst in ((f'{TODAY}_브리핑.txt', '최신_브리핑.txt'), (f'{TODAY}_수집점검.txt', '최신_수집점검.txt'), (f'{TODAY}_닉스요약.txt', '최신_닉스요약.txt')):
         if os.path.exists(f'{DAY}/{src}'):
             copies.append((dst, open(f'{DAY}/{src}', 'rb').read()))
     fail = []
