@@ -40,6 +40,12 @@ YAHOO_RSS = 'https://feeds.finance.yahoo.com/rss/2.0/headline'
 CNBC_RSS = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'
 GNEWS_RSS = 'https://news.google.com/rss/search'
 MORNING_QUERIES = ['뉴욕증시 마감', '간밤 해외증시', '모닝 브리핑 증시', '뉴욕마감']   # 아침 정리 기사 검색어 (고칠 곳)
+# 2026-11-05 의장 "텍사스·아이오와·조지아 주지사의 데이터센터 발언을 매일 챙겨라(당분간 가장 중요)" (고칠 곳)
+GOV_QUERIES = ['Texas governor data center', 'Hinojosa data center', 'Abbott data center',
+               'Iowa governor data center', 'Iowa governor-elect data center',
+               'Georgia governor data center', 'Georgia governor-elect data center', 'Kemp data center']
+GOV_TITLE = r'(?i)data ?cent(er|re)|데이터 ?센터'
+GOV_STATE = r'(?i)texas|iowa|georgia|hinojosa|abbott|kemp|reynolds|텍사스|아이오와|조지아'
 MORNING_TITLE = r'뉴욕증시|뉴욕마감|뉴욕 마감|美증시|미 증시|미국 증시|간밤|해외증시|월가|글로벌 마켓'   # 제목에 이 말이 있는 것만
 NEWS_MAX = 10             # 출처마다 최대 건수
 YAHOO_PER_TICKER = 2      # 야후 종목별 뉴스에서 한 종목 최대 건수
@@ -183,6 +189,28 @@ try:                                    # ④ 아침 정리 기사 — 구글 �
     msgs.append(f'아침 정리 {len(got)}건' + (f'(검색어 실패 {n_fail})' if n_fail else ''))
 except Exception as e:
     msgs.append(f'아침 정리 실패({type(e).__name__} {e})')
+try:                                    # ⑥ 주지사·데이터센터 — 구글 뉴스(영어), 텍사스·아이오와·조지아 (2026-11-05)
+    pool, seen, n_fail = [], set(), 0
+    for q in GOV_QUERIES:
+        try:
+            items = _rss(GNEWS_RSS, '주지사 데이터센터', params={'q': f'{q} when:1d', 'hl': 'en-US', 'gl': 'US', 'ceid': 'US:en'})
+        except Exception:
+            n_fail += 1
+            continue
+        for x in items:
+            title, _, media = x['제목'].rpartition(' - ')
+            title = title or x['제목']
+            if title in seen or not _re.search(GOV_TITLE, title) or not _re.search(GOV_STATE, title):
+                continue
+            seen.add(title)
+            x.update({'제목': f'{title} ({media})' if media else title, '요약': ''})
+            pool.append(x)
+        time.sleep(0.3)
+    got = sorted(pool, key=lambda x: x['시각(한국)'], reverse=True)[:NEWS_MAX]
+    news += got
+    msgs.append(f'주지사 데이터센터 {len(got)}건' + (f'(검색어 실패 {n_fail})' if n_fail else ''))
+except Exception as e:
+    msgs.append(f'주지사 데이터센터 실패({type(e).__name__} {e})')
 try:                                    # ⑤ 한국·일본 종목별 — 구글 뉴스 검색, 보유 먼저, 한 종목 최대 ASIA_PER_TICKER건
     asia = u[u['시장'].isin(['한국', '일본']) & (u['구분'] == '개별주')]
     asia = pd.concat([asia[asia['보유/관심'] == '보유'], asia[asia['보유/관심'] != '보유']])
