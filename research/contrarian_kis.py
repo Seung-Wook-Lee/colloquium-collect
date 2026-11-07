@@ -10,7 +10,12 @@ BASE = 'https://openapi.koreainvestment.com:9443'
 K, S = os.environ['KIS_APP_KEY'], os.environ['KIS_APP_SECRET']
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = f'{HERE}/out/contrarian'; os.makedirs(f'{OUT}/px', exist_ok=True)
-TOK = requests.post(f'{BASE}/oauth2/tokenP', timeout=10, json={'grant_type': 'client_credentials', 'appkey': K, 'appsecret': S}).json()['access_token']
+for _n in range(4):   # 토큰은 1분에 1회만 발급 → 막히면 65초 기다렸다 다시
+    _j = requests.post(f'{BASE}/oauth2/tokenP', timeout=10, json={'grant_type': 'client_credentials', 'appkey': K, 'appsecret': S}).json()
+    TOK = _j.get('access_token')
+    if TOK: break
+    print('토큰 대기:', _j.get('error_code'), _j.get('error_description'), flush=True); time.sleep(65)
+if not TOK: sys.exit('한투 토큰 발급 실패')
 HD = {'content-type': 'application/json; charset=utf-8', 'authorization': f'Bearer {TOK}', 'appkey': K, 'appsecret': S, 'tr_id': 'HHDFS76240000', 'custtype': 'P'}
 
 def page(ex, sym, bymd):
