@@ -124,6 +124,12 @@ try:
             out.append(f'- {_sig(r)}{r["항목"]}: {v}{chg}' + (f' | {note}' if note else '') + f' ({r["기준일"] or ""})')
     out.append('  YTD는 작년 마지막 거래일 대비, 1달은 한 달 전 대비. 금리는 %p 변화. 월간 지표의 1달은 직전 발표 대비.')
 
+    # 3-1. 일본 (블록 9-일본, 2026-11-07 의장: 아야카 상 일본 전담)
+    out += _h('3-1. 일본 (아야카 상)')
+    jtxt = f'{DAY}/{TODAY}_일본.txt'
+    out += open(jtxt, encoding='utf-8').read().splitlines()[1:] if os.path.exists(jtxt) else ['일본 자료 없음(블록 9-일본 실패, 점검 파일 참고)']
+    out.append('  TOPIX·J-REIT는 ETF(1306·1343) 주봉으로 대신 잰다. 주봉 RSI는 와일더식 14주. 실적일은 야후 예정일(회사 공지와 대조).')
+
     # 4. 리스크
     out += _h('4. 리스크')
     # 리오 매크로 체크리스트(블록 8-리오): 국면과 반대 신호 n/7, 꺾인 항목
