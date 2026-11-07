@@ -27,6 +27,8 @@ jobs:
           SCRIPT: ${{ github.event.inputs.script }}
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
           QUIET: '1'
         run: python "research/$(basename "$SCRIPT")"
       - name: 결과 파일 저장(research/out이 있으면 같은 브랜치에 커밋)
