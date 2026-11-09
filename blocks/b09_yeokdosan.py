@@ -33,9 +33,16 @@ try:
     T.to_csv(f'{DAY}/{TODAY}_역도산.csv', index=False, encoding='utf-8-sig')
     lines = [f'미스터 역도산 {TODAY} (한투 주봉, 마지막 주 {store.날짜.max():%Y-%m-%d})']
     lines.append(('끼어들기: ' + ', '.join(f'{e} 60주선 첫 터치' for e in cut)) if cut else '끼어들기 없음(ETF 60주선 첫 터치 없음)')
-    for col, name in [('60주 첫터치', '60주선 첫 터치'), ('60주 상향돌파', '60주선 하향돌파 뒤 상향돌파'), ('20주 첫터치', '20주선 첫 터치')]:
-        x = T[T.get(col) == '예'] if col in T else T.iloc[0:0]
-        lines.append(f'{name}: ' + (', '.join(f'{r.티커}({r.ETF})' for r in x.itertuples()) or '없음'))
+    # 11/9 의장: ETF가 60주선에 닿았을 때만 그 ETF 상위 10을 분석한다. 그 밖의 종목 터치·상향돌파는 회의에 올리지 않는다(지금판 csv에는 남김).
+    for e in cut:
+        x = T[(T.ETF == e) & (T.구분 == '종목')].sort_values('ETF대비26주', ascending=False)
+        lines.append(f'-- {e} 상위 10 (26주 ETF 대비 높은 순) --')
+        for _, r in x.iterrows():
+            lines.append(f"{r['티커']}: 60주 이격 {r.get('60주 이격')} | 고점 대비 {r.get('고점대비52주')}% | ETF 대비 26주 {r.get('ETF대비26주')}%p | RSI {r.get('RSI')}")
+    if not cut:
+        e60 = T[(T.구분 == 'ETF') & T['60주 이격'].notna()] if '60주 이격' in T else T.iloc[0:0]
+        e60 = e60[e60['60주 이격'] >= 100].nsmallest(1, '60주 이격')
+        if len(e60): lines.append(f'가장 가까운 것: {e60.ETF.iloc[0]} 60주선 이격 {e60["60주 이격"].iloc[0]}')
     open(f'{DAY}/{TODAY}_역도산.txt', 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
     log(f'[9 역도산] 주봉 {len(syms) - len(bad)}/{len(syms)}종목 | 창고 {store.티커.nunique()}종목·{len(store)}줄 | '
         f'{lines[1]} | 실패: {", ".join(bad) or "없음"}')
