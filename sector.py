@@ -112,17 +112,17 @@ def analyze(px, members, bench):
         a = nyx.analyze(d.copy())
         for k in NYX_COLS:
             r[k] = a.get(k, np.nan)
-        # 미스터 역도산 국내 섹터 바닥 전환(11/9 의장): 많이 빠진 섹터부터, 주봉 MACD 기울기 양 전환(오실레이터 음수여도 됨)
+        # 국내 섹터 바닥 전환(11/9 의장, 닉스 팀 클로토 자료): 많이 빠진 섹터부터, 주봉 MACD 기울기 양 전환(오실레이터 음수여도 됨)
         #   + 일봉 MACD 골든크로스(최근 3봉 안) + 월봉 5개월선 이격. 패턴 이름·넥라인은 쓰지 않는다.
         wo = [a.get(f'주_MACD오실레이터{x}') for x in ('', '_1봉전', '_2봉전')]
         do = [a.get(f'일_MACD오실레이터{x}') for x in ('', '_1봉전', '_2봉전')]
         ok = lambda v: all(x is not None and pd.notna(x) for x in v)
-        r['역도산_주MACD기울기'] = ('양 전환' if wo[0] > wo[1] and wo[1] <= wo[2] else '양' if wo[0] > wo[1] else '음') if ok(wo) else ''
-        r['역도산_일MACD골든크로스'] = ('예' if (do[0] > 0 and do[1] <= 0) or (do[1] > 0 and do[2] <= 0) else '') if ok(do) else ''
+        r['주MACD기울기'] = ('양 전환' if wo[0] > wo[1] and wo[1] <= wo[2] else '양' if wo[0] > wo[1] else '음') if ok(wo) else ''
+        r['일MACD골든크로스'] = ('예' if (do[0] > 0 and do[1] <= 0) or (do[1] > 0 and do[2] <= 0) else '') if ok(do) else ''
         s5, s20 = c.rolling(5).mean(), c.rolling(20).mean(); gx = (s5 > s20) & (s5.shift(1) <= s20.shift(1))
-        r['역도산_일5_20선골든크로스'] = '예' if gx.iloc[-3:].any() else ''      # 이동평균 골든크로스(최근 3봉 안)
+        r['일5_20선골든크로스'] = '예' if gx.iloc[-3:].any() else ''      # 이동평균 골든크로스(최근 3봉 안)
         m5 = a.get('월_5개월선')
-        r['역도산_월5개월선이격'] = round(c.iloc[-1] / m5 * 100, 1) if m5 is not None and pd.notna(m5) and m5 else np.nan
+        r['월5개월선이격'] = round(c.iloc[-1] / m5 * 100, 1) if m5 is not None and pd.notna(m5) and m5 else np.nan
         rows.append(r)
     df = pd.DataFrame(rows)
     if not len(df):
