@@ -2,7 +2,7 @@
 #   목적: 클로드가 100종목 × 수십 칸 표를 통째로 읽지 않고, 이 파일만 읽고 닉스 팀 발언을 하게 해 토큰을 줄인다.
 #   1부  위원별 신호 목록(콜로키움 100 전체 감시, ★ = 핵심30)
 #   2부  핵심30 종목별 7개 기준 한 줄
-#   판정 기준은 룰북(클로토 v0.8.3, 라케시스 v0.6, 아트로포스 v0.5, 닉스_공통 7장)을 코드로 옮긴 1차 거름망이다.
+#   판정 기준은 룰북(미스 차트 v0.8.3, 라케시스 v0.6, 아트로포스 v0.5, 닉스_공통 7장)을 코드로 옮긴 1차 거름망이다.
 #   하루치 표만 보므로 '5영업일 안', '3주 안', '2주 연속', 시장 대비 26주 수익률은 여기서 판정하지 않는다(회의에서 확인).
 #   룰을 바꾸면 이 파일도 같이 고친다.
 import re
@@ -34,8 +34,8 @@ def _name(r, core):
     return ('★' if r['번호'] in core else '') + str(r['정식 종목명'])
 
 
-def clotho(r):
-    """클로토 1단계 4조건(일봉) 중 오늘 몇 개 충족인지 + 2단계 ⑤ 주봉 MACD 오실레이터 상승 여부"""
+def misschart(r):
+    """미스 차트 1단계 4조건(일봉) 중 오늘 몇 개 충족인지 + 2단계 ⑤ 주봉 MACD 오실레이터 상승 여부"""
     rsi, x50 = _num(r.get('일_RSI')), _num(r.get('일_50일_이격도'))
     low, dn = _num(r.get('일_저가')), _num(r.get('일_볼린저_하단'))
     mo, mo1 = _num(r.get('일_MACD오실레이터')), _num(r.get('일_MACD오실레이터_1봉전'))
@@ -134,7 +134,7 @@ def build(nx, core_ids, stamp):
 
     c_full, c_near, best = [], [], None
     for _, r in nx.iterrows():
-        n, miss, w_up, rsi, x50 = clotho(r)
+        n, miss, w_up, rsi, x50 = misschart(r)
         w = ' / 주봉 MACD 오실레이터 상승 중(⑤ 후보)' if w_up else ''
         if n == 4:
             c_full.append((_name(r, core), 0, f'1단계 충족(RSI {_f(rsi)}, 50일 이격 {_f(x50)}){w}'))
@@ -142,10 +142,10 @@ def build(nx, core_ids, stamp):
             c_near.append((_name(r, core), 1, f'1단계 3/4(미충족: {", ".join(miss)}){w}'))
         if best is None or n > best[0]:
             best = (n, _name(r, core), miss)
-    section('클로토 — 1단계(일봉 4조건 오늘 동시 충족)', c_full, '오늘 1단계 충족 종목 없음')
+    section('미스 차트 — 1단계(일봉 4조건 오늘 동시 충족)', c_full, '오늘 1단계 충족 종목 없음')
     near_empty = (f'3/4 근접 없음. 가장 근접: {best[1]}({best[0]}/4, 미충족: {", ".join(best[2])})'
                   if best else '없음')
-    section('클로토 — 1단계 근접(3/4)', c_near, near_empty)
+    section('미스 차트 — 1단계 근접(3/4)', c_near, near_empty)
 
     lk = [(_name(r, core), 0, ' / '.join(h)) for _, r in nx.iterrows() if (h := lachesis(r))]
     section('라케시스 — 돌파·바닥 패턴 완성·하락 국면 후보', lk, '오늘 라케시스 신호 없음')
