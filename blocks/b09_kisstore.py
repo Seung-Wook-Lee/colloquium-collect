@@ -21,7 +21,7 @@ KS_YEARS = {'D': 10, 'W': 20, 'M': 20}          # 과거 채우기 목표
 KS_STATE = f'{KEEP}/00_한투_창고상태.csv'
 KS_VAL = f'{KEEP}/00_한투_밸류이력.csv'
 KS_COLS = ['번호', '코드', '종목명', '시장', '날짜', '시가', '고가', '저가', '종가', '거래량']
-BACKFILL_CALLS = 1500                           # 하루 과거 채우기 호출 한도(0.3초 간격 → 약 8분)
+BACKFILL_CALLS = 1000                           # 하루 과거 채우기 호출 한도(0.3초 간격 → 약 6분, 전체 45분 제한 안)
 KS_EXCD = {'NASDAQ': 'NAS', 'NYSE': 'NYS', 'NYSE American': 'AMS', 'NYSE Arca': 'AMS', 'Cboe BZX': 'AMS', 'TSE 프라임': 'TSE'}
 KS_GUBN = {'D': '0', 'W': '1', 'M': '2'}
 
