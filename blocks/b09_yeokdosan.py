@@ -58,7 +58,12 @@ try:
             if not c: raise RuntimeError('빈 응답')
             comp += [dict(ETF=e, 순위=a, 티커=b, 이름=n, 비중=w) for a, b, n, w in c]
         except Exception as x:
-            cbad.append(e); comp += old[old.ETF == e].to_dict('records')
+            px_ = ekr.set_index('ETF').미국대리.get(e)
+            try:
+                if not (isinstance(px_, str) and px_): raise
+                comp += [dict(ETF=e, 순위=a, 티커=b, 이름=n, 비중=w) for a, b, n, w in ydo.us_proxy_components(px_)]
+            except Exception:
+                cbad.append(e); comp += old[old.ETF == e].to_dict('records')
     hkr = pd.DataFrame(comp); hkr['시장'] = '국내'
     if len(hkr): hkr.to_csv(cpath, index=False, encoding='utf-8-sig')
     # 주봉 갱신
@@ -68,7 +73,13 @@ try:
         ex, nm, rows = ydo.find_exchange(TOKEN, K_, S_, tk)
         if rows: new.append(ydo.to_frame(tk, rows))
         else: bad.append(tk)
-    for tk in ['069500'] + list(ekr.ETF) + (list(dict.fromkeys(hkr.티커)) if len(hkr) else []):
+    kus = [t for t in (dict.fromkeys(hkr.티커) if len(hkr) else []) if not (len(str(t)) == 6 and str(t)[:1].isdigit())]
+    for tk in kus:                                   # 미국 지수 추종 국내 ETF의 미국 종목(대리 ETF 보유)
+        if tk in set(hus.티커): continue
+        ex, nm, rows = ydo.find_exchange(TOKEN, K_, S_, tk)
+        if rows: new.append(ydo.to_frame(tk, rows))
+        else: bad.append(tk)
+    for tk in ['069500'] + list(ekr.ETF) + [t for t in (dict.fromkeys(hkr.티커) if len(hkr) else []) if t not in kus]:
         try:
             f = ydo.kr_to_frame(tk, ydo.kr_week_page(TOKEN, K_, S_, tk)) if tk in have else ydo.kr_week_all(TOKEN, K_, S_, tk)
             if f is not None and len(f): new.append(f)

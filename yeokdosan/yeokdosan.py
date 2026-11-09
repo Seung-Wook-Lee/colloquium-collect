@@ -135,6 +135,15 @@ def kr_components(token, key, secret, etf, top=10):
     return [(i + 1, c, n, w) for i, (c, n, w) in enumerate(out)]
 
 
+def us_proxy_components(proxy, top=10):
+    """미국 지수를 따르는 국내 ETF: 같은 지수를 따르는 미국 ETF(예: SOX → SOXQ)의 상위 보유(yfinance). [(순위, 티커, 이름, 비중%)]"""
+    import yfinance as yf
+    d = yf.Ticker(proxy).funds_data.top_holdings.head(top)
+    w = d.iloc[:, -1] if 'Holding Percent' not in d else d['Holding Percent']
+    nm = d['Name'] if 'Name' in d else [''] * len(d)
+    return [(i + 1, str(t), n, round(float(x) * 100, 2)) for i, (t, n, x) in enumerate(zip(d.index, nm, w))]
+
+
 def merge(store, new):
     """창고에 새 주봉을 덮어 넣는다(같은 티커·날짜는 새 값)."""
     if store is None or store.empty:
