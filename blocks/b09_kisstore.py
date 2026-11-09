@@ -21,7 +21,11 @@ KS_YEARS = {'D': 10, 'W': 20, 'M': 20}          # 과거 채우기 목표
 KS_STATE = f'{KEEP}/00_한투_창고상태.csv'
 KS_VAL = f'{KEEP}/00_한투_밸류이력.csv'
 KS_COLS = ['번호', '코드', '종목명', '시장', '날짜', '시가', '고가', '저가', '종가', '거래량']
-BACKFILL_CALLS = 1000                           # 하루 과거 채우기 호출 한도(0.3초 간격 → 약 6분, 전체 45분 제한 안)
+BACKFILL_CALLS = 1000                           # 과거 채우기 호출 한도
+# 과거 채우기 시간 한도: 07시 정기 실행은 4분(전체 45분 제한 안, 11/10 시험에서 한투 1회 약 1.2초),
+# 손으로 블록만 돌릴 때(BLOCKS 입력 있음)는 25분
+BACKFILL_SEC = 1500 if os.environ.get('BLOCKS', '').strip() else 240
+KS_T0 = time.time()
 KS_EXCD = {'NASDAQ': 'NAS', 'NYSE': 'NYS', 'NYSE American': 'AMS', 'NYSE Arca': 'AMS', 'Cboe BZX': 'AMS', 'TSE 프라임': 'TSE'}
 KS_GUBN = {'D': '0', 'W': '1', 'M': '2'}
 
@@ -133,7 +137,8 @@ try:
                      if t is not None and not pd.isna(t)]
             oldest = min(cands) if cands else None
             target = pd.Timestamp(TODAY) - pd.DateOffset(years=KS_YEARS[per])
-            while rec.get('과거완료') != '예' and budget > 0 and oldest is not None and oldest > target:
+            while rec.get('과거완료') != '예' and budget > 0 and time.time() - KS_T0 < BACKFILL_SEC \
+                    and oldest is not None and oldest > target:
                 y = ks_page(s, per, (oldest - pd.Timedelta(days=1)).strftime('%Y%m%d'))
                 budget -= 1
                 if y is None:
