@@ -635,7 +635,7 @@ with t1:
     h0.subheader('1. 시장')
     per = h1.segmented_control('기간', ['1일', '1주', '1달'], default='1일', key='hm_per',
                                label_visibility='collapsed') or '1일'
-    need = {'S&P500', '한국'} - (set(hm['시장']) if len(hm) else set())
+    need = {'S&P500'} - (set(hm['시장']) if len(hm) else set())   # 11/10 의장: 히트맵은 미국만
     if need:
         try:
             hm, live = pd.concat([hm, heatmap_live(tuple(sorted(need)))], ignore_index=True), True
@@ -644,18 +644,17 @@ with t1:
     for c in ('시총', '1일', '1주', '1달'):
         if c in hm:
             hm[c] = num(hm[c])
-    cu, ck = st.columns(2, gap='medium')
-    for col, mk, ttl in ((cu, 'S&P500', '미국 S&P500'), (ck, '한국', '한국 코스피·코스닥')):
+    for col, mk, ttl in ((st.container(), 'S&P500', '미국 S&P500'),):
         part = hm[hm['시장'] == mk] if len(hm) else hm
         with col:
             st.markdown(f'**{ttl}**')
             if len(part):
-                st.plotly_chart(treemap(part, per, True, h=520), width='stretch', config={'displayModeBar': False},
+                st.plotly_chart(treemap(part, per, True, h=600), width='stretch', config={'displayModeBar': False},
                                 key=f'hm_{mk}')
             else:
                 st.info(f'{ttl} 히트맵 자료가 없습니다.')
     base = hm['기준일'].dropna().max() if len(hm) and '기준일' in hm else ''
-    st.caption('미국 = SPDR 섹터 ETF 11개 상위 10종목, 한국 = 코스피·코스닥 주요 약 70종목(섹터별). 칸 크기 = 시가총액, '
+    st.caption('미국 S&P500 = SPDR 섹터 ETF 11개 상위 10종목. 칸 크기 = 시가총액, '
                f'초록 = 오름, 빨강 = 내림. 기준일 {base}.' + (' (07시 파일이 없어 지금 야후에서 받은 값)' if live else ''))
     have = [k for k in TOP_CARDS if k in R and R[k]['_now'] is not None]
     if have:

@@ -2,7 +2,7 @@
 # [블록 9-히트맵] 스트림릿 '오늘 시장' 맨 위 히트맵 자료 (2026-11-10 의장 "히트맵도 넣어야 할 것 같고, 제일 위에")
 #   하는 일  : (가) S&P500: SPDR 섹터 ETF 11개의 상위 10종목(yeokdosan/holdings_top10.csv)을 섹터별로 묶어
 #                   1일·1주(5거래일)·1달(21거래일) 등락률과 시가총액(칸 크기)을 적는다. 섹터 ETF 줄도 함께.
-#              (가-2) 한국: heatmap_kr.csv의 코스피·코스닥 주요 약 70종목(섹터별, 칸 크기 시총)
+#              (한국 히트맵은 11/10 의장 '미국만 봅시다'로 화면에서 뺌. heatmap.korea·heatmap_kr.csv는 남겨 둠)
 #              (나) 콜로키움 100: 유니버스 종목을 층(S0~S6)별로 묶어 같은 세 기간 등락률(칸 크기는 같게).
 #              판정은 하지 않는다. 숫자만.
 #   소스     : 야후(키 없음, 최근 3달 일봉·시가총액), 수집데이터/00_누적/00_가격이력.csv(블록 1)
@@ -15,7 +15,6 @@ import heatmap as hmmod   # 계산식(스트림릿과 같이 씀)
 try:
     hold = pd.read_csv('yeokdosan/holdings_top10.csv')
     HM = hmmod.sp500(yf, hold)   # (가) S&P500 섹터 × 상위 10 + 섹터 ETF 줄
-    HM += hmmod.korea(yf, pd.read_csv('heatmap_kr.csv'))   # (가-2) 한국: 코스피·코스닥 주요 약 70종목
     caps = {r['티커']: r['시총'] for r in HM if r['시장'] in ('S&P500', '한국')}
     # (나) 콜로키움 100 (블록 1 가격 이력)
     ph = pd.read_csv(f'{KEEP}/00_가격이력.csv', parse_dates=['날짜'], dtype={'티커': str},
