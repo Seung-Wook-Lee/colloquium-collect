@@ -8,7 +8,7 @@
 #                   값, 기준일, 1주 전·1달 전 값을 나란히 적는다.
 #              '신호' 칸은 의장 기준이 있는 항목과 VIX 역전(VIX > VIX3M)에만 적는다. 나머지는 '일반 기준' 글만 붙인다.
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_공포탐욕.csv, YYYYMMDD_리스크.csv
-#              (YYYYMMDD_추이.csv 에 공포탐욕 1년 이력, 7개 지표·리스크 항목의 최근 1달 값을 더함)
+#              (YYYYMMDD_추이.csv 에 공포탐욕 1년 이력, 7개 지표·리스크 항목의 최근 1년 값을 더함)
 #   쓰는 위원: 포보스(회의 0번 공포탐욕, 변동성·신용·자금), 리오(침체 신호), 뉴스보이(고용)
 #   고칠 곳  : 의장 기준이 정해지면 RISK 표의 의장 기준 칸과 RISK_RULES
 # ======================================================================
@@ -78,7 +78,7 @@ try:
                      'CNN 갱신시각': str(pd.to_datetime(x['timestamp'], unit='ms', utc=True)) if x.get('timestamp') else None})
     fg = pd.DataFrame(rows)
     fg['수집시각(KST)'] = stamp()
-    # 화면 그래프용: 종합 점수 1년 이력 + 7개 지표 원천값 최근 1달
+    # 화면 그래프용: 종합 점수 1년 이력 + 7개 지표 원천값 최근 1년
     hist = (CNN.get('fear_and_greed_historical') or {}).get('data') or []
     if hist:
         h = pd.Series({pd.to_datetime(p['x'], unit='ms').normalize(): p['y'] for p in hist}).sort_index()
@@ -161,6 +161,7 @@ try:
            chair='Normal −0.5~0.5, 플러스 폭 커지면 유동성 문제', src='뉴욕연준 SOFR − FRED IORB')
     if NETLIQ is not None and len(NETLIQ) > 4:
         d4 = NETLIQ.iloc[-1] - NETLIQ.iloc[-5]
+        trend('리스크', '순유동성 4주 변화', (NETLIQ - NETLIQ.shift(4)).dropna())   # 화면 1년 그래프용
         r = rk('자금 경색', '순유동성 4주 변화', None, unit='조$', value=round(d4, 3), date=NETLIQ.index[-1].strftime('%Y-%m-%d'),
                general='증가 = 유동성 우호, 감소 = 부담', src='FRED WALCL − WTREGEN − RRPONTSYD 계산',
                note=f'순유동성 {NETLIQ.iloc[-1]:.3f}조$ (4주 전 {NETLIQ.iloc[-5]:.3f})')

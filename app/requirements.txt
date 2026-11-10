@@ -2,3 +2,5 @@ streamlit>=1.50
 pandas
 requests
 altair
+plotly
+yfinance
