@@ -329,7 +329,7 @@ CARD_NAME = {'필라델피아 반도체(SOX)': 'SOX 반도체'}
 WEEKLY = {'실업수당 4주 평균', '세인트루이스', '시카고 NFCI', '시카고 조정 NFCI', '순유동성 4주 변화'}
 MONTHLY = {'실업률', '비농업 고용 증감', '샴 룰', '절사평균 PCE(댈러스)', '기대인플레 1년(클리블랜드)',
            '기대인플레 10년(클리블랜드)', '경기침체 확률', '캔자스시티'}
-CHG_COLS = ['직전 대비', '1달', 'YTD', '1년']
+CHG_COLS = ['전일 대비', '1년 전 대비']
 
 
 def _f(x):
@@ -418,7 +418,8 @@ def build_rows():
         extra = ' · '.join(str(x) for x in notes if x is not None and pd.notna(x) and str(x).strip() and str(x) not in crit)
         rows[name] = {
             '항목': name, '현재': cur,
-            '직전 대비': (_txt(d1_v, pp, unit_pp) + f' ({fq})') if d1_v is not None else '—',
+            '전일 대비': (_txt(d1_v, pp, unit_pp) + ('' if fq == '전일' else f' ({fq})')) if d1_v is not None else '—',
+            '1년 전 대비': _txt(_chg(now, y1, pp), pp, unit_pp), '_crit': crit,
             '1달': _txt(mo_v, pp, unit_pp), 'YTD': _txt(ytd_v, pp, unit_pp), '1년': _txt(_chg(now, y1, pp), pp, unit_pp),
             '기준일': '' if pd.isna(r.get('기준일')) else str(r.get('기준일')),
             '신호': (f'{icon} {short_sig}' + (' (제안)' if who == '제안' and short_sig else '')).strip(),
@@ -685,10 +686,10 @@ with t1:
 
     # ---- ④ 지표 표: 줄을 누르면 바로 아래에 최근 1년 그래프
     st.subheader('지표')
-    st.caption('줄을 누르면 그 지표의 최근 1년 그래프가 표 아래에 나옵니다. 직전 대비 = 일간 지표는 전일, 주간 지표는 전주, '
-               '월간 지표는 전월(직전 발표). 신호: 의장 기준은 그대로, 나머지는 바닥 찾기 기준 클로드 제안(제안 표시). '
+    st.caption('줄을 누르면 그 지표의 최근 1년 그래프가 표 아래에 나옵니다. 주간·월간 지표는 전일 대신 전주·전월 대비. '
+               '신호: 의장 기준은 그대로, 나머지는 바닥 찾기 기준 클로드 제안(제안 표시). '
                '🟢 바닥 쪽 · 🟠 주의 · 🔴 위험 · ⚪ 평상.')
-    SHOW = ['항목', '현재', '직전 대비', '1달', 'YTD', '1년', '기준일', '신호', '해석']
+    SHOW = ['항목', '현재', '전일 대비', '1년 전 대비', '기준일', '신호']
     for title, names in TABLES:
         rows = [R[n] for n in names if n in R]
         if not rows:
@@ -698,13 +699,14 @@ with t1:
         ev = st.dataframe(df[SHOW].style.map(_color, subset=CHG_COLS), hide_index=True, width='stretch',
                           height=36 * (len(df) + 1) + 4, on_select='rerun', selection_mode='single-row',
                           key=f'tbl_{title}',
-                          column_config={'신호': st.column_config.TextColumn(width='medium'),
-                                         '해석': st.column_config.TextColumn(width='large')})
+                          column_config={'신호': st.column_config.TextColumn(width='large')})
         sel = ev.selection.rows if ev and ev.selection else []
         if sel:
             r = rows[sel[0]]
             if len(r['_hist']) >= 2:
                 st.altair_chart(chart_1y(r['항목'], r['_hist'], r['_unit']), width='stretch')
+                if r['_crit']:
+                    st.caption(r['_crit'])
             else:
                 st.caption(f'{r["항목"]}: 그래프 이력이 아직 없습니다.')
 
@@ -734,8 +736,6 @@ with t1:
                 if key in FG_HELP:
                     with st.popover('읽는 법', width='stretch'):
                         st.markdown(f'**{key}**\n\n' + FG_HELP[key])
-                if pd.notna(r.get('해석')):
-                    st.caption(r['해석'])
 
 
 # ---------------------------------------------------------------- 2. 종목
