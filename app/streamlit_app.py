@@ -298,7 +298,7 @@ def fg_chart(h):
 
 
 sec, sec_tr = csv(DAY, '섹터'), csv(DAY, '섹터궤적')
-t1, tj, t5, t2, t6, t3, t4 = st.tabs(['오늘 시장', '일본(아야카 상)', '회의록', '종목', '섹터 순환', '주봉 차트', '수집 점검'])
+t1, t5, t2, t6, t3, t4 = st.tabs(['회의 자료', '회의록', '종목', '섹터 순환', '주봉 차트', '수집 점검'])
 
 # ---------------------------------------------------------------- 1. 오늘 시장
 # 2026-11-10 의장 개편: 맨 위 지표 카드 + 히트맵, 모든 지표는 누르면 최근 1년 그래프(해석 없음),
@@ -309,6 +309,8 @@ import html as _h
 import re as _re
 
 import heatmap as hmmod  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import present  # noqa: E402
 from signal_rules import signal2 as sig_of  # noqa: E402
 
 TABLES = [   # (표 제목, [항목]) — 화면에 보이는 순서. 여기 없는 항목은 화면에 안 나온다(수집 파일·리오 체크리스트엔 그대로).
@@ -464,14 +466,18 @@ def spark_1m(s, up):
 
 
 @st.cache_data(ttl=3 * 3600, show_spinner='히트맵 자료 받는 중(야후)…')
-def heatmap_live():
+def heatmap_live(markets=('S&P500', '한국')):
     """그날 히트맵 파일이 없을 때(07시 블록 이전 날짜 등) 화면에서 바로 계산"""
     import yfinance as yf
-    hold = pd.read_csv(ROOT / 'yeokdosan' / 'holdings_top10.csv')
-    return pd.DataFrame(hmmod.sp500(yf, hold), columns=hmmod.COLS)
+    rows = []
+    if 'S&P500' in markets:
+        rows += hmmod.sp500(yf, pd.read_csv(ROOT / 'yeokdosan' / 'holdings_top10.csv'))
+    if '한국' in markets:
+        rows += hmmod.korea(yf, pd.read_csv(ROOT / 'heatmap_kr.csv'))
+    return pd.DataFrame(rows, columns=hmmod.COLS)
 
 
-def treemap(df, period, sized):
+def treemap(df, period, sized, h=560):
     import plotly.express as px
     d = df.dropna(subset=[period]).copy()
     if sized and d['시총'].notna().any():
@@ -489,217 +495,111 @@ def treemap(df, period, sized):
                                     '1주 %{customdata[2]:+.2f}% · 1달 %{customdata[3]:+.2f}%<extra></extra>',
                       marker=dict(line=dict(width=1, color='#111')), tiling=dict(pad=2),
                       textfont=dict(size=14, color='#fff'), pathbar=dict(visible=False))
-    fig.update_layout(margin=dict(t=8, l=0, r=0, b=0), height=560, coloraxis_showscale=False,
+    fig.update_layout(margin=dict(t=8, l=0, r=0, b=0), height=h, coloraxis_showscale=False,
                       uniformtext=dict(minsize=11, mode='hide'))
     return fig
 
 
-with t1:
-    R = build_rows()
+@st.cache_data(ttl=60, show_spinner=False)      # 회의 중 고친 발표 문장이 1분 안에 보이게
+def script(day):
+    import json
+    b = _raw(f'{day}/{day}_발표.json')
+    return json.loads(b.decode('utf-8-sig')) if b else None
 
-    # ---- ① 맨 위: 지표 카드 + 1달 미니 그래프 (카드의 '1년' 버튼 = 최근 1년 그래프)
-    st.subheader('시장 체온계')
-    st.caption(f'{DAY[:4]}-{DAY[4:6]}-{DAY[6:]} 07시 수집 · 등락은 직전 거래일 대비 · 작은 그래프 = 최근 1달 · "1년 그래프"를 누르면 최근 1년')
-    have = [k for k in CARDS if k in R and R[k]['_now'] is not None]
-    for i in range(0, len(have), 5):
-        cols = st.columns(5)
-        for c, k in zip(cols, have[i:i + 5]):
-            r = R[k]
-            with c.container(border=True):
-                dv = r['_d1pct']
-                delta = None if dv is None else (f'{dv:+.2f}%p' if r['_pp'] else f'{dv:+.2f}%')
-                st.metric(CARD_NAME.get(k, k), r['현재'], delta)
-                if len(r['_hist']) >= 2:
-                    st.altair_chart(spark_1m(r['_hist'], (dv or 0) >= 0), width='stretch')
-                    if st.button('1년 그래프', key=f'c1y_{k}', width='stretch'):
-                        show_1y(k, r['_hist'], r['_unit'])
-    if not have:
-        st.info('이 날짜의 매크로 자료가 없습니다.')
 
-    # ---- ② 히트맵
-    st.subheader('히트맵')
-    hm = csv(DAY, '히트맵')
-    live = False
-    h1, h2 = st.columns([2, 1])
-    mkt = h1.segmented_control('시장', ['S&P500', '콜로키움 100'], default='S&P500', key='hm_mkt',
-                               label_visibility='collapsed') or 'S&P500'
-    per = h2.segmented_control('기간', ['1일', '1주', '1달'], default='1일', key='hm_per',
-                               label_visibility='collapsed') or '1일'
-    if (not len(hm) or not (hm['시장'] == 'S&P500').any()) and mkt == 'S&P500':
-        try:
-            hm, live = heatmap_live(), True
-        except Exception as e:
-            st.warning(f'히트맵 자료를 받지 못했습니다: {type(e).__name__}')
-    part = hm[hm['시장'] == mkt] if len(hm) else hm
-    if len(part):
-        for c in ('시총', '1일', '1주', '1달'):
-            part[c] = num(part[c])
-        st.plotly_chart(treemap(part, per, mkt == 'S&P500'), width='stretch', config={'displayModeBar': False})
-        etf = hm[hm['시장'] == 'S&P500 섹터 ETF'] if mkt == 'S&P500' else hm.iloc[0:0]
-        if len(etf):
-            e = etf.assign(v=num(etf[per])).sort_values('v', ascending=False)
-            st.html('<div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.88rem;">' + ''.join(
-                f'<span>{_h.escape(str(r["묶음"]))} <b style="color:{UP if r["v"] >= 0 else DN}">{r["v"]:+.2f}%</b>'
-                f'<span style="color:#6b7280"> {r["티커"]}</span></span>' for _, r in e.iterrows() if pd.notna(r['v'])) + '</div>')
-        base = part['기준일'].dropna().max() if '기준일' in part else ''
-        st.caption(('S&P500 = SPDR 섹터 ETF 11개의 상위 10종목, 칸 크기 = 시가총액. 아래 줄 = 섹터 ETF 등락. '
-                    if mkt == 'S&P500' else '콜로키움 100 = 유니버스 종목을 층별로 묶음, 칸 크기는 같음. ')
-                   + f'초록 = 오름, 빨강 = 내림. 기준일 {base}.' + (' (07시 파일이 없어 지금 야후에서 받은 값)' if live else ''))
-    elif mkt == '콜로키움 100':
-        st.info('콜로키움 100 히트맵은 다음 07시 수집부터 나옵니다.')
-    st.divider()
+def wilder_rsi(c, n=14):
+    d = c.diff()
+    up = d.clip(lower=0).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+    dn = (-d.clip(upper=0)).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+    return 100 - 100 / (1 + up / dn)
 
-    # ---- ③ 공포와 탐욕 · 이번 주 일정 · 간밤 국제 뉴스
-    CARD = ('<div style="font-family:inherit;border:1px solid rgba(128,128,128,.25);border-radius:12px;'
-            'padding:6px 16px 10px;">{}</div>')
-    top_l, c_s, c_n = st.columns([1, 1.3, 1.3], gap='large')
-    tot = fg[fg['구분'] == '종합'].iloc[0] if len(fg) and (fg['구분'] == '종합').any() else None
-    with top_l:
-        st.subheader('공포와 탐욕')
-        if tot is None:
-            st.info('이 날짜의 공포탐욕 자료가 없습니다.')
-        else:
-            s = num(pd.Series([tot['점수']])).iloc[0]
-            st.html(gauge_svg(s, tot['판정']))
-            trs = ''
-            for k in ['전일', '1주 전', '1개월 전', '1년 전']:
-                pv = num(pd.Series([tot.get(k)])).iloc[0]
-                if pd.isna(pv):
-                    continue
-                dv = s - pv
-                trs += (f'<tr><td style="padding:4px 8px;color:#6b7280">{k}</td>'
-                        f'<td style="padding:4px 8px;text-align:right;font-weight:700;color:{fg_color(pv)}">{pv:.1f}</td>'
-                        f'<td style="padding:4px 8px;color:{fg_color(pv)};font-size:13px">{fg_label(pv)}</td>'
-                        f'<td style="padding:4px 8px;text-align:right;color:{DN if dv < 0 else UP}">지금 {dv:+.1f}</td></tr>')
-            if trs:
-                st.html('<table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;'
-                        f'font-size:15px">{trs}</table>')
-    with c_s:
-        st.subheader('이번 주 일정')
-        if len(sched_df):
-            sd = sched_df.copy()
-            sd['보유/관심'] = sd['보유/관심'].fillna('')
-            timed = set(zip(sd.loc[sd['시각(한국)'] != '미정', '날짜'], sd.loc[sd['시각(한국)'] != '미정', '대상']))
-            sd = sd[~((sd['시각(한국)'] == '미정') & pd.Series([(d, w) in timed for d, w in zip(sd['날짜'], sd['대상'])], index=sd.index))]   # 같은 날 시각 있는 줄이 있으면 '미정' 줄은 뺀다
-            def _chk(r):   # 11/3: 확인 정도 — 확정·발표됨은 회색, 예상은 연한 글씨, 날짜 다름은 주황
-                c = str(r.get('확인') or '')
-                if not c or c == 'nan':
-                    return ''
-                col = '#d97706' if '다름' in c else '#6b7280'
-                return f'<span style="font-size:.75rem;color:{col};margin-left:6px;">({_h.escape(c)})</span>'
 
-            def _memo(r):  # 간밤 실적은 숫자(EPS·매출)를 한 줄 더
-                if '간밤' not in str(r.get('구분')):
-                    return ''
-                return f'<div style="font-size:.82rem;color:#6b7280;">{_h.escape(str(r.get("내용") or ""))}</div>'
+def rsi_chart(name, r, h=190):
+    d = r.rename('RSI').rename_axis('날짜').reset_index()
+    bands = alt.Chart(pd.DataFrame({'y': [30, 70], 'c': [UP, DN]})).mark_rule(strokeDash=[4, 4]).encode(
+        y='y:Q', color=alt.Color('c:N', scale=None))
+    zone = alt.Chart(pd.DataFrame({'lo': [0], 'hi': [30]})).mark_rect(opacity=0.07, color=UP).encode(y='lo:Q', y2='hi:Q')
+    line = alt.Chart(d).mark_line(color='#1d2330', strokeWidth=1.8).encode(
+        x=alt.X('날짜:T', title=None, axis=alt.Axis(format='%y-%m', grid=False)),
+        y=alt.Y('RSI:Q', title=None, scale=alt.Scale(domain=[0, 100])),
+        tooltip=[alt.Tooltip('날짜:T', format='%Y-%m-%d'), alt.Tooltip('RSI:Q', format='.1f')])
+    return (zone + bands + line).properties(height=h, title=f'{name}  주봉 RSI {d.iloc[-1]["RSI"]:.1f}')
 
-            def _sched_html(sd):
-              body = ''
-              for (d, wd), g in sd.groupby(['날짜', '요일'], sort=True):
-                body += (f'<div style="margin:12px 0 4px;font-weight:700;font-size:.95rem;">'
-                         f'{str(d)[5:].replace("-", "/")} ({wd})</div>')
-                for _, r in g.iterrows():
-                    mark = r['보유/관심']
-                    tag = (f'<span style="font-size:.72rem;padding:1px 7px;border-radius:9px;margin-left:6px;'
-                           f'background:{"#2f8f8a" if mark == "보유" else "rgba(128,128,128,.25)"};'
-                           f'color:{"#fff" if mark == "보유" else "inherit"};">{_h.escape(mark)}</span>') if mark else ''
-                    body += (f'<div style="display:flex;gap:12px;padding:5px 0;border-top:1px solid rgba(128,128,128,.12);">'
-                             f'<div style="min-width:64px;color:#6b7280;font-variant-numeric:tabular-nums;font-size:.88rem;">'
-                             f'{_h.escape(str(r["시각(한국)"]))}</div>'
-                             f'<div style="font-size:.92rem;"><b>{_h.escape(str(r["대상"]))}</b>{tag}'
-                             f'<span style="color:#6b7280;"> · {_h.escape(str(r["구분"]))}</span>'
-                             f'{_chk(r)}{_memo(r)}</div></div>')
-              return body
-            sd = sd.sort_values(['날짜', '시각(한국)'])
-            today = f'{DAY[:4]}-{DAY[4:6]}-{DAY[6:]}'
-            sd = sd[sd['날짜'].astype(str) >= today] if (sd['날짜'].astype(str) >= today).any() else sd
-            first, rest = sd.head(6), sd.iloc[6:]
-            st.html(CARD.format(_sched_html(first)))
-            if len(rest):
-                with st.expander(f'이번 주 일정 {len(rest)}건 더 보기'):
-                    st.html(CARD.format(_sched_html(rest)))
-            st.caption('한국 시각. 미국 실적은 야후 예정 시각이라 분 단위가 다를 수 있음(예: 06:00경 → 실제 06:05·06:30).')
-        else:
-            st.info('오늘 일정 파일이 없습니다.')
-    with c_n:
-        st.subheader('간밤 국제 뉴스')
-        nd = news_df.copy() if len(news_df) else pd.DataFrame(columns=['시각(한국)', '제목', '링크', '출처', '종목'])
-        if len(nd):
-            # 2026-11-02 의장 "영어 뉴스·지난 뉴스는 빼고 간밤 것만": 한국어 제목, 전날 18시 이후,
-            # 연합뉴스는 기사 주소의 날짜(AKR20261030…)가 전날 이전이면 뺌(재송고된 옛 기사),
-            # 월요일엔 '아침 정리'(지난 금요일 뉴욕 마감)를 뺌. 국제 5 + 아침 정리 3 + 종목 6건까지.
-            day0 = pd.to_datetime(DAY)
-            prev = (day0 - pd.Timedelta(days=1)).strftime('%m-%d') + ' 18:00'
-            nd = nd[nd['제목'].astype(str).str.contains('[가-힣]', regex=True)]
-            nd = nd[nd['시각(한국)'].astype(str) >= prev]
-            nd = nd[~nd['제목'].astype(str).str.contains('블로그|Blog|카페', regex=True)]   # 블로그 글 제외
-            # 2026-11-03 의장 "홍보 기사를 주요뉴스라고 붙이는 건 판단력 부재": 칼럼·인터뷰·홍보·스포츠 빼고,
-            # 연합뉴스는 시장과 닿는 말이 제목에 있는 것만(07시 수집 b09와 같은 기준)
-            nd = nd[~nd['제목'].astype(str).str.contains(NEWS_DROP, regex=True)]
-            is_yna = nd['출처'].astype(str).str.contains('연합')
-            nd = nd[~is_yna | nd['제목'].astype(str).str.contains(NEWS_KEEP, regex=True)]
-            akr = nd['링크'].astype(str).str.extract(r'AKR(\d{8})')[0]
-            nd = nd[akr.isna() | (akr >= (day0 - pd.Timedelta(days=1)).strftime('%Y%m%d'))]
-            if day0.weekday() == 0:
-                nd = nd[nd['출처'].astype(str) != '아침 정리']
-            nd = nd.drop_duplicates('제목').sort_values('시각(한국)', ascending=False)
-            cap = {'아침 정리': 3}
-            grp = nd['출처'].astype(str).map(lambda x: '국제' if '연합' in x else x if x == '아침 정리' else '종목')
-            nd, grp = nd[grp != '종목'], grp[grp != '종목']   # 11/9 의장 "보유 종목 뉴스는 필요 없고 주요 국제뉴스만"
-            nd = nd.groupby(grp, group_keys=False).apply(lambda g: g.head(cap.get(g.name, 5 if g.name == '국제' else 6)))
-            nd = nd.sort_values('시각(한국)', ascending=False)
-            nd['묶음'] = grp.reindex(nd.index)
-        if len(nd):
-          SRC = '<span style="color:#6b7280;font-size:.8rem;"> · {}</span>'
-          SHOW = {'국제': 2, '아침 정리': 1, '종목': 2}   # 11/3 의장 '단순화': 첫 화면 5건, 나머지는 접기
-          rank = nd.groupby('묶음').cumcount()
-          lead = nd[rank < nd['묶음'].map(SHOW).fillna(0)]
-          more = nd.drop(lead.index)
 
-          def _news_html(nd):
-            body = ''
-            for gname, glabel in (('국제', '간밤 국제'), ('아침 정리', '뉴욕 마감 정리'), ('종목', '보유·관심 종목')):
-                g = nd[nd['묶음'] == gname]
-                if not len(g):
-                    continue
-                body += f'<div style="margin:12px 0 2px;font-weight:700;font-size:.95rem;">{glabel}</div>'
-                for _, r in g.iterrows():
-                    src = str(r.get('종목') or '') if gname != '국제' else '연합뉴스'
-                    src = '' if src == 'nan' else src
-                    link = str(r.get('링크') or '')
-                    title = _h.escape(_re.sub(r'\s+(\([^()]+\)|[-–]\s+[^-–]+)$', '', str(r['제목'])))   # 끝의 '(매체)'·'- 매체' 떼기
-                    ttl = (f'<a href="{_h.escape(link)}" target="_blank" style="color:inherit;text-decoration:none;">{title}</a>'
-                           if link.startswith('http') else title)
-                    body += (f'<div style="display:flex;gap:12px;padding:6px 0;border-top:1px solid rgba(128,128,128,.12);">'
-                             f'<div style="min-width:44px;color:#6b7280;font-variant-numeric:tabular-nums;font-size:.85rem;">'
-                             f'{_h.escape(str(r["시각(한국)"])[6:])}</div>'
-                             f'<div style="font-size:.92rem;line-height:1.4;">{ttl}'
-                             f'{SRC.format(_h.escape(src)) if src else ""}</div></div>')
-            return body
-          st.html(CARD.format(_news_html(lead)))
-          if len(more):
-              with st.expander(f'간밤 뉴스 {len(more)}건 더 보기'):
-                  st.html(CARD.format(_news_html(more)))
-        else:
-            st.info('간밤(전날 18시 이후) 한국어 뉴스가 없습니다.')
-    st.divider()
+def hbar(df, label, value, title='', fmtv='+,.1f', h=None, sort=None, unit=''):
+    """가로 막대(오름 초록, 내림 빨강) + 끝에 숫자"""
+    d = df[[label, value]].dropna().copy()
+    d.columns = ['이름', '값']
+    order = sort or d.sort_values('값', ascending=False)['이름'].tolist()
+    base = alt.Chart(d).encode(y=alt.Y('이름:N', sort=order, title=None, axis=alt.Axis(labelLimit=220, labelOverlap=False)),
+                               x=alt.X('값:Q', title=unit or None))
+    bars = base.mark_bar().encode(color=alt.condition('datum.값 >= 0', alt.value(UP), alt.value(DN)),
+                                  tooltip=['이름', alt.Tooltip('값:Q', format=fmtv)])
+    txt = (base.transform_filter('datum.값 >= 0').mark_text(align='left', dx=4, fontSize=11)
+           .encode(text=alt.Text('값:Q', format=fmtv))
+           + base.transform_filter('datum.값 < 0').mark_text(align='right', dx=-4, fontSize=11)
+           .encode(text=alt.Text('값:Q', format=fmtv)))
+    return (bars + txt).properties(title=title, height=h or 24 * len(d) + 40)
 
-    # ---- ④ 지표 표: 줄을 누르면 바로 아래에 최근 1년 그래프
-    st.subheader('지표')
-    st.caption('줄을 누르면 그 지표의 최근 1년 그래프가 표 아래에 나옵니다. 주간·월간 지표는 전일 대신 전주·전월 대비. '
-               '신호: 의장 기준은 그대로, 나머지는 바닥 찾기 기준 클로드 제안(제안 표시). '
-               '🟢 바닥 쪽 · 🟠 주의 · 🔴 위험 · ⚪ 평상.')
+
+def gap_bars(df, label, col, title, base_line=100):
+    """이격(선 = 100) 막대: 100 위 초록, 아래 빨강"""
+    d = df[[label, col]].dropna().copy()
+    d.columns = ['이름', '값']
+    d['차'] = d['값'] - base_line
+    order = d.sort_values('값')['이름'].tolist()
+    base = alt.Chart(d).encode(y=alt.Y('이름:N', sort=order, title=None, axis=alt.Axis(labelLimit=200)),
+                               x=alt.X('차:Q', title=f'{col} − {base_line}'))
+    bars = base.mark_bar().encode(color=alt.condition('datum.차 >= 0', alt.value(UP), alt.value(DN)),
+                                  tooltip=['이름', alt.Tooltip('값:Q', format='.1f')])
+    txt = base.mark_text(align='left', dx=4, fontSize=11).encode(text=alt.Text('값:Q', format='.1f'))
+    return (bars + txt).properties(title=title, height=24 * len(d) + 40)
+
+
+def speech(sc, keys, nm):
+    """발표 파일에서 이 위원(keys 중 하나를 이름에 포함)의 문장·그래프. 없으면 False."""
+    if not sc:
+        return False
+    for m in sc.get('members', []):
+        if any(k in str(m.get('name', '')) for k in keys):
+            if m.get('sub'):
+                if m.get('lines') or m.get('charts'):
+                    present.member(DAY, {k: v for k, v in m.items() if k not in ('sub', 'name')}, nm)
+                for stb, s_ in zip(st.tabs([s_['name'] for s_ in m['sub']]), m['sub']):
+                    with stb:
+                        present.member(DAY, s_, nm)
+            else:
+                present.member(DAY, {k: v for k, v in m.items() if k != 'name'}, nm)   # 위원 이름은 쓰지 않음(의장)
+            return True
+    return False
+
+
+def short(n):
+    for w in ('TIGER ', 'KODEX ', 'PLUS ', 'SOL ', 'RISE ', 'HANARO ', '코리아', '플러스', 'TOP10', 'TOP3', 'TOP2'):
+        n = n.replace(w, '')
+    return n.replace('미국필라델피아반도체나스닥', '미국반도체').replace('글로벌HBM반도체', 'HBM반도체').strip()
+
+
+def data_head(spoke):
+    if spoke:
+        st.divider()
+    st.markdown('##### 자료')
+
+
+def market_tables(R, groups):
+    """TABLES 중 groups 표만. 줄을 누르면 바로 아래 최근 1년 그래프."""
     SHOW = ['항목', '현재', '전일 대비', '1년 전 대비', '기준일', '신호']
-    for title, names in TABLES:
-        rows = [R[n] for n in names if n in R]
+    for title, names_ in TABLES:
+        if title not in groups:
+            continue
+        rows = [R[n] for n in names_ if n in R]
         if not rows:
             continue
         st.markdown(f'**{title}**')
         df = pd.DataFrame(rows)
         ev = st.dataframe(df[SHOW].style.map(_color, subset=CHG_COLS), hide_index=True, width='stretch',
                           height=36 * (len(df) + 1) + 4, on_select='rerun', selection_mode='single-row',
-                          key=f'tbl_{title}',
-                          column_config={'신호': st.column_config.TextColumn(width='large')})
+                          key=f'tbl_{title}', column_config={'신호': st.column_config.TextColumn(width='large')})
         sel = ev.selection.rows if ev and ev.selection else []
         if sel:
             r = rows[sel[0]]
@@ -710,33 +610,371 @@ with t1:
             else:
                 st.caption(f'{r["항목"]}: 그래프 이력이 아직 없습니다.')
 
-    # ---- ⑤ 공포탐욕 자세히 (접기)
-    with st.expander('공포탐욕 자세히 보기 (추이·7개 지표)'):
-        fh = series('공포탐욕', 'Fear & Greed Index')
-        if len(fh):
-            span = st.segmented_control('기간', ['1달', '3달', '6달', '1년'], default='3달', key='fgspan',
-                                        label_visibility='collapsed')
-            months = {'1달': 1, '3달': 3, '6달': 6, '1년': 12}[span or '3달']
-            st.altair_chart(fg_chart(fh[fh.index >= fh.index[-1] - pd.DateOffset(months=months)]), width='stretch')
-            st.caption(f'점선 70 = 의장 기준(70 넘으면 현금↑). 최근 1년 최저 {fh.min():.1f}({fh.idxmin():%Y-%m-%d}), '
-                       f'최고 {fh.max():.1f}({fh.idxmax():%Y-%m-%d}).')
-        f7 = fg[fg['구분'] == '지표'] if len(fg) else fg
-        cols = st.columns(4)
-        for i, (_, r) in enumerate(f7.iterrows()):
-            sc = num(pd.Series([r['점수']])).iloc[0]
-            raw = series('공포탐욕', r['지표'])
-            key = r['지표'].split('. ', 1)[-1]
-            with cols[i % 4].container(border=True):
-                st.markdown(f'**{key}**')
-                st.html(score_bar(sc, r['판정']))
-                if len(raw):
-                    st.metric(r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2))
-                    if st.button('1년 그래프', key=f'f1y_{key}', width='stretch'):
-                        show_1y(key, raw)
-                if key in FG_HELP:
-                    with st.popover('읽는 법', width='stretch'):
-                        st.markdown(f'**{key}**\n\n' + FG_HELP[key])
 
+TABLES += [('지수 · 변동성', ['VIX', 'VIX3M', 'VIX − VIX3M'])]
+PRESENTERS = [   # 2026-11-10 의장 확정 회의 순서. (내부 키, 탭 제목, 발표 파일 name에서 찾을 말) — 1. 시장은 탭 위 맨 위.
+    # 스트림릿은 회의 자료라 위원 이름을 쓰지 않는다(의장). 찾을 말에 옛 위원 이름도 넣어 둔 것은 지난 발표 파일 호환용.
+    ('뉴스', '2. 주요 뉴스', ['주요 뉴스', '국장']), ('자금', '3. 자금 흐름', ['자금 흐름', '역도산']),
+    ('리스크', '4. 리스크 체크', ['리스크', '리오']), ('공포', '5. 공포와 탐욕', ['공포', '포보스']),
+    ('섹터', '6. 섹터 분석', ['섹터 분석', '피터', '데스크']), ('기술', '7. 기술적 분석', ['기술적', '미스 차트', '미스차트']),
+    ('일본', '8. 일본 분석', ['일본', '아야카']), ('긍정', '9. 긍정 요인', ['긍정', '엘피스']), ('기타', '10. 기타', ['기타'])]
+KEYS = {k: ks for k, _, ks in PRESENTERS}
+TOP_CARDS = ['S&P500', '나스닥', '코스피', '필라델피아 반도체(SOX)', '원/달러', '미국 10년']
+
+with t1:
+    st.html('<style>[data-testid="stMetricValue"]{font-size:1.55rem}</style>')   # 카드 6개 한 줄에 숫자가 잘리지 않게
+    R = build_rows()
+    present.setup(csv, prices)
+    sc = script(DAY)
+    nm = present.names(DAY)
+
+    # ---- 맨 위: 시장 한눈에 — 미국·한국 히트맵 + 지표 카드 한 줄
+    hm = csv(DAY, '히트맵')
+    live = False
+    h0, h1 = st.columns([3, 1])
+    h0.subheader('1. 시장')
+    per = h1.segmented_control('기간', ['1일', '1주', '1달'], default='1일', key='hm_per',
+                               label_visibility='collapsed') or '1일'
+    need = {'S&P500', '한국'} - (set(hm['시장']) if len(hm) else set())
+    if need:
+        try:
+            hm, live = pd.concat([hm, heatmap_live(tuple(sorted(need)))], ignore_index=True), True
+        except Exception as e:
+            st.warning(f'히트맵 자료를 받지 못했습니다: {type(e).__name__}')
+    for c in ('시총', '1일', '1주', '1달'):
+        if c in hm:
+            hm[c] = num(hm[c])
+    cu, ck = st.columns(2, gap='medium')
+    for col, mk, ttl in ((cu, 'S&P500', '미국 S&P500'), (ck, '한국', '한국 코스피·코스닥')):
+        part = hm[hm['시장'] == mk] if len(hm) else hm
+        with col:
+            st.markdown(f'**{ttl}**')
+            if len(part):
+                st.plotly_chart(treemap(part, per, True, h=520), width='stretch', config={'displayModeBar': False},
+                                key=f'hm_{mk}')
+            else:
+                st.info(f'{ttl} 히트맵 자료가 없습니다.')
+    base = hm['기준일'].dropna().max() if len(hm) and '기준일' in hm else ''
+    st.caption('미국 = SPDR 섹터 ETF 11개 상위 10종목, 한국 = 코스피·코스닥 주요 약 70종목(섹터별). 칸 크기 = 시가총액, '
+               f'초록 = 오름, 빨강 = 내림. 기준일 {base}.' + (' (07시 파일이 없어 지금 야후에서 받은 값)' if live else ''))
+    have = [k for k in TOP_CARDS if k in R and R[k]['_now'] is not None]
+    if have:
+        cols = st.columns(len(have))
+        for c, k in zip(cols, have):
+            r = R[k]
+            with c.container(border=True):
+                dv = r['_d1pct']
+                st.metric(CARD_NAME.get(k, k), r['현재'], None if dv is None else (f'{dv:+.2f}%p' if r['_pp'] else f'{dv:+.2f}%'))
+                if len(r['_hist']) >= 2:
+                    st.altair_chart(spark_1m(r['_hist'], (dv or 0) >= 0), width='stretch')
+                    if st.button('1년 그래프', key=f'c1y_{k}', width='stretch'):
+                        show_1y(k, r['_hist'], r['_unit'])
+
+    # ---- 발표 순서 탭
+    if not sc:
+        st.caption('오늘 발표 원고(_발표.json)는 아직 없습니다. 탭마다 자료만 보입니다.')
+    CARD = ('<div style="font-family:inherit;border:1px solid rgba(128,128,128,.25);border-radius:12px;'
+            'padding:6px 16px 10px;">{}</div>')
+    T = dict(zip([k for k, _, _ in PRESENTERS], st.tabs([t for _, t, _ in PRESENTERS])))
+
+    # 2 국장: 간밤 국제 뉴스 · 이번 주 일정
+    with T['뉴스']:
+        data_head(speech(sc, KEYS['뉴스'], nm))
+        c_n, c_s = st.columns(2, gap='large')
+        with c_s:
+            st.subheader('이번 주 일정')
+            if len(sched_df):
+                sd = sched_df.copy()
+                sd['보유/관심'] = sd['보유/관심'].fillna('')
+                timed = set(zip(sd.loc[sd['시각(한국)'] != '미정', '날짜'], sd.loc[sd['시각(한국)'] != '미정', '대상']))
+                sd = sd[~((sd['시각(한국)'] == '미정') & pd.Series([(d, w) in timed for d, w in zip(sd['날짜'], sd['대상'])], index=sd.index))]   # 같은 날 시각 있는 줄이 있으면 '미정' 줄은 뺀다
+                def _chk(r):   # 11/3: 확인 정도 — 확정·발표됨은 회색, 예상은 연한 글씨, 날짜 다름은 주황
+                    c = str(r.get('확인') or '')
+                    if not c or c == 'nan':
+                        return ''
+                    col = '#d97706' if '다름' in c else '#6b7280'
+                    return f'<span style="font-size:.75rem;color:{col};margin-left:6px;">({_h.escape(c)})</span>'
+
+                def _memo(r):  # 간밤 실적은 숫자(EPS·매출)를 한 줄 더
+                    if '간밤' not in str(r.get('구분')):
+                        return ''
+                    return f'<div style="font-size:.82rem;color:#6b7280;">{_h.escape(str(r.get("내용") or ""))}</div>'
+
+                def _sched_html(sd):
+                  body = ''
+                  for (d, wd), g in sd.groupby(['날짜', '요일'], sort=True):
+                    body += (f'<div style="margin:12px 0 4px;font-weight:700;font-size:.95rem;">'
+                             f'{str(d)[5:].replace("-", "/")} ({wd})</div>')
+                    for _, r in g.iterrows():
+                        mark = r['보유/관심']
+                        tag = (f'<span style="font-size:.72rem;padding:1px 7px;border-radius:9px;margin-left:6px;'
+                               f'background:{"#2f8f8a" if mark == "보유" else "rgba(128,128,128,.25)"};'
+                               f'color:{"#fff" if mark == "보유" else "inherit"};">{_h.escape(mark)}</span>') if mark else ''
+                        body += (f'<div style="display:flex;gap:12px;padding:5px 0;border-top:1px solid rgba(128,128,128,.12);">'
+                                 f'<div style="min-width:64px;color:#6b7280;font-variant-numeric:tabular-nums;font-size:.88rem;">'
+                                 f'{_h.escape(str(r["시각(한국)"]))}</div>'
+                                 f'<div style="font-size:.92rem;"><b>{_h.escape(str(r["대상"]))}</b>{tag}'
+                                 f'<span style="color:#6b7280;"> · {_h.escape(str(r["구분"]))}</span>'
+                                 f'{_chk(r)}{_memo(r)}</div></div>')
+                  return body
+                sd = sd.sort_values(['날짜', '시각(한국)'])
+                today = f'{DAY[:4]}-{DAY[4:6]}-{DAY[6:]}'
+                sd = sd[sd['날짜'].astype(str) >= today] if (sd['날짜'].astype(str) >= today).any() else sd
+                first, rest = sd.head(6), sd.iloc[6:]
+                st.html(CARD.format(_sched_html(first)))
+                if len(rest):
+                    with st.expander(f'이번 주 일정 {len(rest)}건 더 보기'):
+                        st.html(CARD.format(_sched_html(rest)))
+                st.caption('한국 시각. 미국 실적은 야후 예정 시각이라 분 단위가 다를 수 있음(예: 06:00경 → 실제 06:05·06:30).')
+            else:
+                st.info('오늘 일정 파일이 없습니다.')
+        with c_n:
+            st.subheader('간밤 국제 뉴스')
+            nd = news_df.copy() if len(news_df) else pd.DataFrame(columns=['시각(한국)', '제목', '링크', '출처', '종목'])
+            if len(nd):
+                # 2026-11-02 의장 "영어 뉴스·지난 뉴스는 빼고 간밤 것만": 한국어 제목, 전날 18시 이후,
+                # 연합뉴스는 기사 주소의 날짜(AKR20261030…)가 전날 이전이면 뺌(재송고된 옛 기사),
+                # 월요일엔 '아침 정리'(지난 금요일 뉴욕 마감)를 뺌. 국제 5 + 아침 정리 3 + 종목 6건까지.
+                day0 = pd.to_datetime(DAY)
+                prev = (day0 - pd.Timedelta(days=1)).strftime('%m-%d') + ' 18:00'
+                nd = nd[nd['제목'].astype(str).str.contains('[가-힣]', regex=True)]
+                nd = nd[nd['시각(한국)'].astype(str) >= prev]
+                nd = nd[~nd['제목'].astype(str).str.contains('블로그|Blog|카페', regex=True)]   # 블로그 글 제외
+                # 2026-11-03 의장 "홍보 기사를 주요뉴스라고 붙이는 건 판단력 부재": 칼럼·인터뷰·홍보·스포츠 빼고,
+                # 연합뉴스는 시장과 닿는 말이 제목에 있는 것만(07시 수집 b09와 같은 기준)
+                nd = nd[~nd['제목'].astype(str).str.contains(NEWS_DROP, regex=True)]
+                is_yna = nd['출처'].astype(str).str.contains('연합')
+                nd = nd[~is_yna | nd['제목'].astype(str).str.contains(NEWS_KEEP, regex=True)]
+                akr = nd['링크'].astype(str).str.extract(r'AKR(\d{8})')[0]
+                nd = nd[akr.isna() | (akr >= (day0 - pd.Timedelta(days=1)).strftime('%Y%m%d'))]
+                if day0.weekday() == 0:
+                    nd = nd[nd['출처'].astype(str) != '아침 정리']
+                nd = nd.drop_duplicates('제목').sort_values('시각(한국)', ascending=False)
+                cap = {'아침 정리': 3}
+                grp = nd['출처'].astype(str).map(lambda x: '국제' if '연합' in x else x if x == '아침 정리' else '종목')
+                nd, grp = nd[grp != '종목'], grp[grp != '종목']   # 11/9 의장 "보유 종목 뉴스는 필요 없고 주요 국제뉴스만"
+                nd = nd.groupby(grp, group_keys=False).apply(lambda g: g.head(cap.get(g.name, 5 if g.name == '국제' else 6)))
+                nd = nd.sort_values('시각(한국)', ascending=False)
+                nd['묶음'] = grp.reindex(nd.index)
+            if len(nd):
+              SRC = '<span style="color:#6b7280;font-size:.8rem;"> · {}</span>'
+              SHOW = {'국제': 2, '아침 정리': 1, '종목': 2}   # 11/3 의장 '단순화': 첫 화면 5건, 나머지는 접기
+              rank = nd.groupby('묶음').cumcount()
+              lead = nd[rank < nd['묶음'].map(SHOW).fillna(0)]
+              more = nd.drop(lead.index)
+
+              def _news_html(nd):
+                body = ''
+                for gname, glabel in (('국제', '간밤 국제'), ('아침 정리', '뉴욕 마감 정리'), ('종목', '보유·관심 종목')):
+                    g = nd[nd['묶음'] == gname]
+                    if not len(g):
+                        continue
+                    body += f'<div style="margin:12px 0 2px;font-weight:700;font-size:.95rem;">{glabel}</div>'
+                    for _, r in g.iterrows():
+                        src = str(r.get('종목') or '') if gname != '국제' else '연합뉴스'
+                        src = '' if src == 'nan' else src
+                        link = str(r.get('링크') or '')
+                        title = _h.escape(_re.sub(r'\s+(\([^()]+\)|[-–]\s+[^-–]+)$', '', str(r['제목'])))   # 끝의 '(매체)'·'- 매체' 떼기
+                        ttl = (f'<a href="{_h.escape(link)}" target="_blank" style="color:inherit;text-decoration:none;">{title}</a>'
+                               if link.startswith('http') else title)
+                        body += (f'<div style="display:flex;gap:12px;padding:6px 0;border-top:1px solid rgba(128,128,128,.12);">'
+                                 f'<div style="min-width:44px;color:#6b7280;font-variant-numeric:tabular-nums;font-size:.85rem;">'
+                                 f'{_h.escape(str(r["시각(한국)"])[6:])}</div>'
+                                 f'<div style="font-size:.92rem;line-height:1.4;">{ttl}'
+                                 f'{SRC.format(_h.escape(src)) if src else ""}</div></div>')
+                return body
+              st.html(CARD.format(_news_html(lead)))
+              if len(more):
+                  with st.expander(f'간밤 뉴스 {len(more)}건 더 보기'):
+                      st.html(CARD.format(_news_html(more)))
+            else:
+                st.info('간밤(전날 18시 이후) 한국어 뉴스가 없습니다.')
+    # 3 미스터 역도산: 섹터 ETF 지도, ETF 자금, 국내 외국인 수급
+    with T['자금']:
+        data_head(speech(sc, KEYS['자금'], nm))
+        yd = csv(DAY, '역도산')
+        a, b = st.columns(2, gap='large')
+        if len(yd) and '60주 이격' in yd:
+            e = yd[yd['구분'] == 'ETF'].copy()
+            e['이름'] = e['ETF'].map(lambda x: f'{hmmod.SECTOR_KO.get(x, x)} {x}')
+            a.altair_chart(gap_bars(e, '이름', '60주 이격', '미국 섹터 ETF · 60주선 이격(100 = 선 위치)'), width='stretch')
+            b.altair_chart(gap_bars(e, '이름', '20주 이격', '미국 섹터 ETF · 20주선 이격'), width='stretch')
+        else:
+            a.info('역도산 지금판(_역도산.csv)이 없습니다.')
+        if len(sec) and '주_20주_이격도' in sec:
+            s_ = sec.assign(이름=sec['종목'].map(short), v=num(sec['주_20주_이격도']))
+            a.altair_chart(gap_bars(s_, '이름', 'v', '국내 섹터 ETF · 20주선 이격'), width='stretch')
+        fl = csv(DAY, 'ETF자금')
+        if len(fl) and '유입_5일' in fl:
+            for mk_, where in (('미국', b), ('국내', b)):
+                f_ = fl[fl['시장'].astype(str).str.contains(mk_)].assign(v=lambda x: num(x['유입_5일']))
+                if len(f_):
+                    f_ = pd.concat([f_.nlargest(6, 'v'), f_.nsmallest(4, 'v')]).drop_duplicates('이름')
+                    where.altair_chart(hbar(f_, '이름', 'v', f'{mk_} ETF 자금 5일 유입 상·하위', fmtv='+,.0f'), width='stretch')
+        kf = csv(DAY, '국내수급')
+        if len(kf) and '외국인 5일(억원)' in kf:
+            k_ = kf.assign(v=num(kf['외국인 5일(억원)']))
+            st.altair_chart(hbar(k_, '종목', 'v', '국내 종목 외국인 5일 순매수(억원)', fmtv='+,.0f'), width='stretch')
+
+    # 4 리오: 금리·환율·유가·금·MOVE·하이일드 등
+    with T['리스크']:
+        data_head(speech(sc, KEYS['리스크'], nm))
+        st.caption('줄을 누르면 그 지표의 최근 1년 그래프가 표 아래에 나옵니다. 주간·월간 지표는 전주·전월 대비. '
+                   '신호: 의장 기준은 그대로, 나머지는 바닥 찾기 기준 클로드 제안(제안 표시). 🟢 바닥 쪽 · 🟠 주의 · 🔴 위험 · ⚪ 평상.')
+        market_tables(R, ['금리', '환율', '원자재', '변동성', '신용·금융 스트레스', '연준 참고 (댈러스·클리블랜드·애틀랜타)',
+                          '고용', '침체 신호·자금'])
+
+    # 5 포보스: 공포탐욕 게이지(발표 때 반드시) · 7개 지표 · 추이
+    with T['공포']:
+        data_head(speech(sc, KEYS['공포'], nm))
+        tot = fg[fg['구분'] == '종합'].iloc[0] if len(fg) and (fg['구분'] == '종합').any() else None
+        if tot is None:
+            st.info('이 날짜의 공포탐욕 자료가 없습니다.')
+        else:
+            g1, g2 = st.columns([1, 2], gap='large')
+            s = num(pd.Series([tot['점수']])).iloc[0]
+            with g1:
+                st.html(gauge_svg(s, tot['판정']))
+                trs = ''
+                for k in ['전일', '1주 전', '1개월 전', '1년 전']:
+                    pv = num(pd.Series([tot.get(k)])).iloc[0]
+                    if pd.isna(pv):
+                        continue
+                    dv = s - pv
+                    trs += (f'<tr><td style="padding:4px 8px;color:#6b7280">{k}</td>'
+                            f'<td style="padding:4px 8px;text-align:right;font-weight:700;color:{fg_color(pv)}">{pv:.1f}</td>'
+                            f'<td style="padding:4px 8px;color:{fg_color(pv)};font-size:13px">{fg_label(pv)}</td>'
+                            f'<td style="padding:4px 8px;text-align:right;color:{DN if dv < 0 else UP}">지금 {dv:+.1f}</td></tr>')
+                if trs:
+                    st.html('<table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;'
+                            f'font-size:15px">{trs}</table>')
+            with g2:
+                fh = series('공포탐욕', 'Fear & Greed Index')
+                if len(fh):
+                    span = st.segmented_control('기간', ['1달', '3달', '6달', '1년'], default='3달', key='fgspan',
+                                                label_visibility='collapsed')
+                    months = {'1달': 1, '3달': 3, '6달': 6, '1년': 12}[span or '3달']
+                    st.altair_chart(fg_chart(fh[fh.index >= fh.index[-1] - pd.DateOffset(months=months)]), width='stretch')
+                    st.caption('점선 70 = 의장 기준(70 넘으면 현금↑).')
+        f7 = fg[fg['구분'] == '지표'] if len(fg) else fg
+        if len(f7):
+            # 7개 지표 구간 표 (스트림릿 순서, 영어)
+            rows7 = []
+            for _, r in f7.iterrows():
+                sc7 = num(pd.Series([r['점수']])).iloc[0]
+                rows7.append({'Indicator': r['지표'].split('. ', 1)[-1], 'Score': sc7, 'Rating': r['판정']})
+            cols = st.columns(4)
+            for i, (_, r) in enumerate(f7.iterrows()):
+                key = r['지표'].split('. ', 1)[-1]
+                raw = series('공포탐욕', r['지표'])
+                with cols[i % 4].container(border=True):
+                    st.markdown(f'**{key}**')
+                    st.html(score_bar(num(pd.Series([r['점수']])).iloc[0], r['판정']))
+                    if len(raw):
+                        st.metric(r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2))
+                        if st.button('1년 그래프', key=f'f1y_{key}', width='stretch'):
+                            show_1y(key, raw)
+        market_tables(R, ['지수 · 변동성'])
+
+    # 6 피터·데스크: 데스크 하위 탭(발표 파일), 콜로키움 100 히트맵(층별), 하루 등락 상·하위
+    with T['섹터']:
+        data_head(speech(sc, KEYS['섹터'], nm))
+        part = hm[hm['시장'] == '콜로키움 100'] if len(hm) else hm
+        if len(part):
+            st.markdown('**콜로키움 100 (층별)**')
+            st.plotly_chart(treemap(part, per, False, h=460), width='stretch', config={'displayModeBar': False}, key='hm_c100')
+        if len(price):
+            pp_ = price.assign(v=num(price['등락률(%)'])).dropna(subset=['v'])
+            if len(pp_):
+                tb_ = pd.concat([pp_.nlargest(10, 'v'), pp_.nsmallest(10, 'v')]).drop_duplicates('정식 종목명')
+                st.altair_chart(hbar(tb_, '정식 종목명', 'v', '콜로키움 100 하루 등락 상·하위 10 (%)', fmtv='+.2f'), width='stretch')
+        market_tables(R, ['지수'])
+
+    # 7 미스 차트: 예외 검정, 바닥 기준(일봉 RSI≤30 + 50일 이격≤90 + 월봉 5개월선 아래), 60주선 근처
+    with T['기술']:
+        data_head(speech(sc, KEYS['기술'], nm))
+        ex = csv(DAY, '예외검정')
+        if len(ex):
+            p10, p13 = num(ex.get('10년_하락p')), num(ex.get('잔차13주_하락p'))
+            hit = ex[(p10 <= 0.05) | (p13 <= 0.05)]
+            cols_ = [c for c in ['정식 종목명', '52주고점대비(%)', '10년_하락p', '잔차13주_하락p', '베타(주간2년)', '예외 정리'] if c in ex]
+            st.markdown(f'**예외적 하락 (10년 자기역사 p ≤ 0.05 또는 베타 잔차 13주 p ≤ 0.05) · {len(hit)}종목**')
+            st.dataframe(hit[cols_].sort_values(cols_[2] if len(cols_) > 2 else cols_[0]), hide_index=True, width='stretch')
+        nx = csv(DAY, '닉스')
+        if len(nx) and {'일_RSI', '일_50일_이격도', '월_5개월선'} <= set(nx.columns) and len(price):
+            cl = price.set_index('yfinance 티커')['종가']
+            nx = nx.assign(종가=num(nx['yfinance 티커'].map(cl)))
+            ok = nx[(num(nx['일_RSI']) <= 30) & (num(nx['일_50일_이격도']) <= 90) & (nx['종가'] < num(nx['월_5개월선']))]
+            st.markdown(f'**바닥 기준 세 조건 충족 (일봉 RSI ≤ 30 · 50일 이격 ≤ 90 · 월봉 5개월선 아래) · {len(ok)}종목**')
+            st.dataframe(ok[['정식 종목명', '일_RSI', '일_50일_이격도']], hide_index=True, width='stretch') if len(ok) else st.caption('없음')
+        yd = csv(DAY, '역도산')
+        if len(yd) and '60주 이격' in yd:
+            near = yd[(yd['구분'] == '종목') & (num(yd['60주 이격']).between(97, 103))]
+            st.markdown(f'**60주선 근처(이격 97~103) 미국 섹터 상위 종목 · {len(near)}종목**')
+            if len(near):
+                st.dataframe(near[[c for c in ['티커', 'ETF', '60주 이격', '20주 이격', 'RSI'] if c in near]], hide_index=True, width='stretch')
+
+    # 8 아야카 상: 일본 종목 주봉 RSI 흐름
+    with T['일본']:
+        data_head(speech(sc, KEYS['일본'], nm))
+        jd = csv(DAY, '일본')
+        jp = price[price['시장'].astype(str).str.contains('일본')] if len(price) and '시장' in price else pd.DataFrame()
+        if not len(jp):
+            st.info('이 날짜의 시세 파일에 일본 종목이 없습니다.')
+        else:
+            ph = prices()
+            span = st.segmented_control('기간', ['1년', '2년', '5년'], default='2년', key='jp_span',
+                                        label_visibility='collapsed') or '2년'
+            yrs = {'1년': 1, '2년': 2, '5년': 5}[span]
+            st.caption('주봉 RSI(와일더 14주). 점선 30 아래(옅은 초록 칸) = 과매도, 70 위 = 과열. 판정 없이 흐름만.')
+            cols, k = st.columns(2), 0
+            for _, r in jp.iterrows():
+                c = ph[ph['티커'] == r['yfinance 티커']].set_index('날짜')['가격'].sort_index() if len(ph) else pd.Series(dtype=float)
+                if len(c) < 30:
+                    continue
+                w = c.groupby(c.index.to_period('W-FRI')).last()
+                w.index = w.index.to_timestamp(how='end').normalize()
+                rs = wilder_rsi(w).dropna()
+                rs = rs[rs.index >= rs.index[-1] - pd.DateOffset(years=yrs)]
+                if len(rs) < 2:
+                    continue
+                with cols[k % 2].container(border=True):
+                    st.altair_chart(rsi_chart(r['정식 종목명'], rs), width='stretch')
+                k += 1
+        if len(jd):
+            with st.expander('일본 날씨·주봉 위치 표 (_일본.csv)'):
+                st.dataframe(jd, hide_index=True, width='stretch')
+
+    # 9 엘피스: 코스피 50일 이격, 아직 공포가 깊은 지표(🟢), 많이 빠진 종목
+    with T['긍정']:
+        data_head(speech(sc, KEYS['긍정'], nm))
+        a, b = st.columns(2, gap='large')
+        with a:
+            r = R.get('코스피 50일 이격도')
+            if r and len(r['_hist']) >= 2:
+                st.altair_chart(chart_1y('코스피 50일 이격도', r['_hist']), width='stretch')
+            deep = [x for x in R.values() if str(x['신호']).startswith('🟢')]
+            st.markdown('**바닥 쪽 신호(🟢)가 켜진 지표**')
+            if deep:
+                st.dataframe(pd.DataFrame(deep)[['항목', '현재', '신호']], hide_index=True, width='stretch')
+            else:
+                st.caption('없음')
+        with b:
+            ex = csv(DAY, '예외검정')
+            if len(ex) and '52주고점대비(%)' in ex:
+                ex_ = ex.assign(v=num(ex['52주고점대비(%)'])).nsmallest(15, 'v')
+                st.altair_chart(hbar(ex_, '정식 종목명', 'v', '콜로키움 100 · 52주 고점 대비 가장 많이 빠진 15종목(%)',
+                                     fmtv='+.1f'), width='stretch')
+
+    # 10 기타: 발표 파일에서 위 칸에 안 걸린 위원, 종목 전체 표·수집 점검 안내
+    with T['기타']:
+        spoke = speech(sc, KEYS['기타'], nm)
+        used = [k for _, _, ks in PRESENTERS[:-1] for k in ks]
+        for m in (sc or {}).get('members', []):
+            if not any(k in str(m.get('name', '')) for k in used + ['기타']):
+                present.member(DAY, m, nm); spoke = True
+        if not spoke:
+            st.caption('종목 전체 표·주봉 차트·회의록·수집 점검은 위쪽 다른 탭(종목·주봉 차트·회의록·수집 점검)에 있습니다.')
 
 # ---------------------------------------------------------------- 2. 종목
 def stock_table():
@@ -954,55 +1192,3 @@ with t4:
         st.code(txt.decode('utf-8', errors='replace'), language=None, wrap_lines=True)
     else:
         st.info('이 날짜의 점검 파일이 없습니다.')
-
-
-# ---------------------------------------------------------------- 일본(아야카 상): 주봉 RSI 흐름
-# 2026-11-10 의장 "일본 기업은 숫자로 해봤자 안 보임, RSI만 그래프로, 아야카가 발표할 때 스트림릿 보게"
-def wilder_rsi(c, n=14):
-    d = c.diff()
-    up = d.clip(lower=0).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
-    dn = (-d.clip(upper=0)).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
-    return 100 - 100 / (1 + up / dn)
-
-
-def rsi_chart(name, r, h=190):
-    d = r.rename('RSI').rename_axis('날짜').reset_index()
-    bands = alt.Chart(pd.DataFrame({'y': [30, 70], 'c': [UP, DN]})).mark_rule(strokeDash=[4, 4]).encode(
-        y='y:Q', color=alt.Color('c:N', scale=None))
-    zone = alt.Chart(pd.DataFrame({'lo': [0], 'hi': [30]})).mark_rect(opacity=0.07, color=UP).encode(y='lo:Q', y2='hi:Q')
-    line = alt.Chart(d).mark_line(color='#1d2330', strokeWidth=1.8).encode(
-        x=alt.X('날짜:T', title=None, axis=alt.Axis(format='%y-%m', grid=False)),
-        y=alt.Y('RSI:Q', title=None, scale=alt.Scale(domain=[0, 100])),
-        tooltip=[alt.Tooltip('날짜:T', format='%Y-%m-%d'), alt.Tooltip('RSI:Q', format='.1f')])
-    last = d.iloc[-1]
-    return (zone + bands + line).properties(height=h, title=f'{name}  주봉 RSI {last["RSI"]:.1f}')
-
-
-with tj:
-    jp = price[price['시장'].astype(str).str.contains('일본')] if len(price) and '시장' in price else pd.DataFrame()
-    if not len(jp):
-        st.info('이 날짜의 시세 파일에 일본 종목이 없습니다.')
-    else:
-        ph = prices()
-        span = st.segmented_control('기간', ['1년', '2년', '5년'], default='2년', key='jp_span',
-                                    label_visibility='collapsed') or '2년'
-        yrs = {'1년': 1, '2년': 2, '5년': 5}[span]
-        st.caption('주봉 RSI(와일더 14주). 점선 30 아래(옅은 초록 칸) = 과매도, 70 위 = 과열. 판정 없이 흐름만.')
-        cols = st.columns(2)
-        k = 0
-        for _, r in jp.iterrows():
-            c = ph[ph['티커'] == r['yfinance 티커']].set_index('날짜')['가격'].sort_index() if len(ph) else pd.Series(dtype=float)
-            if len(c) < 30:
-                continue
-            w = c.groupby(c.index.to_period('W-FRI')).last()
-            w.index = w.index.to_timestamp(how='end').normalize()
-            rs = wilder_rsi(w).dropna()
-            rs = rs[rs.index >= rs.index[-1] - pd.DateOffset(years=yrs)]
-            if len(rs) < 2:
-                continue
-            with cols[k % 2].container(border=True):
-                st.altair_chart(rsi_chart(r['정식 종목명'], rs), width='stretch')
-            k += 1
-        if not k:
-            st.info('가격 이력에서 일본 종목 주봉을 만들지 못했습니다.')
-
