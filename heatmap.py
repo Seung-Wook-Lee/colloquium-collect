@@ -1,4 +1,5 @@
 # 히트맵 계산 — 블록 b09_heatmap(07시)과 스트림릿(그날 파일이 없을 때 바로 계산)이 같이 쓴다.
+#   한국: heatmap_kr.csv(코스피·코스닥 주요 약 70종목, 섹터별), 칸 크기는 시가총액.
 #   S&P500: SPDR 섹터 ETF 11개의 상위 10종목(yeokdosan/holdings_top10.csv)을 섹터별로 묶고, 칸 크기는 시가총액.
 #   등락률: 1일(직전 거래일), 1주(5거래일), 1달(21거래일). 판정은 하지 않는다.
 from concurrent.futures import ThreadPoolExecutor
@@ -27,14 +28,10 @@ def _cap(yf, t):
         return None
 
 
-def sp500(yf, hold):
-    """hold = holdings_top10.csv (ETF, 순위, 티커, 이름) → 히트맵 줄 목록"""
-    etfs = list(dict.fromkeys(hold.ETF))
-    stocks = list(dict.fromkeys(hold.티커))
-    d = yf.download(etfs + stocks, period='3mo', interval='1d', auto_adjust=True, group_by='ticker',
-                    threads=True, progress=False)
+def _download(yf, syms):
+    d = yf.download(syms, period='3mo', interval='1d', auto_adjust=True, group_by='ticker', threads=True, progress=False)
     close = {}
-    for t in etfs + stocks:
+    for t in syms:
         try:
             s = d[t]['Close'].dropna()
             s.index = pd.to_datetime(s.index).tz_localize(None).normalize()
@@ -42,6 +39,24 @@ def sp500(yf, hold):
                 close[t] = s
         except Exception:
             pass
+    return close
+
+
+def korea(yf, lst):
+    """lst = heatmap_kr.csv (섹터, 티커, 이름): 코스피·코스닥 주요 종목, 칸 크기는 시가총액"""
+    close = _download(yf, list(lst.티커))
+    stocks = [t for t in lst.티커 if t in close]
+    with ThreadPoolExecutor(8) as ex:
+        caps = dict(zip(stocks, ex.map(lambda t: _cap(yf, t), stocks)))
+    return [{'시장': '한국', '묶음': r.섹터, '티커': r.티커, '이름': r.이름, '시총': caps.get(r.티커), **returns(close[r.티커])}
+            for r in lst.itertuples() if r.티커 in close]
+
+
+def sp500(yf, hold):
+    """hold = holdings_top10.csv (ETF, 순위, 티커, 이름) → 히트맵 줄 목록"""
+    etfs = list(dict.fromkeys(hold.ETF))
+    stocks = list(dict.fromkeys(hold.티커))
+    close = _download(yf, etfs + stocks)
     with ThreadPoolExecutor(8) as ex:
         caps = dict(zip(stocks, ex.map(lambda t: _cap(yf, t), stocks)))
     rows, seen = [], set()
