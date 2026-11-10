@@ -298,28 +298,281 @@ def fg_chart(h):
 
 
 sec, sec_tr = csv(DAY, '섹터'), csv(DAY, '섹터궤적')
-t1, t5, t2, t6, t3, t4 = st.tabs(['오늘 시장', '회의록', '종목', '섹터 순환', '주봉 차트', '수집 점검'])
+t1, tj, t5, t2, t6, t3, t4 = st.tabs(['오늘 시장', '일본(아야카 상)', '회의록', '종목', '섹터 순환', '주봉 차트', '수집 점검'])
 
 # ---------------------------------------------------------------- 1. 오늘 시장
+# 2026-11-10 의장 개편: 맨 위 지표 카드 + 히트맵, 모든 지표는 누르면 최근 1년 그래프(해석 없음),
+#   금리는 기준금리·2년·10년·30년 + 일본 10년, 물가 칸 삭제(댈러스·클리블랜드 중 연준 참고만 남김),
+#   주간·월간 지표는 전주·전월 대비, 신호 칸 전부 채움(의장 기준 그대로 + 나머지는 '바닥 찾기' 제안), 메모 칸 삭제,
+#   해석·긴 설명은 맨 뒤 열.
+import html as _h
+import re as _re
+
+import heatmap as hmmod  # noqa: E402
+from signal_rules import signal2 as sig_of  # noqa: E402
+
+TABLES = [   # (표 제목, [항목]) — 화면에 보이는 순서. 여기 없는 항목은 화면에 안 나온다(수집 파일·리오 체크리스트엔 그대로).
+    ('지수', ['S&P500', '나스닥', '다우', '코스피', '코스닥', '코스피 50일 이격도', '필라델피아 반도체(SOX)',
+            '니케이225', '대만 가권', '유로스톡스50']),
+    ('환율', ['원/달러', '엔/달러', '100엔당 원', '달러지수']),
+    ('금리', ['기준금리(범위)', '미국 2년', '미국 10년', '미국 30년', '일본 10년']),
+    ('연준 참고 (댈러스·클리블랜드·애틀랜타)', ['절사평균 PCE(댈러스)', '기대인플레 1년(클리블랜드)',
+                                     '기대인플레 10년(클리블랜드)', 'GDPNow']),
+    ('고용', ['실업수당 4주 평균', '실업률', '비농업 고용 증감', '샴 룰']),
+    ('원자재', ['WTI', '구리', '금']),
+    ('변동성', ['VIX', 'VIX3M', 'VIX − VIX3M', 'MOVE']),
+    ('신용·금융 스트레스', ['하이일드 스프레드', '투자등급 스프레드', '세인트루이스', '캔자스시티', '시카고 NFCI', '시카고 조정 NFCI']),
+    ('침체 신호·자금', ['10년−2년', '10년−3개월', '경기침체 확률', 'SOFR−IORB', '순유동성 4주 변화']),
+]
+CARDS = ['S&P500', '나스닥', '코스피', '필라델피아 반도체(SOX)', 'VIX', '미국 10년', '원/달러', '엔/달러', '금', 'WTI']
+CARD_NAME = {'필라델피아 반도체(SOX)': 'SOX 반도체'}
+WEEKLY = {'실업수당 4주 평균', '세인트루이스', '시카고 NFCI', '시카고 조정 NFCI', '순유동성 4주 변화'}
+MONTHLY = {'실업률', '비농업 고용 증감', '샴 룰', '절사평균 PCE(댈러스)', '기대인플레 1년(클리블랜드)',
+           '기대인플레 10년(클리블랜드)', '경기침체 확률', '캔자스시티'}
+CHG_COLS = ['직전 대비', '1달', 'YTD', '1년']
+
+
+def _f(x):
+    v = num(pd.Series([x])).iloc[0]
+    return None if pd.isna(v) else float(v)
+
+
+def freq_of(name, hist):
+    """'전일'·'전주'·'전월'·'직전' — 이력 점 간격으로 정하고, 이력이 짧으면 이름표로"""
+    if name in WEEKLY:
+        return '전주'
+    if name in MONTHLY:
+        return '전월'
+    if name == 'GDPNow':
+        return '직전 추정'
+    if len(hist) >= 4:
+        gap = pd.Series(hist.index).diff().dt.days.median()
+        return '전일' if gap <= 4 else '전주' if gap <= 10 else '전월'
+    return '전일'
+
+
+def _chg(now, past, pp):
+    if now is None or past is None:
+        return None
+    if pp:
+        return now - past
+    return None if past == 0 else (now / past - 1) * 100
+
+
+def _txt(v, pp, unit_pp='%p'):
+    return '—' if v is None or pd.isna(v) else f'{v:+.2f}{unit_pp if pp else "%"}'
+
+
+def _color(x):
+    x = str(x)
+    return f'color:{UP}' if x.startswith('+') and x.strip('+0.%p() 전일주월직추정') else f'color:{DN}' if x.startswith('-') else ''
+
+
+def build_rows():
+    """매크로·리스크 파일 → {항목: 줄}. 줄 = 표 칸 + 그래프용 이력·단위"""
+    rows = {}
+    vals = {}
+    if len(mac):
+        for _, r in mac.iterrows():
+            vals[r['항목']] = _f(r['값'])
+    if len(risk):
+        for _, r in risk.iterrows():
+            vals[r['항목']] = _f(r['값'])
+    srcs = []
+    if len(mac):
+        srcs += [('매크로', r) for _, r in mac.iterrows()]
+    if len(risk):
+        srcs += [('리스크', r) for _, r in risk.iterrows()]
+    for kind, r in srcs:
+        name, grp = r['항목'], r.get('구분')
+        now = _f(r['값'])
+        unit = '' if pd.isna(r.get('단위')) else str(r.get('단위'))
+        hist = series(kind, name)
+        if kind == '매크로':
+            pp = r.get('변화 단위') == '%p'
+            d1, mo, ye, y1 = (_f(r.get(k)) for k in ('전일 값', '1달 전 값', '작년 말 값', '1년 전 값'))
+            mo_ready, ytd_ready = _f(r.get('1달')), _f(r.get('YTD'))
+            notes = [r.get('의장 기준(참고)'), r.get('비고')]
+            dec = 3 if grp == '금리' else 1 if grp == '원자재' else 2
+        else:
+            pp = unit in ('%', '%p') or '−' in str(name) or grp in ('금융 스트레스', '침체 신호', '자금 경색')
+            d1, mo, ye, y1 = (_f(r.get(k)) for k in ('전일', '1달 전', '작년 말', '1년 전'))
+            mo_ready = ytd_ready = None
+            notes = [r.get('의장 기준(참고)'), r.get('일반 기준(참고)'), r.get('비고')]
+            dec = 2
+        if d1 is None and len(hist) > 1:
+            d1 = float(hist.iloc[-2])
+        fq = freq_of(name, hist)
+        if fq == '전월':           # 월간 지표는 '1달' 칸이 직전 대비와 같아서 비운다
+            mo = mo_ready = None
+        mo_v = _chg(now, mo, pp) if mo is not None else mo_ready
+        ytd_v = _chg(now, ye, pp) if ye is not None else ytd_ready
+        unit_pp = '%p' if unit in ('%', '%p') or kind == '매크로' else 'p'
+        hi_gap = _f(r.get('최고 대비(%)'))
+        d1_v = _chg(now, d1, pp)
+        icon, short_sig, who, crit = sig_of(name, now, r.get('신호'), r.get('표시'), hi_gap=hi_gap, mo=mo_v, d1=d1_v, vals=vals)
+        cur = fmt(now, dec, unit if unit in ('%', '천명', '건') else '')
+        if name == '기준금리(범위)' and pd.notna(r.get('비고')):
+            cur = str(r['비고'])
+        why = interpret(grp, name, now, mo_v, pp, hi_gap).replace('한 달 새', '직전보다' if fq == '전월' else '한 달 새')
+        extra = ' · '.join(str(x) for x in notes if x is not None and pd.notna(x) and str(x).strip() and str(x) not in crit)
+        rows[name] = {
+            '항목': name, '현재': cur,
+            '직전 대비': (_txt(d1_v, pp, unit_pp) + f' ({fq})') if d1_v is not None else '—',
+            '1달': _txt(mo_v, pp, unit_pp), 'YTD': _txt(ytd_v, pp, unit_pp), '1년': _txt(_chg(now, y1, pp), pp, unit_pp),
+            '기준일': '' if pd.isna(r.get('기준일')) else str(r.get('기준일')),
+            '신호': (f'{icon} {short_sig}' + (' (제안)' if who == '제안' and short_sig else '')).strip(),
+            '해석': '. '.join(x for x in [crit, why, extra] if x),
+            '_now': now, '_d1pct': d1_v, '_pp': pp, '_unit': unit, '_hist': hist, '_dec': dec,
+        }
+    return rows
+
+
+def chart_1y(name, s, unit='', h=280):
+    """최근 1년 선 그래프(해석 없음). 이력이 1년보다 짧으면 있는 만큼."""
+    s = s[s.index >= s.index[-1] - pd.DateOffset(years=1)] if len(s) else s
+    d = s.rename('값').rename_axis('날짜').reset_index()
+    lo, hi = float(d['값'].min()), float(d['값'].max())
+    pad = (hi - lo) * 0.08 or abs(hi) * 0.01 or 1
+    hover = alt.selection_point(fields=['날짜'], nearest=True, on='pointerover', empty=False)
+    base = alt.Chart(d).encode(x=alt.X('날짜:T', title=None, axis=alt.Axis(format='%y-%m', grid=False)))
+    area = base.mark_area(opacity=0.12, color='#2f8f8a').encode(
+        y=alt.Y('값:Q', title=unit or None, scale=alt.Scale(domain=[lo - pad, hi + pad], zero=False)), y2=alt.datum(lo - pad))
+    line = base.mark_line(color='#2f8f8a', strokeWidth=2).encode(y='값:Q')
+    pts = base.mark_point(size=60, filled=True, color='#1d2330').encode(
+        y='값:Q', opacity=alt.condition(hover, alt.value(1), alt.value(0)),
+        tooltip=[alt.Tooltip('날짜:T', format='%Y-%m-%d'), alt.Tooltip('값:Q', format=',.3f')]).add_params(hover)
+    return (area + line + pts).properties(height=h, title=f'{name} — 최근 {"1년" if len(s) and s.index[0] <= s.index[-1] - pd.DateOffset(months=11) else f"{(s.index[-1] - s.index[0]).days}일"}')
+
+
+@st.dialog('최근 1년', width='large')
+def show_1y(name, s, unit=''):
+    st.altair_chart(chart_1y(name, s, unit, h=380), width='stretch')
+
+
+def spark_1m(s, up):
+    s = s[s.index >= s.index[-1] - pd.DateOffset(months=1)]
+    d = s.rename('v').reset_index(drop=True).reset_index()
+    lo, hi = float(d['v'].min()), float(d['v'].max())
+    pad = (hi - lo) * 0.1 or abs(hi) * 0.01 or 1
+    col = UP if up else DN
+    return (alt.Chart(d).mark_area(line={'color': col, 'strokeWidth': 1.6}, color=col, opacity=0.12)
+            .encode(x=alt.X('index:Q', axis=None), y=alt.Y('v:Q', axis=None, scale=alt.Scale(domain=[lo - pad, hi + pad])),
+                    y2=alt.datum(lo - pad), tooltip=alt.value(None))
+            .properties(height=48).configure_view(stroke=None))
+
+
+@st.cache_data(ttl=3 * 3600, show_spinner='히트맵 자료 받는 중(야후)…')
+def heatmap_live():
+    """그날 히트맵 파일이 없을 때(07시 블록 이전 날짜 등) 화면에서 바로 계산"""
+    import yfinance as yf
+    hold = pd.read_csv(ROOT / 'yeokdosan' / 'holdings_top10.csv')
+    return pd.DataFrame(hmmod.sp500(yf, hold), columns=hmmod.COLS)
+
+
+def treemap(df, period, sized):
+    import plotly.express as px
+    d = df.dropna(subset=[period]).copy()
+    if sized and d['시총'].notna().any():
+        d['크기'] = d['시총'].fillna(d['시총'].median())
+    else:
+        d['크기'] = 1.0
+    cap = {'1일': 3, '1주': 6, '1달': 12}[period]
+    d['글'] = d.apply(lambda r: f"{r['이름']}<br>{r[period]:+.2f}%", axis=1)
+    fig = px.treemap(d, path=['묶음', '글'], values='크기', color=period,
+                     color_continuous_scale=[[0, '#e53935'], [0.3, '#8e2a2a'], [0.5, '#2b2f36'], [0.7, '#1f6b3a'],
+                                             [1, '#2ecc71']], range_color=[-cap, cap],
+                     custom_data=['티커', '1일', '1주', '1달'])
+    fig.update_traces(root_color='rgba(0,0,0,0)', texttemplate='%{label}', textposition='middle center',
+                      hovertemplate='<b>%{label}</b><br>%{customdata[0]}<br>1일 %{customdata[1]:+.2f}% · '
+                                    '1주 %{customdata[2]:+.2f}% · 1달 %{customdata[3]:+.2f}%<extra></extra>',
+                      marker=dict(line=dict(width=1, color='#111')), tiling=dict(pad=2),
+                      textfont=dict(size=14, color='#fff'), pathbar=dict(visible=False))
+    fig.update_layout(margin=dict(t=8, l=0, r=0, b=0), height=560, coloraxis_showscale=False,
+                      uniformtext=dict(minsize=11, mode='hide'))
+    return fig
+
+
 with t1:
-    m = mac.set_index('항목') if len(mac) else pd.DataFrame()
+    R = build_rows()
 
-    def mget(name, col='값'):
+    # ---- ① 맨 위: 지표 카드 + 1달 미니 그래프 (카드의 '1년' 버튼 = 최근 1년 그래프)
+    st.subheader('시장 체온계')
+    st.caption(f'{DAY[:4]}-{DAY[4:6]}-{DAY[6:]} 07시 수집 · 등락은 직전 거래일 대비 · 작은 그래프 = 최근 1달 · "1년 그래프"를 누르면 최근 1년')
+    have = [k for k in CARDS if k in R and R[k]['_now'] is not None]
+    for i in range(0, len(have), 5):
+        cols = st.columns(5)
+        for c, k in zip(cols, have[i:i + 5]):
+            r = R[k]
+            with c.container(border=True):
+                dv = r['_d1pct']
+                delta = None if dv is None else (f'{dv:+.2f}%p' if r['_pp'] else f'{dv:+.2f}%')
+                st.metric(CARD_NAME.get(k, k), r['현재'], delta)
+                if len(r['_hist']) >= 2:
+                    st.altair_chart(spark_1m(r['_hist'], (dv or 0) >= 0), width='stretch')
+                    if st.button('1년 그래프', key=f'c1y_{k}', width='stretch'):
+                        show_1y(k, r['_hist'], r['_unit'])
+    if not have:
+        st.info('이 날짜의 매크로 자료가 없습니다.')
+
+    # ---- ② 히트맵
+    st.subheader('히트맵')
+    hm = csv(DAY, '히트맵')
+    live = False
+    h1, h2 = st.columns([2, 1])
+    mkt = h1.segmented_control('시장', ['S&P500', '콜로키움 100'], default='S&P500', key='hm_mkt',
+                               label_visibility='collapsed') or 'S&P500'
+    per = h2.segmented_control('기간', ['1일', '1주', '1달'], default='1일', key='hm_per',
+                               label_visibility='collapsed') or '1일'
+    if (not len(hm) or not (hm['시장'] == 'S&P500').any()) and mkt == 'S&P500':
         try:
-            return num(pd.Series([m.loc[name, col]])).iloc[0]
-        except Exception:
-            return None
-
-    # 2026-11-03 의장 "스트림릿이 너무 거칠고 자료가 많음, 단순화" → 첫 화면은 '오늘 한 장':
-    #   ① 공포탐욕 + 핵심 지표 8개 ② 일정·간밤 뉴스 짧게 ③ 나머지(공포탐욕 추이·7개 지표, 묶음별 전체 표)는 접어 둠
-    top = st.container()
+            hm, live = heatmap_live(), True
+        except Exception as e:
+            st.warning(f'히트맵 자료를 받지 못했습니다: {type(e).__name__}')
+    part = hm[hm['시장'] == mkt] if len(hm) else hm
+    if len(part):
+        for c in ('시총', '1일', '1주', '1달'):
+            part[c] = num(part[c])
+        st.plotly_chart(treemap(part, per, mkt == 'S&P500'), width='stretch', config={'displayModeBar': False})
+        etf = hm[hm['시장'] == 'S&P500 섹터 ETF'] if mkt == 'S&P500' else hm.iloc[0:0]
+        if len(etf):
+            e = etf.assign(v=num(etf[per])).sort_values('v', ascending=False)
+            st.html('<div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.88rem;">' + ''.join(
+                f'<span>{_h.escape(str(r["묶음"]))} <b style="color:{UP if r["v"] >= 0 else DN}">{r["v"]:+.2f}%</b>'
+                f'<span style="color:#6b7280"> {r["티커"]}</span></span>' for _, r in e.iterrows() if pd.notna(r['v'])) + '</div>')
+        base = part['기준일'].dropna().max() if '기준일' in part else ''
+        st.caption(('S&P500 = SPDR 섹터 ETF 11개의 상위 10종목, 칸 크기 = 시가총액. 아래 줄 = 섹터 ETF 등락. '
+                    if mkt == 'S&P500' else '콜로키움 100 = 유니버스 종목을 층별로 묶음, 칸 크기는 같음. ')
+                   + f'초록 = 오름, 빨강 = 내림. 기준일 {base}.' + (' (07시 파일이 없어 지금 야후에서 받은 값)' if live else ''))
+    elif mkt == '콜로키움 100':
+        st.info('콜로키움 100 히트맵은 다음 07시 수집부터 나옵니다.')
     st.divider()
-    # ---- 이번 주 일정 · 간밤 주요 뉴스 (2026-11-02 의장 "첫 페이지에 넣자", "한국어 간밤 뉴스만, 표 말고 보기 좋게")
-    import html as _h
-    import re as _re
+
+    # ---- ③ 공포와 탐욕 · 이번 주 일정 · 간밤 국제 뉴스
     CARD = ('<div style="font-family:inherit;border:1px solid rgba(128,128,128,.25);border-radius:12px;'
             'padding:6px 16px 10px;">{}</div>')
-    c_s, c_n = st.columns([1, 1], gap='large')
+    top_l, c_s, c_n = st.columns([1, 1.3, 1.3], gap='large')
+    tot = fg[fg['구분'] == '종합'].iloc[0] if len(fg) and (fg['구분'] == '종합').any() else None
+    with top_l:
+        st.subheader('공포와 탐욕')
+        if tot is None:
+            st.info('이 날짜의 공포탐욕 자료가 없습니다.')
+        else:
+            s = num(pd.Series([tot['점수']])).iloc[0]
+            st.html(gauge_svg(s, tot['판정']))
+            trs = ''
+            for k in ['전일', '1주 전', '1개월 전', '1년 전']:
+                pv = num(pd.Series([tot.get(k)])).iloc[0]
+                if pd.isna(pv):
+                    continue
+                dv = s - pv
+                trs += (f'<tr><td style="padding:4px 8px;color:#6b7280">{k}</td>'
+                        f'<td style="padding:4px 8px;text-align:right;font-weight:700;color:{fg_color(pv)}">{pv:.1f}</td>'
+                        f'<td style="padding:4px 8px;color:{fg_color(pv)};font-size:13px">{fg_label(pv)}</td>'
+                        f'<td style="padding:4px 8px;text-align:right;color:{DN if dv < 0 else UP}">지금 {dv:+.1f}</td></tr>')
+            if trs:
+                st.html('<table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;'
+                        f'font-size:15px">{trs}</table>')
     with c_s:
         st.subheader('이번 주 일정')
         if len(sched_df):
@@ -368,7 +621,7 @@ with t1:
         else:
             st.info('오늘 일정 파일이 없습니다.')
     with c_n:
-        st.subheader('간밤 주요 뉴스')
+        st.subheader('간밤 국제 뉴스')
         nd = news_df.copy() if len(news_df) else pd.DataFrame(columns=['시각(한국)', '제목', '링크', '출처', '종목'])
         if len(nd):
             # 2026-11-02 의장 "영어 뉴스·지난 뉴스는 빼고 간밤 것만": 한국어 제목, 전날 18시 이후,
@@ -391,6 +644,7 @@ with t1:
             nd = nd.drop_duplicates('제목').sort_values('시각(한국)', ascending=False)
             cap = {'아침 정리': 3}
             grp = nd['출처'].astype(str).map(lambda x: '국제' if '연합' in x else x if x == '아침 정리' else '종목')
+            nd, grp = nd[grp != '종목'], grp[grp != '종목']   # 11/9 의장 "보유 종목 뉴스는 필요 없고 주요 국제뉴스만"
             nd = nd.groupby(grp, group_keys=False).apply(lambda g: g.head(cap.get(g.name, 5 if g.name == '국제' else 6)))
             nd = nd.sort_values('시각(한국)', ascending=False)
             nd['묶음'] = grp.reindex(nd.index)
@@ -429,185 +683,60 @@ with t1:
             st.info('간밤(전날 18시 이후) 한국어 뉴스가 없습니다.')
     st.divider()
 
-    # ---- 공포와 탐욕: 게이지·비교는 첫 화면(top 왼쪽), 추이·7개 지표는 접기
-    tot = fg[fg['구분'] == '종합'].iloc[0] if len(fg) and (fg['구분'] == '종합').any() else None
-    top_l, top_r = top.columns([1, 2], gap='large')
-    top_l.subheader('공포와 탐욕')
-    if tot is None:
-        top_l.info('이 날짜의 공포탐욕 자료가 없습니다.')
-    else:
-        s = num(pd.Series([tot['점수']])).iloc[0]
-        with top_l:
-            st.html(gauge_svg(s, tot['판정']))
-            trs = ''
-            for k in ['전일', '1주 전', '1개월 전', '1년 전']:
-                pv = num(pd.Series([tot.get(k)])).iloc[0]
-                if pd.isna(pv):
-                    continue
-                dv = s - pv
-                dc = '#c0392b' if dv < 0 else '#2e7d32'
-                trs += (f'<tr><td style="padding:4px 8px;color:#6b7280">{k}</td>'
-                        f'<td style="padding:4px 8px;text-align:right;font-weight:700;color:{fg_color(pv)}">{pv:.1f}</td>'
-                        f'<td style="padding:4px 8px;color:{fg_color(pv)};font-size:13px">{fg_label(pv)}</td>'
-                        f'<td style="padding:4px 8px;text-align:right;color:{dc}">지금 {dv:+.1f}</td></tr>')
-            if trs:
-                st.html('<table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;'
-                        f'font-size:15px">{trs}</table>')
-    fg_more = st.expander('공포탐욕 자세히 보기 (추이·7개 지표)')
-    if tot is not None:
-        with fg_more:
-            fh = series('공포탐욕', 'Fear & Greed Index')
-            if len(fh):
-                span = st.segmented_control('기간', ['1달', '3달', '6달', '1년'], default='3달', key='fgspan',
-                                            label_visibility='collapsed')
-                months = {'1달': 1, '3달': 3, '6달': 6, '1년': 12}[span or '3달']
-                st.altair_chart(fg_chart(fh[fh.index >= fh.index[-1] - pd.DateOffset(months=months)]), width='stretch')
-                st.caption(f'CNN 공포탐욕 종합 점수 추이. 띠 색: 0–25 극단적 공포 · 25–45 공포 · 45–55 중립 · 55–75 탐욕 · 75–100 극단적 탐욕. '
-                           f'점선 70 = 의장 기준(70 넘으면 현금↑). 최근 1년 최저 {fh.min():.1f}({fh.idxmin():%Y-%m-%d}), 최고 {fh.max():.1f}({fh.idxmax():%Y-%m-%d}).')
-            else:
-                st.caption('추이 자료는 다음 수집부터 쌓입니다.')
-
-            st.markdown('**7개 지표** — 점수(0–100)와 원천값 최근 1달')
-            f7 = fg[fg['구분'] == '지표']
-            cols = st.columns(4)
-            for i, (_, r) in enumerate(f7.iterrows()):
-                sc = num(pd.Series([r['점수']])).iloc[0]
-                raw = series('공포탐욕', r['지표'])
-                with cols[i % 4].container(border=True):
-                    st.markdown(f'**{r["지표"].split(". ", 1)[-1]}**')
-                    st.html(score_bar(sc, r['판정']))
-                    key = r['지표'].split('. ', 1)[-1]
-                    if key in FG_HELP:
-                        with st.popover('읽는 법', width='stretch'):
-                            st.markdown(f'**{key}**\n\n' + FG_HELP[key])
-                    if len(raw):   # 2026-11-02 의장: 막대 대신 어제·1주 전·1달 전 값을 숫자로
-                        d0 = raw.index[-1]
-                        past = [('전일', raw.iloc[-2] if len(raw) > 1 else None),
-                                ('1주 전', at_or_before(raw, d0 - pd.Timedelta(days=7))),
-                                ('1달 전', at_or_before(raw, d0 - pd.DateOffset(months=1)))]
-                        st.metric(r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2), help=r.get('원천값 설명'))
-                        st.caption(' · '.join(f'{k} {fmt(v, 2)}' for k, v in past if v is not None and pd.notna(v)))
-                    if pd.notna(r.get('해석')):
-                        st.caption(r['해석'])
-
-    st.divider()
-    # 2026-11-03 의장: "그래프들이 사실상 큰 효과가 없다. 공포탐욕 빼고 모두 표로, 하루 전·한 달 전·YTD·1년 전 4개에 비해
-    # 얼마나 오르고 내렸는지 숫자로. 섹터별로 묶어서 표로." → 매크로·리스크 항목을 묶음별 표 하나씩.
-    def _chg(now, past, pp):
-        """past 대비 변화: %p 항목은 차이, 나머지는 %"""
-        if now is None or past is None or pd.isna(now) or pd.isna(past):
-            return None
-        if pp:
-            return now - past
-        return None if past == 0 else (now / past - 1) * 100
-
-    def _txt(v, pp, dec):
-        if v is None or pd.isna(v):
-            return '—'
-        return f'{v:+.{dec}f}{"%p" if pp else "%"}'
-
-    def _color(x):
-        x = str(x)
-        return f'color:{UP}' if x.startswith('+') and x.strip('+0.%p') else f'color:{DN}' if x.startswith('-') else ''
-
-    def _row(name, now, unit, d1, mo, ye, y1, pp, dec, day, memo, ytd_ready=None, mo_ready=None, grp='', hi_gap=None):
-        ytd_v = _chg(now, ye, pp) if ye is not None else ytd_ready
-        mo_v = _chg(now, mo, pp) if mo is not None else mo_ready
-        why = interpret(grp, name, now, mo_v, pp, hi_gap)   # 11/3 의장 "숫자만 쓰면 무슨 의미?" → 수준 + 방향 뜻
-        if grp in MONTHLY_GRP:
-            why = why.replace('한 달 새', '직전 발표보다')
-        return {'항목': name, '현재': fmt(now, dec, unit if unit in ('%', '천명', '건') else ''), '해석': why,
-                '전일 대비': _txt(_chg(now, d1, pp), pp, 2 if pp else 2),
-                '1달 전 대비': _txt(mo_v, pp, 2 if pp else 1),
-                'YTD(작년 말 대비)': _txt(ytd_v, pp, 2 if pp else 1),
-                '1년 전 대비': _txt(_chg(now, y1, pp), pp, 2 if pp else 1),
-                '기준일': day or '', '신호·메모': memo}
-
-    ALL = {}
-    detail = st.expander('지표 전체 표 보기 (지수·환율·금리·물가·고용·원자재·리스크 묶음별)')
-
-    def _show(title, rows, note=None, where=None):
+    # ---- ④ 지표 표: 줄을 누르면 바로 아래에 최근 1년 그래프
+    st.subheader('지표')
+    st.caption('줄을 누르면 그 지표의 최근 1년 그래프가 표 아래에 나옵니다. 직전 대비 = 일간 지표는 전일, 주간 지표는 전주, '
+               '월간 지표는 전월(직전 발표). 신호: 의장 기준은 그대로, 나머지는 바닥 찾기 기준 클로드 제안(제안 표시). '
+               '🟢 바닥 쪽 · 🟠 주의 · 🔴 위험 · ⚪ 평상.')
+    SHOW = ['항목', '현재', '직전 대비', '1달', 'YTD', '1년', '기준일', '신호', '해석']
+    for title, names in TABLES:
+        rows = [R[n] for n in names if n in R]
         if not rows:
-            return
-        where = where or detail
-        for r_ in rows:
-            ALL.setdefault(r_['항목'], r_)
-        where.markdown(f'**{title}**')
+            continue
+        st.markdown(f'**{title}**')
         df = pd.DataFrame(rows)
-        where.dataframe(df.style.map(_color, subset=['전일 대비', '1달 전 대비', 'YTD(작년 말 대비)', '1년 전 대비']),
-                     hide_index=True, width='stretch', height=36 * (len(df) + 1) + 4,
-                     column_config={'해석': st.column_config.TextColumn(width='large'),
-                                    '신호·메모': st.column_config.TextColumn(width='medium')})
-        if note:
-            where.caption(note)
+        ev = st.dataframe(df[SHOW].style.map(_color, subset=CHG_COLS), hide_index=True, width='stretch',
+                          height=36 * (len(df) + 1) + 4, on_select='rerun', selection_mode='single-row',
+                          key=f'tbl_{title}',
+                          column_config={'신호': st.column_config.TextColumn(width='medium'),
+                                         '해석': st.column_config.TextColumn(width='large')})
+        sel = ev.selection.rows if ev and ev.selection else []
+        if sel:
+            r = rows[sel[0]]
+            if len(r['_hist']) >= 2:
+                st.altair_chart(chart_1y(r['항목'], r['_hist'], r['_unit']), width='stretch')
+            else:
+                st.caption(f'{r["항목"]}: 그래프 이력이 아직 없습니다.')
 
-    DEC = {'지수': 2, '환율': 2, '금리': 3, '물가': 2, '성장·고용': 2, '원자재': 1}
-    if len(mac):
-        for grp in ['지수', '환율', '금리', '물가', '성장·고용', '원자재']:
-            g = mac[mac['구분'] == grp]
-            rows = []
-            for _, r in g.iterrows():
-                now = num(pd.Series([r['값']])).iloc[0]
-                pp = r.get('변화 단위') == '%p'
-                monthly = grp in MONTHLY_GRP
-                hist = series('매크로', r['항목'])
-                d1 = None if monthly else num(pd.Series([r.get('전일 값')])).iloc[0]
-                if (d1 is None or pd.isna(d1)) and not monthly and len(hist) > 1:
-                    d1 = float(hist.iloc[-2])
-                mo = num(pd.Series([r.get('1달 전 값')])).iloc[0]
-                ye = num(pd.Series([r.get('작년 말 값')])).iloc[0]
-                y1 = num(pd.Series([r.get('1년 전 값')])).iloc[0]
-                shown_unit = r['단위'] if pd.notna(r.get('단위')) else ''
-                memo = ' · '.join(str(x) for x in [SIG_ICON.get(r.get('신호'), ''), r.get('표시'), r.get('비고')]
-                                  if pd.notna(x) and str(x).strip())
-                rows.append(_row(r['항목'], now, shown_unit,
-                                 d1, None if pd.isna(mo) else mo, None if pd.isna(ye) else ye, None if pd.isna(y1) else y1,
-                                 pp, DEC[grp], r.get('기준일'), memo,
-                                 ytd_ready=num(pd.Series([r.get('YTD')])).iloc[0],
-                                 mo_ready=num(pd.Series([r.get('1달')])).iloc[0], grp=grp,
-                                 hi_gap=num(pd.Series([r.get('최고 대비(%)')])).iloc[0]))
-                if r['항목'] == '기준금리(범위)' and pd.notna(r.get('비고')):
-                    rows[-1]['현재'] = str(r['비고'])
-            _show(grp, rows, '물가·고용은 월간 발표라 전일 칸이 없고, 1달 전 칸은 직전 발표 대비입니다.' if grp in MONTHLY_GRP else None)
-    if len(risk):
-        for grp in risk['구분'].dropna().unique():
-            g = risk[risk['구분'] == grp]
-            rows = []
-            for _, r in g.iterrows():
-                now = num(pd.Series([r['값']])).iloc[0]
-                hist = series('리스크', r['항목'])
-                d1 = num(pd.Series([r.get('전일')])).iloc[0] if '전일' in r else None
-                if (d1 is None or pd.isna(d1)) and len(hist) > 1:
-                    d1 = float(hist.iloc[-2])
-                mo = num(pd.Series([r.get('1달 전')])).iloc[0]
-                ye = num(pd.Series([r.get('작년 말')])).iloc[0] if '작년 말' in r else None
-                y1 = num(pd.Series([r.get('1년 전')])).iloc[0] if '1년 전' in r else None
-                unit = r['단위'] if pd.notna(r.get('단위')) else ''
-                pp = unit in ('%', '%p') or str(r['항목']).find('−') >= 0 or grp in ('금융 스트레스', '침체 신호', '자금 경색')
-                memo = ' · '.join(str(x) for x in [SIG_ICON.get(r.get('신호'), ''), r.get('표시'),
-                                                   r.get('의장 기준(참고)')]
-                                  if pd.notna(x) and str(x).strip())
-                rr = _row(r['항목'], now, unit, d1, None if pd.isna(mo) else mo,
-                          None if ye is None or pd.isna(ye) else ye, None if y1 is None or pd.isna(y1) else y1,
-                          pp, 2, r.get('기준일'), memo, grp=grp)
-                if pp:   # 수준 지표(스프레드·스트레스 지수)는 차이로, 단위를 붙여 읽기 쉽게
-                    for k in ['전일 대비', '1달 전 대비', 'YTD(작년 말 대비)', '1년 전 대비']:
-                        rr[k] = rr[k].replace('%p', 'p' if unit not in ('%', '%p') else '%p')
-                rows.append(rr)
-            _show(f'리스크 · {grp}', rows)
-    CORE = ['S&P500', '코스피', '필라델피아 반도체(SOX)', '원/달러', '미국 10년', 'VIX', '하이일드 스프레드', 'WTI']
-    with top_r:
-        st.subheader('핵심 지표 8개')
-        core = [ALL[k] for k in CORE if k in ALL]
-        if core:
-            dfc = pd.DataFrame(core)[['항목', '현재', '해석', '전일 대비', '1달 전 대비', 'YTD(작년 말 대비)', '1년 전 대비']]
-            st.dataframe(dfc.style.map(_color, subset=['전일 대비', '1달 전 대비', 'YTD(작년 말 대비)', '1년 전 대비']),
-                         hide_index=True, width='stretch', height=36 * (len(dfc) + 1) + 4,
-                         column_config={'해석': st.column_config.TextColumn(width='large')})
-        else:
-            st.info('이 날짜의 매크로 자료가 없습니다.')
-    detail.caption('등락은 초록 = 올라감, 빨강 = 내려감(값 자체의 방향, 좋고 나쁨이 아님). 금리·스프레드·지수형 지표는 차이(%p·p), 나머지는 %. '
-               'YTD·1년 전 칸이 "—"인 항목은 다음 07시 수집부터 채워집니다(11/3 추가). 🔴🟠🟢는 의장 기준이 있는 항목.')
+    # ---- ⑤ 공포탐욕 자세히 (접기)
+    with st.expander('공포탐욕 자세히 보기 (추이·7개 지표)'):
+        fh = series('공포탐욕', 'Fear & Greed Index')
+        if len(fh):
+            span = st.segmented_control('기간', ['1달', '3달', '6달', '1년'], default='3달', key='fgspan',
+                                        label_visibility='collapsed')
+            months = {'1달': 1, '3달': 3, '6달': 6, '1년': 12}[span or '3달']
+            st.altair_chart(fg_chart(fh[fh.index >= fh.index[-1] - pd.DateOffset(months=months)]), width='stretch')
+            st.caption(f'점선 70 = 의장 기준(70 넘으면 현금↑). 최근 1년 최저 {fh.min():.1f}({fh.idxmin():%Y-%m-%d}), '
+                       f'최고 {fh.max():.1f}({fh.idxmax():%Y-%m-%d}).')
+        f7 = fg[fg['구분'] == '지표'] if len(fg) else fg
+        cols = st.columns(4)
+        for i, (_, r) in enumerate(f7.iterrows()):
+            sc = num(pd.Series([r['점수']])).iloc[0]
+            raw = series('공포탐욕', r['지표'])
+            key = r['지표'].split('. ', 1)[-1]
+            with cols[i % 4].container(border=True):
+                st.markdown(f'**{key}**')
+                st.html(score_bar(sc, r['판정']))
+                if len(raw):
+                    st.metric(r.get('원천값 설명') or '원천값', fmt(raw.iloc[-1], 2))
+                    if st.button('1년 그래프', key=f'f1y_{key}', width='stretch'):
+                        show_1y(key, raw)
+                if key in FG_HELP:
+                    with st.popover('읽는 법', width='stretch'):
+                        st.markdown(f'**{key}**\n\n' + FG_HELP[key])
+                if pd.notna(r.get('해석')):
+                    st.caption(r['해석'])
+
 
 # ---------------------------------------------------------------- 2. 종목
 def stock_table():
@@ -825,3 +954,55 @@ with t4:
         st.code(txt.decode('utf-8', errors='replace'), language=None, wrap_lines=True)
     else:
         st.info('이 날짜의 점검 파일이 없습니다.')
+
+
+# ---------------------------------------------------------------- 일본(아야카 상): 주봉 RSI 흐름
+# 2026-11-10 의장 "일본 기업은 숫자로 해봤자 안 보임, RSI만 그래프로, 아야카가 발표할 때 스트림릿 보게"
+def wilder_rsi(c, n=14):
+    d = c.diff()
+    up = d.clip(lower=0).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+    dn = (-d.clip(upper=0)).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+    return 100 - 100 / (1 + up / dn)
+
+
+def rsi_chart(name, r, h=190):
+    d = r.rename('RSI').rename_axis('날짜').reset_index()
+    bands = alt.Chart(pd.DataFrame({'y': [30, 70], 'c': [UP, DN]})).mark_rule(strokeDash=[4, 4]).encode(
+        y='y:Q', color=alt.Color('c:N', scale=None))
+    zone = alt.Chart(pd.DataFrame({'lo': [0], 'hi': [30]})).mark_rect(opacity=0.07, color=UP).encode(y='lo:Q', y2='hi:Q')
+    line = alt.Chart(d).mark_line(color='#1d2330', strokeWidth=1.8).encode(
+        x=alt.X('날짜:T', title=None, axis=alt.Axis(format='%y-%m', grid=False)),
+        y=alt.Y('RSI:Q', title=None, scale=alt.Scale(domain=[0, 100])),
+        tooltip=[alt.Tooltip('날짜:T', format='%Y-%m-%d'), alt.Tooltip('RSI:Q', format='.1f')])
+    last = d.iloc[-1]
+    return (zone + bands + line).properties(height=h, title=f'{name}  주봉 RSI {last["RSI"]:.1f}')
+
+
+with tj:
+    jp = price[price['시장'].astype(str).str.contains('일본')] if len(price) and '시장' in price else pd.DataFrame()
+    if not len(jp):
+        st.info('이 날짜의 시세 파일에 일본 종목이 없습니다.')
+    else:
+        ph = prices()
+        span = st.segmented_control('기간', ['1년', '2년', '5년'], default='2년', key='jp_span',
+                                    label_visibility='collapsed') or '2년'
+        yrs = {'1년': 1, '2년': 2, '5년': 5}[span]
+        st.caption('주봉 RSI(와일더 14주). 점선 30 아래(옅은 초록 칸) = 과매도, 70 위 = 과열. 판정 없이 흐름만.')
+        cols = st.columns(2)
+        k = 0
+        for _, r in jp.iterrows():
+            c = ph[ph['티커'] == r['yfinance 티커']].set_index('날짜')['가격'].sort_index() if len(ph) else pd.Series(dtype=float)
+            if len(c) < 30:
+                continue
+            w = c.groupby(c.index.to_period('W-FRI')).last()
+            w.index = w.index.to_timestamp(how='end').normalize()
+            rs = wilder_rsi(w).dropna()
+            rs = rs[rs.index >= rs.index[-1] - pd.DateOffset(years=yrs)]
+            if len(rs) < 2:
+                continue
+            with cols[k % 2].container(border=True):
+                st.altair_chart(rsi_chart(r['정식 종목명'], rs), width='stretch')
+            k += 1
+        if not k:
+            st.info('가격 이력에서 일본 종목 주봉을 만들지 못했습니다.')
+
