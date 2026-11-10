@@ -564,12 +564,11 @@ def speech(sc, keys, nm):
         if any(k in str(m.get('name', '')) for k in keys):
             if m.get('sub'):
                 if m.get('lines') or m.get('charts'):
-                    present.member(DAY, {k: v for k, v in m.items() if k not in ('sub', 'name')}, nm)
-                for stb, s_ in zip(st.tabs([s_['name'] for s_ in m['sub']]), m['sub']):
-                    with stb:
-                        present.member(DAY, s_, nm)
+                    present.member(DAY, {k: v for k, v in m.items() if k not in ('sub', 'name', 'role')}, nm)
+                for s_ in m['sub']:   # 하위 칸(섹터별)도 탭 대신 아래로 차례로
+                    present.member(DAY, s_, nm)   # 섹터 이름은 member가 소제목으로
             else:
-                present.member(DAY, {k: v for k, v in m.items() if k != 'name'}, nm)   # 위원 이름은 쓰지 않음(의장)
+                present.member(DAY, {k: v for k, v in m.items() if k not in ('name', 'role')}, nm)   # 위원 이름·칸 이름은 위 제목과 겹치므로 뺌
             return True
     return False
 
@@ -632,7 +631,7 @@ with t1:
     hm = csv(DAY, '히트맵')
     live = False
     h0, h1 = st.columns([3, 1])
-    h0.subheader('1. 시장')
+    h0.header('1. 시장', anchor='sec-시장')
     per = h1.segmented_control('기간', ['1일', '1주', '1달'], default='1일', key='hm_per',
                                label_visibility='collapsed') or '1일'
     need = {'S&P500'} - (set(hm['시장']) if len(hm) else set())   # 11/10 의장: 히트맵은 미국만
@@ -669,12 +668,18 @@ with t1:
                     if st.button('1년 그래프', key=f'c1y_{k}', width='stretch'):
                         show_1y(k, r['_hist'], r['_unit'])
 
-    # ---- 발표 순서 탭
+    # ---- 발표 순서대로 아래로 이어짐
     if not sc:
-        st.caption('오늘 발표 원고(_발표.json)는 아직 없습니다. 탭마다 자료만 보입니다.')
+        st.caption('오늘 발표 원고(_발표.json)는 아직 없습니다. 칸마다 자료만 보입니다.')
     CARD = ('<div style="font-family:inherit;border:1px solid rgba(128,128,128,.25);border-radius:12px;'
             'padding:6px 16px 10px;">{}</div>')
-    T = dict(zip([k for k, _, _ in PRESENTERS], st.tabs([t for _, t, _ in PRESENTERS])))
+    # 11/10 의장 "탭 말고 아래로 내리면 차례로" — 2~10을 한 페이지에 순서대로 이어 붙인다(회의 때 스크롤로 진행)
+    T = {}
+    for k, t, _ in PRESENTERS:
+        T[k] = st.container()
+        with T[k]:
+            st.divider()
+            st.header(t, anchor=f'sec-{k}')
 
     # 2 국장: 간밤 국제 뉴스 · 이번 주 일정
     with T['뉴스']:
