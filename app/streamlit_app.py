@@ -658,6 +658,16 @@ with t1:
     for c in ('시총', '1일', '1주', '1달'):
         if c in hm:
             hm[c] = num(hm[c])
+    # 2026-11-11 의장: 맨 위 = 콜로키움 100(층별) → 하루 등락 상·하위 10 → 미국 S&P500 히트맵
+    part = hm[hm['시장'] == '콜로키움 100'] if len(hm) else hm
+    if len(part):
+        st.markdown('**콜로키움 100 (층별)**')
+        st.plotly_chart(treemap(part, per, False, h=460), width='stretch', config={'displayModeBar': False}, key='hm_c100')
+    if len(price):
+        pp_ = price.assign(v=num(price['등락률(%)'])).dropna(subset=['v'])
+        if len(pp_):
+            tb_ = pd.concat([pp_.nlargest(10, 'v'), pp_.nsmallest(10, 'v')]).drop_duplicates('정식 종목명')
+            st.altair_chart(hbar(tb_, '정식 종목명', 'v', '콜로키움 100 하루 등락 상·하위 10 (%)', fmtv='+.2f'), width='stretch')
     for col, mk, ttl in ((st.container(), 'S&P500', '미국 S&P500'),):
         part = hm[hm['시장'] == mk] if len(hm) else hm
         with col:
@@ -981,15 +991,6 @@ with t1:
     # 6 피터·데스크: 데스크 하위 탭(발표 파일), 콜로키움 100 히트맵(층별), 하루 등락 상·하위
     with T['섹터']:
         data_head(speech(sc, KEYS['섹터'], nm))
-        part = hm[hm['시장'] == '콜로키움 100'] if len(hm) else hm
-        if len(part):
-            st.markdown('**콜로키움 100 (층별)**')
-            st.plotly_chart(treemap(part, per, False, h=460), width='stretch', config={'displayModeBar': False}, key='hm_c100')
-        if len(price):
-            pp_ = price.assign(v=num(price['등락률(%)'])).dropna(subset=['v'])
-            if len(pp_):
-                tb_ = pd.concat([pp_.nlargest(10, 'v'), pp_.nsmallest(10, 'v')]).drop_duplicates('정식 종목명')
-                st.altair_chart(hbar(tb_, '정식 종목명', 'v', '콜로키움 100 하루 등락 상·하위 10 (%)', fmtv='+.2f'), width='stretch')
         market_tables(R, ['지수'])
 
     # 7 미스 차트: 예외 검정, 바닥 기준(일봉 RSI≤30 + 50일 이격≤90 + 월봉 5개월선 아래), 60주선 근처
