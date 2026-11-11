@@ -326,6 +326,7 @@ import re as _re
 import heatmap as hmmod  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import present  # noqa: E402
+import valuation_view  # noqa: E402
 from signal_rules import signal2 as sig_of  # noqa: E402
 
 TABLES = [   # (표 제목, [항목]) — 화면에 보이는 순서. 여기 없는 항목은 화면에 안 나온다(수집 파일·리오 체크리스트엔 그대로).
@@ -645,8 +646,11 @@ with t1:
     # ---- 맨 위: 시장 한눈에 — 미국·한국 히트맵 + 지표 카드 한 줄
     hm = csv(DAY, '히트맵')
     live = False
+    st.header('1. 시장', anchor='sec-시장')
+    # 2026-11-11 의장 "처음에 볼 수 있게": 맨 위 = 지수 밸류·등락(선행 P/E 밴드, 필반 200일 이격도, 주요국·미국 등락)
+    valuation_view.show(csv, _raw, DAY)
     h0, h1 = st.columns([3, 1])
-    h0.header('1. 시장', anchor='sec-시장')
+    h0.markdown('#### 히트맵')
     per = h1.segmented_control('기간', ['1일', '1주', '1달'], default='1일', key='hm_per',
                                label_visibility='collapsed') or '1일'
     need = {'S&P500'} - (set(hm['시장']) if len(hm) else set())   # 11/10 의장: 히트맵은 미국만
@@ -658,7 +662,7 @@ with t1:
     for c in ('시총', '1일', '1주', '1달'):
         if c in hm:
             hm[c] = num(hm[c])
-    # 2026-11-11 의장: 맨 위 = 콜로키움 100(층별) → 하루 등락 상·하위 10 → 미국 S&P500 히트맵
+    # 2026-11-11 의장: 콜로키움 100(층별) → 하루 등락 상·하위 10 → 미국 S&P500 히트맵
     part = hm[hm['시장'] == '콜로키움 100'] if len(hm) else hm
     if len(part):
         st.markdown('**콜로키움 100 (층별)**')
