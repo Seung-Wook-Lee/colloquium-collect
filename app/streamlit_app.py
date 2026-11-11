@@ -828,11 +828,17 @@ with t1:
             a.altair_chart(gap_bars(s_, '이름', 'v', '국내 섹터 ETF · 20주선 이격'), width='stretch')
         fl = csv(DAY, 'ETF자금')
         if len(fl) and '유입_5일' in fl:
-            for mk_, where in (('미국', b), ('국내', b)):
-                f_ = fl[fl['시장'].astype(str).str.contains(mk_)].assign(v=lambda x: num(x['유입_5일']))
+            for mk_, lbl_, where in (('미국', '미국', b), ('한국', '국내', b)):
+                f_ = fl[fl['시장'].astype(str) == mk_].assign(v=lambda x: num(x['유입_5일']))
+                # 2026-11-11 SOXX 5일 +206억 달러(순자산의 47%) 오류: 하루·5일 유입이 순자산의 10%를 넘으면 좌수 자료 오류로 보고 뺀다
+                aum_ = num(f_['순자산']).abs()
+                bad_ = ((f_['v'].abs() > aum_ * 0.10) | (num(f_['유입_1일']).abs() > aum_ * 0.10)) & aum_.gt(0)
+                if bad_.any():
+                    where.caption(f'{lbl_} 좌수 자료 점검 중이라 뺌: ' + ', '.join(f_.loc[bad_, '코드'].astype(str)))
+                f_ = f_[~bad_]
                 if len(f_):
                     f_ = pd.concat([f_.nlargest(6, 'v'), f_.nsmallest(4, 'v')]).drop_duplicates('이름')
-                    where.altair_chart(hbar(f_, '이름', 'v', f'{mk_} ETF 자금 5일 유입 상·하위', fmtv='+,.0f'), width='stretch')
+                    where.altair_chart(hbar(f_, '이름', 'v', f'{lbl_} ETF 자금 5일 유입 상·하위', fmtv='+,.0f'), width='stretch')
         # 2026-11-11 의장 "ETF 자금 유입을 1년·6달·3달 그래프로, 액수보다 추세": 좌수(발행 수) 흐름, 시작 = 100.
         # 좌수는 가격과 무관하게 돈이 들어오면 늘고 나가면 줄어 자금 추세를 바로 보여 준다.
         fh_ = flow_hist()
@@ -847,6 +853,14 @@ with t1:
                 if not len(w_):
                     continue
                 w_['이름'] = w_.groupby('코드')['이름'].transform('last')
+                # 하루에 좌수가 10% 넘게 바뀐 ETF는 자료 오류로 보고 뺀다(11/11 SOXX)
+                jump_ = w_.groupby('코드')['상장좌수'].transform(lambda x: x.pct_change().abs().max())
+                if (jump_ > 0.10).any():
+                    st.caption(f'{"미국" if mk_ == "미국" else "국내"} 좌수 자료 점검 중이라 뺌: '
+                               + ', '.join(sorted(w_.loc[jump_ > 0.10, '코드'].astype(str).unique())))
+                w_ = w_[~(jump_ > 0.10)]
+                if not len(w_):
+                    continue
                 first_ = w_.groupby('코드')['날짜'].transform('min')
                 full_ = (first_ <= start_ + pd.Timedelta(days=10))
                 if full_.any():

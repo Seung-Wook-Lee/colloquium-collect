@@ -178,6 +178,9 @@ try:
                      '좌수변화_20일(%)': sh_chg, '상장좌수': last['상장좌수'], '기록일수': len(g), '계산방식': how,
                      '좌수출처': last['좌수출처'], '순자산출처': last['순자산출처']})
     fl = pd.DataFrame(rows)
+    # 2026-11-11 SOXX 5일 +206억 달러(순자산의 47%) 오류: 하루·5일 유입이 순자산의 10%를 넘으면 좌수 자료 오류 의심
+    big = lambda c: pd.to_numeric(fl[c], errors='coerce').abs() > pd.to_numeric(fl['순자산'], errors='coerce').abs() * 0.10
+    fl['점검'] = (big('유입_1일') | big('유입_5일')).map({True: '좌수 자료 의심', False: ''})
     fl['순위_20일'] = fl.groupby('시장')['유입_20일'].rank(ascending=False, method='min')
     fl['순위_5일'] = fl.groupby('시장')['유입_5일'].rank(ascending=False, method='min')
     fl = fl.sort_values(['시장', '유입_20일', '유입_5일'], ascending=[True, False, False], na_position='last')
