@@ -93,6 +93,21 @@ def prices():
     return p[['날짜', '티커', '가격']]
 
 
+
+@st.cache_data(ttl=6 * 3600, show_spinner='ETF 좌수 이력 불러오는 중…')
+def flow_hist():
+    """ETF 좌수 일별 이력 (00_누적/00_ETF좌수이력.csv, SPDR 펀드는 공식 1년치)"""
+    b = _raw('00_누적/00_ETF좌수이력.csv')
+    if not b:
+        return pd.DataFrame()
+    h = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', dtype={'수집일': str, '코드': str})
+    h = h[h['상장좌수'].notna()].copy()
+    h['날짜'] = pd.to_datetime(h['수집일'], format='%Y%m%d', errors='coerce')
+    us = h['시장'] == '미국'
+    nm = h['이름'].astype(str) if '이름' in h else h['코드']
+    h['이름'] = nm.where(~us, h['코드'] + ' ' + h['섹터/테마'].fillna('').astype(str))
+    return h.dropna(subset=['날짜'])
+
 def num(s):
     return pd.to_numeric(s, errors='coerce')
 
@@ -753,6 +768,9 @@ with t1:
                 nd = nd[akr.isna() | (akr >= (day0 - pd.Timedelta(days=1)).strftime('%Y%m%d'))]
                 if day0.weekday() == 0:
                     nd = nd[nd['출처'].astype(str) != '아침 정리']
+                # 2026-11-11 의장 "믿을 만한 언론만. 매경, 연합뉴스, 조선일보 정도": 아침 정리는 세 매체만(이미 수집된 날도 화면에서 거름)
+                is_am = nd['출처'].astype(str) == '아침 정리'
+                nd = nd[~is_am | nd['종목'].astype(str).str.strip().isin(['매일경제', '연합뉴스', '조선일보'])]
                 nd = nd.drop_duplicates('제목').sort_values('시각(한국)', ascending=False)
                 cap = {'아침 정리': 3}
                 grp = nd['출처'].astype(str).map(lambda x: '국제' if '연합' in x else x if x == '아침 정리' else '종목')
@@ -810,11 +828,71 @@ with t1:
             a.altair_chart(gap_bars(s_, '이름', 'v', '국내 섹터 ETF · 20주선 이격'), width='stretch')
         fl = csv(DAY, 'ETF자금')
         if len(fl) and '유입_5일' in fl:
-            for mk_, where in (('미국', b), ('국내', b)):
-                f_ = fl[fl['시장'].astype(str).str.contains(mk_)].assign(v=lambda x: num(x['유입_5일']))
+            for mk_, lbl_, where in (('미국', '미국', b), ('한국', '국내', b)):
+                f_ = fl[fl['시장'].astype(str) == mk_].assign(v=lambda x: num(x['유입_5일']))
+                # 2026-11-11 SOXX 5일 +206억 달러(순자산의 47%) 오류: 하루·5일 유입이 순자산의 10%를 넘으면 좌수 자료 오류로 보고 뺀다
+                aum_ = num(f_['순자산']).abs()
+                bad_ = ((f_['v'].abs() > aum_ * 0.10) | (num(f_['유입_1일']).abs() > aum_ * 0.10)) & aum_.gt(0)
+                if bad_.any():
+                    where.caption(f'{lbl_} 좌수 자료 점검 중이라 뺌: ' + ', '.join(f_.loc[bad_, '코드'].astype(str)))
+                f_ = f_[~bad_]
                 if len(f_):
                     f_ = pd.concat([f_.nlargest(6, 'v'), f_.nsmallest(4, 'v')]).drop_duplicates('이름')
-                    where.altair_chart(hbar(f_, '이름', 'v', f'{mk_} ETF 자금 5일 유입 상·하위', fmtv='+,.0f'), width='stretch')
+                    where.altair_chart(hbar(f_, '이름', 'v', f'{lbl_} ETF 자금 5일 유입 상·하위', fmtv='+,.0f'), width='stretch')
+        # 2026-11-11 의장 "ETF 자금 유입을 1년·6달·3달 그래프로, 액수보다 추세": 좌수(발행 수) 흐름, 시작 = 100.
+        # 좌수는 가격과 무관하게 돈이 들어오면 늘고 나가면 줄어 자금 추세를 바로 보여 준다.
+        fh_ = flow_hist()
+        if len(fh_):
+            span_ = st.segmented_control('기간', ['3달', '6달', '1년'], default='6달', key='flowspan',
+                                         label_visibility='collapsed')
+            start_ = fh_['날짜'].max() - pd.DateOffset(months={'3달': 3, '6달': 6, '1년': 12}[span_ or '6달'])
+            for mk_, deflt in (('미국', ['SPY', 'XLK', 'XLF', 'XLV', 'XLE']),
+                               # 국내 기본 6개 (11/11 의장)
+                               ('한국', ['TIGER 200', 'TIGER 반도체', 'KODEX 미국S&P500', 'ACE 미국빅테크', 'SOL 초단기채', '커버드콜'])):
+                w_ = fh_[(fh_['시장'] == mk_) & (fh_['날짜'] >= start_)].sort_values('날짜').copy()
+                if not len(w_):
+                    continue
+                w_['이름'] = w_.groupby('코드')['이름'].transform('last')
+                # 하루에 좌수가 10% 넘게 바뀐 ETF는 자료 오류로 보고 뺀다(11/11 SOXX)
+                jump_ = w_.groupby('코드')['상장좌수'].transform(lambda x: x.pct_change().abs().max())
+                if (jump_ > 0.10).any():
+                    st.caption(f'{"미국" if mk_ == "미국" else "국내"} 좌수 자료 점검 중이라 뺌: '
+                               + ', '.join(sorted(w_.loc[jump_ > 0.10, '코드'].astype(str).unique())))
+                w_ = w_[~(jump_ > 0.10)]
+                if not len(w_):
+                    continue
+                first_ = w_.groupby('코드')['날짜'].transform('min')
+                full_ = (first_ <= start_ + pd.Timedelta(days=10))
+                if full_.any():
+                    w_ = w_[full_]                                     # 기간 처음부터 기록이 있는 ETF만
+                since_ = w_['날짜'].min()
+                w_['지수'] = w_['상장좌수'] / w_.groupby('코드')['상장좌수'].transform('first') * 100
+                chg_ = w_.groupby('이름')['지수'].last().sub(100).round(1).reset_index()
+                lbl_ = '미국' if mk_ == '미국' else '국내'
+                st.markdown(f'**{lbl_} ETF 자금 추세 · 좌수(발행 수) 흐름, 시작 = 100** '
+                            f':small[:gray[{since_:%Y-%m-%d}부터]]')
+                fa, fb = st.columns([3, 2], gap='large')
+                names_ = chg_.sort_values('지수', ascending=False)['이름'].tolist()
+                key_ = lambda n: str(n).replace(' ', '').upper()
+                if mk_ == '미국':
+                    dft_ = [n for n in names_ if n.split()[0] in deflt]
+                else:
+                    dft_ = [n for n in names_ if any(key_(d) in key_(n) for d in deflt)]
+                pick_ = fa.multiselect('ETF', names_, default=dft_, key=f'flowpick_{mk_}', label_visibility='collapsed')
+                if pick_:
+                    ln_ = w_[w_['이름'].isin(pick_)]
+                    fa.altair_chart(
+                        alt.Chart(ln_).mark_line(strokeWidth=2).encode(
+                            x=alt.X('날짜:T', title=None, axis=alt.Axis(format='%y.%m.%d' if mk_ == '한국' else '%y.%m')),
+                            y=alt.Y('지수:Q', title=None, scale=alt.Scale(zero=False)),
+                            color=alt.Color('이름:N', title=None, legend=alt.Legend(orient='bottom', columns=2, labelLimit=260)),
+                            tooltip=['이름', alt.Tooltip('날짜:T', format='%Y-%m-%d'), alt.Tooltip('지수:Q', format='.1f')])
+                        + alt.Chart(pd.DataFrame({'y': [100]})).mark_rule(strokeDash=[4, 4], color='#9ca3af').encode(y='y:Q'),
+                        width='stretch')
+                sel_ = chg_[chg_['이름'].isin(pick_)] if pick_ else chg_
+                fb.altair_chart(hbar(sel_, '이름', '지수', f'기간 중 좌수 변화(%)', fmtv='+.1f'), width='stretch')
+            st.caption('좌수 = 발행된 ETF 수. 돈이 들어오면 늘고 나가면 준다(가격 오르내림과 무관). '
+                       'SPDR(XL*·SPY·SPYM)은 State Street 공식 1년 이력. 국내와 QQQ·SOXX 등은 10/29부터 쌓는 중이라 그 날부터 보임.')
         kf = csv(DAY, '국내수급')
         if len(kf) and '외국인 5일(억원)' in kf:
             k_ = kf.assign(v=num(kf['외국인 5일(억원)']))
@@ -823,6 +901,26 @@ with t1:
     # 4 리오: 금리·환율·유가·금·MOVE·하이일드 등
     with T['리스크']:
         data_head(speech(sc, KEYS['리스크'], nm))
+        # 2026-11-11 의장 "리스크 지표도 비교가 중요한데 오늘 것만 나와 있다, 그래프로": 핵심 지표 흐름 + 1주·1달·1년 전 비교
+        RISK_KEY = ['미국 10년', '미국 30년', 'MOVE', 'VIX', '하이일드 스프레드', '10년−2년', '원/달러', 'WTI']
+        rk_ = [n for n in RISK_KEY if n in R and len(R[n]['_hist']) >= 2]
+        if rk_:
+            rspan = st.segmented_control('기간', ['3달', '6달', '1년'], default='6달', key='riskspan', label_visibility='collapsed')
+            rmon = {'3달': 3, '6달': 6, '1년': 12}[rspan or '6달']
+            for i in range(0, len(rk_), 4):
+                cols_ = st.columns(4)
+                for c_, n in zip(cols_, rk_[i:i + 4]):
+                    h_ = R[n]['_hist']
+                    now_ = float(h_.iloc[-1])
+                    cmp_ = []
+                    for lab, off in (('1주', pd.DateOffset(weeks=1)), ('1달', pd.DateOffset(months=1)), ('1년', pd.DateOffset(years=1))):
+                        pv = at_or_before(h_, h_.index[-1] - off)
+                        if pv is not None and h_.index[0] <= h_.index[-1] - off:
+                            cmp_.append(f'{lab} 전 {pv:,.2f}')
+                    w = h_[h_.index >= h_.index[-1] - pd.DateOffset(months=rmon)]
+                    with c_.container(border=True):
+                        st.markdown(f'**{n}** {now_:,.2f}  \n:small[:gray[{" · ".join(cmp_) or "비교 이력 없음"}]]')
+                        st.altair_chart(chart_1y(n, w, R[n]['_unit'], h=150).properties(title=''), width='stretch')
         st.caption('줄을 누르면 그 지표의 최근 1년 그래프가 표 아래에 나옵니다. 주간·월간 지표는 전주·전월 대비. '
                    '신호: 의장 기준은 그대로, 나머지는 바닥 찾기 기준 클로드 제안(제안 표시). 🟢 바닥 쪽 · 🟠 주의 · 🔴 위험 · ⚪ 평상.')
         market_tables(R, ['금리', '환율', '원자재', '변동성', '신용·금융 스트레스', '연준 참고 (댈러스·클리블랜드·애틀랜타)',
