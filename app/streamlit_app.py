@@ -901,6 +901,26 @@ with t1:
     # 4 리오: 금리·환율·유가·금·MOVE·하이일드 등
     with T['리스크']:
         data_head(speech(sc, KEYS['리스크'], nm))
+        # 2026-11-11 의장 "리스크 지표도 비교가 중요한데 오늘 것만 나와 있다, 그래프로": 핵심 지표 흐름 + 1주·1달·1년 전 비교
+        RISK_KEY = ['미국 10년', '미국 30년', 'MOVE', 'VIX', '하이일드 스프레드', '10년−2년', '원/달러', 'WTI']
+        rk_ = [n for n in RISK_KEY if n in R and len(R[n]['_hist']) >= 2]
+        if rk_:
+            rspan = st.segmented_control('기간', ['3달', '6달', '1년'], default='6달', key='riskspan', label_visibility='collapsed')
+            rmon = {'3달': 3, '6달': 6, '1년': 12}[rspan or '6달']
+            for i in range(0, len(rk_), 4):
+                cols_ = st.columns(4)
+                for c_, n in zip(cols_, rk_[i:i + 4]):
+                    h_ = R[n]['_hist']
+                    now_ = float(h_.iloc[-1])
+                    cmp_ = []
+                    for lab, off in (('1주', pd.DateOffset(weeks=1)), ('1달', pd.DateOffset(months=1)), ('1년', pd.DateOffset(years=1))):
+                        pv = at_or_before(h_, h_.index[-1] - off)
+                        if pv is not None and h_.index[0] <= h_.index[-1] - off:
+                            cmp_.append(f'{lab} 전 {pv:,.2f}')
+                    w = h_[h_.index >= h_.index[-1] - pd.DateOffset(months=rmon)]
+                    with c_.container(border=True):
+                        st.markdown(f'**{n}** {now_:,.2f}  \n:small[:gray[{" · ".join(cmp_) or "비교 이력 없음"}]]')
+                        st.altair_chart(chart_1y(n, w, R[n]['_unit'], h=150).properties(title=''), width='stretch')
         st.caption('줄을 누르면 그 지표의 최근 1년 그래프가 표 아래에 나옵니다. 주간·월간 지표는 전주·전월 대비. '
                    '신호: 의장 기준은 그대로, 나머지는 바닥 찾기 기준 클로드 제안(제안 표시). 🟢 바닥 쪽 · 🟠 주의 · 🔴 위험 · ⚪ 평상.')
         market_tables(R, ['금리', '환율', '원자재', '변동성', '신용·금융 스트레스', '연준 참고 (댈러스·클리블랜드·애틀랜타)',
