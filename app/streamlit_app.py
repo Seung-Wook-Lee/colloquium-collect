@@ -93,6 +93,21 @@ def prices():
     return p[['날짜', '티커', '가격']]
 
 
+
+@st.cache_data(ttl=6 * 3600, show_spinner='ETF 좌수 이력 불러오는 중…')
+def flow_hist():
+    """ETF 좌수 일별 이력 (00_누적/00_ETF좌수이력.csv, SPDR 펀드는 공식 1년치)"""
+    b = _raw('00_누적/00_ETF좌수이력.csv')
+    if not b:
+        return pd.DataFrame()
+    h = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', dtype={'수집일': str, '코드': str})
+    h = h[h['상장좌수'].notna()].copy()
+    h['날짜'] = pd.to_datetime(h['수집일'], format='%Y%m%d', errors='coerce')
+    us = h['시장'] == '미국'
+    nm = h['이름'].astype(str) if '이름' in h else h['코드']
+    h['이름'] = nm.where(~us, h['코드'] + ' ' + h['섹터/테마'].fillna('').astype(str))
+    return h.dropna(subset=['날짜'])
+
 def num(s):
     return pd.to_numeric(s, errors='coerce')
 
@@ -818,6 +833,52 @@ with t1:
                 if len(f_):
                     f_ = pd.concat([f_.nlargest(6, 'v'), f_.nsmallest(4, 'v')]).drop_duplicates('이름')
                     where.altair_chart(hbar(f_, '이름', 'v', f'{mk_} ETF 자금 5일 유입 상·하위', fmtv='+,.0f'), width='stretch')
+        # 2026-11-11 의장 "ETF 자금 유입을 1년·6달·3달 그래프로, 액수보다 추세": 좌수(발행 수) 흐름, 시작 = 100.
+        # 좌수는 가격과 무관하게 돈이 들어오면 늘고 나가면 줄어 자금 추세를 바로 보여 준다.
+        fh_ = flow_hist()
+        if len(fh_):
+            span_ = st.segmented_control('기간', ['3달', '6달', '1년'], default='6달', key='flowspan',
+                                         label_visibility='collapsed')
+            start_ = fh_['날짜'].max() - pd.DateOffset(months={'3달': 3, '6달': 6, '1년': 12}[span_ or '6달'])
+            for mk_, deflt in (('미국', ['SPY', 'XLK', 'XLF', 'XLV', 'XLE']),
+                               # 국내 기본 6개 (11/11 의장)
+                               ('한국', ['TIGER 200', 'TIGER 반도체', 'KODEX 미국S&P500', 'ACE 미국빅테크', 'SOL 초단기채', '커버드콜'])):
+                w_ = fh_[(fh_['시장'] == mk_) & (fh_['날짜'] >= start_)].sort_values('날짜').copy()
+                if not len(w_):
+                    continue
+                w_['이름'] = w_.groupby('코드')['이름'].transform('last')
+                first_ = w_.groupby('코드')['날짜'].transform('min')
+                full_ = (first_ <= start_ + pd.Timedelta(days=10))
+                if full_.any():
+                    w_ = w_[full_]                                     # 기간 처음부터 기록이 있는 ETF만
+                since_ = w_['날짜'].min()
+                w_['지수'] = w_['상장좌수'] / w_.groupby('코드')['상장좌수'].transform('first') * 100
+                chg_ = w_.groupby('이름')['지수'].last().sub(100).round(1).reset_index()
+                lbl_ = '미국' if mk_ == '미국' else '국내'
+                st.markdown(f'**{lbl_} ETF 자금 추세 · 좌수(발행 수) 흐름, 시작 = 100** '
+                            f':small[:gray[{since_:%Y-%m-%d}부터]]')
+                fa, fb = st.columns([3, 2], gap='large')
+                names_ = chg_.sort_values('지수', ascending=False)['이름'].tolist()
+                key_ = lambda n: str(n).replace(' ', '').upper()
+                if mk_ == '미국':
+                    dft_ = [n for n in names_ if n.split()[0] in deflt]
+                else:
+                    dft_ = [n for n in names_ if any(key_(d) in key_(n) for d in deflt)]
+                pick_ = fa.multiselect('ETF', names_, default=dft_, key=f'flowpick_{mk_}', label_visibility='collapsed')
+                if pick_:
+                    ln_ = w_[w_['이름'].isin(pick_)]
+                    fa.altair_chart(
+                        alt.Chart(ln_).mark_line(strokeWidth=2).encode(
+                            x=alt.X('날짜:T', title=None, axis=alt.Axis(format='%y.%m.%d' if mk_ == '한국' else '%y.%m')),
+                            y=alt.Y('지수:Q', title=None, scale=alt.Scale(zero=False)),
+                            color=alt.Color('이름:N', title=None, legend=alt.Legend(orient='bottom', columns=2, labelLimit=260)),
+                            tooltip=['이름', alt.Tooltip('날짜:T', format='%Y-%m-%d'), alt.Tooltip('지수:Q', format='.1f')])
+                        + alt.Chart(pd.DataFrame({'y': [100]})).mark_rule(strokeDash=[4, 4], color='#9ca3af').encode(y='y:Q'),
+                        width='stretch')
+                sel_ = chg_[chg_['이름'].isin(pick_)] if pick_ else chg_
+                fb.altair_chart(hbar(sel_, '이름', '지수', f'기간 중 좌수 변화(%)', fmtv='+.1f'), width='stretch')
+            st.caption('좌수 = 발행된 ETF 수. 돈이 들어오면 늘고 나가면 준다(가격 오르내림과 무관). '
+                       'SPDR(XL*·SPY·SPYM)은 State Street 공식 1년 이력. 국내와 QQQ·SOXX 등은 10/29부터 쌓는 중이라 그 날부터 보임.')
         kf = csv(DAY, '국내수급')
         if len(kf) and '외국인 5일(억원)' in kf:
             k_ = kf.assign(v=num(kf['외국인 5일(억원)']))
