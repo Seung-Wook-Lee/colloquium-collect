@@ -753,6 +753,9 @@ with t1:
                 nd = nd[akr.isna() | (akr >= (day0 - pd.Timedelta(days=1)).strftime('%Y%m%d'))]
                 if day0.weekday() == 0:
                     nd = nd[nd['출처'].astype(str) != '아침 정리']
+                # 2026-11-11 의장 "믿을 만한 언론만. 매경, 연합뉴스, 조선일보 정도": 아침 정리는 세 매체만(이미 수집된 날도 화면에서 거름)
+                is_am = nd['출처'].astype(str) == '아침 정리'
+                nd = nd[~is_am | nd['종목'].astype(str).str.strip().isin(['매일경제', '연합뉴스', '조선일보'])]
                 nd = nd.drop_duplicates('제목').sort_values('시각(한국)', ascending=False)
                 cap = {'아침 정리': 3}
                 grp = nd['출처'].astype(str).map(lambda x: '국제' if '연합' in x else x if x == '아침 정리' else '종목')
