@@ -54,7 +54,7 @@ try:
     for nm in _vtodo:
         _vtick = vmod.members(get, nm, _vmem.loc[_vmem['지수'] == nm, '티커'].tolist())
         if not _vtick:
-            _vmsg.append(f'{nm} 구성종목 없음')
+            _vmsg.append(f'{nm} 구성종목 없음({vmod.MEMBER_ERR.get(nm, "")})')
             continue
         if nm != '필반지수':
             _vmem = pd.concat([_vmem[_vmem['지수'] != nm],
