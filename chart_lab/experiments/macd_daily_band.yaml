@@ -1,0 +1,69 @@
+제목: 일봉 MACD ±선으로 바닥·꼭지 잡기
+설명: 의장님이 알파벳 일봉 MACD에 ±5 보조선을 긋고, 그 아래·위에서 바닥·꼭지가 나오는지 물으심. 주가 수준이 종목마다 달라 MACD÷종가×100으로 환산(알파벳 300달러에서 ±5 ≈ ±1.7%).
+출처: 의장 2026-11-13 ('일봉 MACD ±선으로 바닥·꼭지 잡기 검증' 스레드), 정의는 그 스레드와 같게
+기본봉: 일봉
+자료: 한투            # 한투(드라이브 창고) | 야후
+중복제외봉: 10
+
+규칙:
+  - 이름: B0_비교_골든크로스_수준무관
+    구분: 비교
+    조건:
+      - cross_up(d.macd_osc, 0)
+  - 이름: B1_바닥_골든크로스_MACD<-1.7%
+    구분: 의장기준
+    조건:
+      - d.macd_pct < -1.7
+      - cross_up(d.macd_osc, 0)
+    기록: [macd, macd_pct]
+  - 이름: B2_바닥_음수막대줄기시작_MACD<-1.7%
+    구분: 의장기준
+    조건:
+      - d.macd_pct < -1.7
+      - d.macd_osc < 0
+      - turn_up(d.macd_osc)
+    기록: [macd, macd_pct]
+  - 이름: B3_제안_골든크로스_하위10%
+    구분: 제안
+    설명: MACD÷종가의 지난 750거래일(최소 250) 백분위 10 이하
+    조건:
+      - pctl(d.macd_pct, 750, 250) <= 10
+      - cross_up(d.macd_osc, 0)
+  - 이름: B9_알파벳_고정선_MACD<-5_골든크로스
+    구분: 의장기준
+    대상:
+      종목: [GOOGL]
+    조건:
+      - d.macd < -5
+      - cross_up(d.macd_osc, 0)
+    기록: [macd]
+  - 이름: T0_비교_데드크로스_수준무관
+    구분: 비교
+    조건:
+      - cross_down(d.macd_osc, 0)
+  - 이름: T1_꼭지_데드크로스_MACD>+1.7%
+    구분: 의장기준
+    조건:
+      - d.macd_pct > 1.7
+      - cross_down(d.macd_osc, 0)
+    기록: [macd, macd_pct]
+  - 이름: T2_꼭지_양수막대줄기시작_MACD>+1.7%
+    구분: 의장기준
+    조건:
+      - d.macd_pct > 1.7
+      - d.macd_osc > 0
+      - turn_down(d.macd_osc)
+    기록: [macd, macd_pct]
+  - 이름: T3_제안_데드크로스_상위10%
+    구분: 제안
+    조건:
+      - pctl(d.macd_pct, 750, 250) >= 90
+      - cross_down(d.macd_osc, 0)
+  - 이름: T9_알파벳_고정선_MACD>+5_데드크로스
+    구분: 의장기준
+    대상:
+      종목: [GOOGL]
+    조건:
+      - d.macd > 5
+      - cross_down(d.macd_osc, 0)
+    기록: [macd]
