@@ -38,6 +38,8 @@ SOX_MEMBERS = ['NVDA', 'AVGO', 'AMD', 'TSM', 'ASML', 'MU', 'QCOM', 'TXN', 'INTC'
                'MTSI', 'RMBS', 'ONTO', 'AMKR', 'GFS']
 PE_INDEX = {'S&P500': 'S&P500', '나스닥100': 'NDX', '필반지수': 'SOX'}
 PE_COLS = ['날짜', '지수', '선행PE', '종목수', '받은 종목수', '받은 비중(%)', '방법']
+NDX_API = 'https://api.nasdaq.com/api/quote/list-type/nasdaq100'
+MEMBER_ERR = {}   # 위키백과 목록을 못 받은 까닭(점검 파일용)
 WIKI = {'S&P500': ('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies', 'Symbol'),
         '나스닥100': ('https://en.wikipedia.org/wiki/Nasdaq-100', 'Ticker')}
 
@@ -114,14 +116,30 @@ def members(get, name, cache=None):
     if name == '필반지수':
         return list(SOX_MEMBERS)
     url, col = WIKI[name]
+    MEMBER_ERR[name] = ''
     try:
         import io
         r = get(url)
+        lo = 90 if name == '나스닥100' else 400
         for t in pd.read_html(io.StringIO(r.text)):
-            if col in t.columns and 80 <= len(t) <= 600:
-                return [str(s).strip().replace('.', '-') for s in t[col].dropna()]
-    except Exception:
-        pass
+            if isinstance(t.columns, pd.MultiIndex):
+                t.columns = [c[-1] for c in t.columns]
+            t.columns = [str(c).strip() for c in t.columns]
+            c = next((c for c in (col, 'Ticker', 'Symbol', 'Ticker symbol') if c in t.columns), None)
+            if c and lo <= len(t) <= 600:   # 11/12 나스닥100 표를 못 찾음 → 열 이름(Ticker·Symbol) 둘 다 본다
+                return [str(s).strip().replace('.', '-') for s in t[c].dropna()]
+        MEMBER_ERR[name] = '표 못 찾음: ' + '; '.join(f'{len(x)}줄 {list(x.columns)[:4]}' for x in pd.read_html(io.StringIO(r.text))[:6])
+    except Exception as e:
+        MEMBER_ERR[name] = f'{type(e).__name__} {e}'[:200]
+    if name == '나스닥100':          # 위키백과가 안 되면 나스닥 공식 목록(나스닥 사이트가 쓰는 주소)
+        try:
+            rows = get(NDX_API).json()['data']['data']['rows']
+            tick = [str(x['symbol']).strip().replace('.', '-') for x in rows if x.get('symbol')]
+            if len(tick) >= 90:
+                return tick
+            MEMBER_ERR[name] += f' | 나스닥 {len(tick)}종목'
+        except Exception as e:
+            MEMBER_ERR[name] += f' | 나스닥 {type(e).__name__}'
     return list(cache or [])
 
 
