@@ -1,4 +1,5 @@
 work/
 __pycache__/
 *.pyc
+youtube/out/
 news_lab/out/
