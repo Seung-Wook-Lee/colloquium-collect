@@ -239,7 +239,7 @@ def ask_gemini(prompt):
         tried.append(m)
         for n in range(3):
             try:
-                r = requests.post(f'{GEMINI_API}/models/{m}:generateContent', headers={'x-goog-api-key': key}, timeout=240,
+                r = requests.post(f'{GEMINI_API}/models/{m}:generateContent', headers={'x-goog-api-key': key}, timeout=150,
                                   json={'contents': [{'role': 'user', 'parts': [{'text': prompt}]}],
                                         'generationConfig': {'temperature': 0.2, 'responseMimeType': 'application/json'}})
                 if r.status_code in (429, 500, 502, 503, 504) and n < 2:
