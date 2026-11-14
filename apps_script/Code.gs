@@ -31,7 +31,7 @@ function doPost(e) {
     const req = JSON.parse(e.postData.contents);
     const token = PropertiesService.getScriptProperties().getProperty('TOKEN');
     if (!token || req.token !== token) return out_({ ok: false, error: '토큰이 맞지 않음' });
-    if (req.action === 'list') return out_({ ok: true, files: list_(req.path) });
+    if (req.action === 'list') return out_({ ok: true, files: list_(req.path), folders: folders_(req.path) });
     if (req.action === 'get') return out_(get_(req.path));
     if (req.action === 'put') return out_(put_(req.path, req.data, req.mime));
     return out_({ ok: false, error: '모르는 요청: ' + req.action });
@@ -82,6 +82,16 @@ function find_(folder, name) {
     if (nfc_(f.getName()) === name) hits.push(f);
   }
   return hits;
+}
+
+// 하위 폴더 이름 목록(강의 캡처 받는곳처럼 폴더째 넣는 곳용). 옛 호출은 files만 보므로 영향 없음.
+function folders_(path) {
+  const f = folder_(path, false);
+  if (!f) return [];
+  const out = [];
+  const it = f.getFolders();
+  while (it.hasNext()) out.push({ name: nfc_(it.next().getName()) });
+  return out;
 }
 
 function list_(path) {
