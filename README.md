@@ -27,6 +27,9 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 10 | `blocks/b10_gemini.py` | 제미나이 위원(뉴스 국장, 피터·섹터 데스크, 엘피스) 발언 원고 — 회의실은 그대로 대독. 키 없으면 건너뜀 | `_위원_뉴스국장.txt`, `_위원_피터.txt`, `_위원_엘피스.txt` |
 | 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
+## 따로 도는 작업
+- 유튜브 공부자료: `.github/workflows/youtube.yml` + `youtube/` (매일 08:30·21:00, 설명 `youtube/읽는법.txt`)
+
 새 블록은 브리핑(블록 10) 앞 번호로 파일을 만들고, 맨 위 설명 칸을 같은 양식으로 채웁니다.
 
 ## 비밀값 (GitHub → Settings → Secrets and variables → Actions)
