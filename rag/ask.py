@@ -207,7 +207,7 @@ def main():
     ap.add_argument('--위원')
     ap.add_argument('--전체', action='store_true')
     ap.add_argument('--종목')
-    ap.add_argument('--종류', help='기획기사,기업카드,교재,회의록,의장자료,공부자료,룰북,분석,증권사리포트,뉴스')
+    ap.add_argument('--종류', help='기획기사,유튜브,기업카드,교재,회의록,의장자료,공부자료,룰북,분석,증권사리포트,뉴스')
     ap.add_argument('--이후', help='YYYY-MM-DD')
     ap.add_argument('--k', type=int, default=C.TOP_K)
     ap.add_argument('--질문파일')
