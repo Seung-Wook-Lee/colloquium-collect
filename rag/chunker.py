@@ -82,7 +82,7 @@ def path_personas(rel):
 
 
 def kind_of(rel):
-    for k, v in [('기획기사', '기획기사'), ('유튜브', '유튜브'), ('기업카드', '기업카드'), ('교재', '교재'), ('회의록', '회의록'), ('의장자료', '의장자료'),
+    for k, v in [('기획기사', '기획기사'), ('유튜브', '유튜브'), ('위원공부/강의', '강의'), ('기업카드', '기업카드'), ('교재', '교재'), ('회의록', '회의록'), ('의장자료', '의장자료'),
                  ('리포트', '증권사리포트'), ('페르소나/공부자료', '공부자료'), ('페르소나', '룰북'),
                  ('위원공부', '공부자료'), ('종목분석', '분석'), ('뉴스브리핑', '뉴스'), ('미스터역도산', '분석'), ('미스차트', '분석')]:
         if k in rel:
@@ -223,13 +223,39 @@ def split_csv(text):
     return out
 
 
+SLIDE_RE = re.compile(r'^\[슬라이드\s*([^\]]+)\]\s*(.*)$')
+
+
+def split_slides(text):
+    """강의 자료: '[슬라이드 129/194] 단원 > 제목' 줄에서 끊어, 슬라이드 한 장 = 문단 하나(붙이거나 나누지 않음).
+    첫 슬라이드 앞 머리글(출처·강의 날짜)은 따로 한 문단."""
+    lines = text.replace('\r\n', '\n').split('\n')
+    out, head, cur, start = [], '머리글', [], 1
+    for i, ln in enumerate(lines, 1):
+        m = SLIDE_RE.match(ln.strip())
+        if m:
+            if '\n'.join(cur).strip():
+                out.append((head, '\n'.join(cur).strip(), start, i - 1))
+            head, cur, start = f'슬라이드 {m.group(1).strip()} {m.group(2).strip()}'.strip(), [ln], i
+        else:
+            cur.append(ln)
+    if '\n'.join(cur).strip():
+        out.append((head, '\n'.join(cur).strip(), start, len(lines)))
+    return out
+
+
 def chunks_of(path, tagger):
     rel = os.path.relpath(path, C.ROOT)
     try:
         text = open(path, encoding='utf-8-sig').read()
     except UnicodeDecodeError:
         text = open(path, encoding='cp949', errors='replace').read()
-    parts = split_csv(text) if path.lower().endswith('.csv') else split_text(text)
+    if path.lower().endswith('.csv'):
+        parts = split_csv(text)
+    elif '[슬라이드' in text:
+        parts = split_slides(text)
+    else:
+        parts = split_text(text)
     title = _title(path)
     who_path = path_personas(rel)
     date = file_date(path)
