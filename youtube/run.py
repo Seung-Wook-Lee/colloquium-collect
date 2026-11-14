@@ -237,8 +237,33 @@ def ask(parts, temp=0.2):
     raise RuntimeError(f'모든 모델 실패: {err}')
 
 
+def transcript(vid):
+    """유튜브 자막(사람이 단 것 우선, 없으면 자동 자막). [mm:ss] 줄들과 언어. 없거나 막히면 (None, '')."""
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+    except ImportError:
+        return None, ''
+    try:
+        api = YouTubeTranscriptApi()
+        tl = api.list(vid)
+        tr = None
+        for finder in (tl.find_manually_created_transcript, tl.find_generated_transcript):
+            try:
+                tr = finder(['ko', 'en', 'en-US', 'en-GB'])
+                break
+            except Exception:
+                pass
+        if tr is None:
+            tr = next(iter(tl))                 # 다른 언어라도 하나
+        lines = [f'[{int(x.start) // 60:02d}:{int(x.start) % 60:02d}] {x.text}' for x in tr.fetch()]
+        return '\n'.join(lines), tr.language_code
+    except Exception as e:
+        log('    자막 못 받음:', type(e).__name__, str(e)[:80])
+        return None, ''
+
+
 def video_part(vid, start=None, end=None):
-    meta = {'fps': 0.1}                       # 1초 0.1장: 말하는 영상은 화면보다 소리가 중요, 토큰 1/3로
+    meta = {'fps': 0.01}                      # 11/14 의장 "오디오만": 화면은 100초에 한 장(사실상 소리만), 2분 반 영상 3,800토큰
     if start is not None:
         meta.update(startOffset=f'{start}s', endOffset=f'{end}s')
     return {'fileData': {'fileUri': watch_url(vid)}, 'videoMetadata': meta}
@@ -280,19 +305,33 @@ PICK = '''아래 영상 정리를 읽고 이 자료를 가장 먼저 공부할 �
 {text}'''
 
 
-def summarize(vid, seconds):
+TOKENS = {'n': 0}
+
+
+def ask_count(parts, temp=0.2):
+    txt, model, use = ask(parts, temp)
+    TOKENS['n'] += int(use.get('totalTokenCount') or 0)
+    return txt, model, use
+
+
+def summarize(vid, seconds, script=None):
+    if script:
+        txt, model, use = ask_count([{'text': PROMPT.replace('이 유튜브 영상을', '아래 유튜브 영상 자막을') +
+                                      '\n[자막]\n' + script}])
+        log(f'    자막으로 정리, 토큰 {use.get("totalTokenCount")}')
+        return txt, model
     if seconds and seconds > (SEG_MIN + 10) * 60:
         pieces, model = [], ''
         for s in range(0, seconds, SEG_MIN * 60):
             e = min(seconds, s + SEG_MIN * 60)
             log(f'    구간 {s // 60}~{e // 60}분')
-            txt, model, _ = ask([video_part(vid, s, e), {'text': PROMPT + f'\n(이번에는 {s // 60}분~{e // 60}분 구간만 받아 적는다. 시간 표시는 영상 전체 기준.)'}])
+            txt, model, _ = ask_count([video_part(vid, s, e), {'text': PROMPT + f'\n(이번에는 {s // 60}분~{e // 60}분 구간만 받아 적는다. 시간 표시는 영상 전체 기준.)'}])
             pieces.append(f'[{s // 60}분~{e // 60}분 구간]\n{txt}')
         merged = '\n\n'.join(pieces)
-        head, model, _ = ask([{'text': '아래는 한 영상을 구간별로 받아 적은 것이다. 영상 전체에 대해 다음 두 칸만 새로 쓴다. 새 내용은 보태지 않는다.\n'
+        head, model, _ = ask_count([{'text': '아래는 한 영상을 구간별로 받아 적은 것이다. 영상 전체에 대해 다음 두 칸만 새로 쓴다. 새 내용은 보태지 않는다.\n'
                                        '■ 한 줄 요약\n(한두 문장)\n\n■ 핵심 정리\n1. 짧은 제목: 내용\n(5~10줄)\n\n' + merged}])
         return head + '\n\n■ 구간별 받아쓰기\n\n' + merged, model
-    txt, model, use = ask([video_part(vid), {'text': PROMPT}])
+    txt, model, use = ask_count([video_part(vid), {'text': PROMPT}])
     log(f'    토큰 {use.get("totalTokenCount")}')
     return txt, model
 
@@ -300,7 +339,7 @@ def summarize(vid, seconds):
 def pick_persona(text):
     table = '\n'.join(f'- {k}: {v}' for k, v in PERSONAS.items())
     try:
-        ans, _, _ = ask([{'text': PICK.format(table=table, text=text[:6000])}], temp=0)
+        ans, _, _ = ask_count([{'text': PICK.format(table=table, text=text[:6000])}], temp=0)
         ans = re.sub(r'[\s"\'.:]', '', ans)
         for k in PERSONAS:
             if k in ans:
@@ -333,7 +372,7 @@ def load_state():
     return rows
 
 
-COLS = ['영상id', '상태', '시도', '파일', '위원', '채널', '제목', '게시일', '받은곳', '처리시각', '모델', '메모']
+COLS = ['영상id', '상태', '시도', '파일', '위원', '채널', '제목', '게시일', '길이분', '방식', '토큰', '받은곳', '처리시각', '모델', '메모']
 
 
 def save_state(rows):
@@ -369,13 +408,14 @@ def main():
     done = 0
     for it in todo[:MAX_VIDEOS]:
         vid = it['vid']
+        TOKENS['n'] = 0
         log(f'■ {vid} ({it["origin"]})')
         info = page_info(vid)
         title = it.get('title') or info['title']
         channel = it.get('channel') or info['channel']
         if not title or not channel:          # 유튜브 페이지를 못 읽었을 때만: 영상에 보이는 제목·채널을 제미나이에게
             try:
-                ans, _, _ = ask([video_part(vid), {'text': '이 영상 화면·소리에 나온 제목과 채널(진행자) 이름을 "제목|채널" 한 줄로만. 모르면 빈 칸.'}], temp=0)
+                ans, _, _ = ask_count([video_part(vid), {'text': '이 영상 화면·소리에 나온 제목과 채널(진행자) 이름을 "제목|채널" 한 줄로만. 모르면 빈 칸.'}], temp=0)
                 t2, _, c2 = ans.strip().splitlines()[0].partition('|')
                 title, channel = title or t2.strip(), channel or c2.strip()
             except Exception as e:
@@ -385,13 +425,14 @@ def main():
         row = {'영상id': vid, '채널': channel, '제목': title, '게시일': date, '받은곳': it['origin'],
                '처리시각': now().strftime('%Y-%m-%d %H:%M'), '메모': it.get('memo', ''),
                '시도': str(int(st.get('시도') or 0) + 1)}
-        if it['who'] == '아야카상' or info['lang'].startswith('ja'):
+        script, slang = transcript(vid)
+        if it['who'] == '아야카상' or info['lang'].startswith('ja') or (slang.startswith('ja') and not info['lang']):
             row.update(상태='건너뜀', 메모='일본 유튜브는 제이미 몫')
             state[vid] = row
             log('  일본 → 건너뜀')
             continue
         try:
-            body, model = summarize(vid, info['seconds'])
+            body, model = summarize(vid, info['seconds'], script)
         except Exception as e:
             row.update(상태='실패', 메모=str(e)[:150])
             state[vid] = row
@@ -404,7 +445,7 @@ def main():
         head = (f'{title}\n'
                 f'출처: 유튜브 {channel} · {watch_url(vid)}\n'
                 f'게시일: {date[:4]}-{date[4:6]}-{date[6:]} · 길이: {mins}\n'
-                f'정리: {now():%Y-%m-%d %H:%M} KST · 제미나이({model}) 받아쓰기, 판단 없음\n'
+                f'정리: {now():%Y-%m-%d %H:%M} KST · 제미나이({model}) {"자막(" + slang + ")" if script else "소리"}로 받아쓰기, 판단 없음\n'
                 f'위원: {who}{" (의장 지정)" if it["who"] else " (제미나이가 고름)"} · 종류: 유튜브 · 받은 곳: {it["origin"]}\n'
                 + (f'의장 메모: {it["memo"]}\n' if it.get('memo') else '')
                 + '주의: 영상 속 숫자·의견은 출연자 말이며 그날 수집 데이터가 아니다. 판정에는 쓰지 않는다.\n\n')
@@ -415,7 +456,8 @@ def main():
                 drive.put(f'{DRIVE_DIR}/위원공부_유튜브/{fname}', data)
             except Exception as e:
                 log('  드라이브 올리기 실패:', str(e)[:100])
-        row.update(상태='완료', 파일=fname, 위원=who, 모델=model)
+        row.update(상태='완료', 파일=fname, 위원=who, 모델=model, 토큰=str(TOKENS['n']), 방식='자막' if script else '소리', 길이분=str(round(info['seconds'] / 60)))
+        log(f'    이 영상 토큰 합계 {TOKENS["n"]:,}')
         state[vid] = row
         save_state(state)
         done += 1
