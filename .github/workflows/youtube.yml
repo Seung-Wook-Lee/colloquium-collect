@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - run: pip install requests
+      - run: pip install requests youtube-transcript-api==1.2.5
       - name: 받아 적기
         env:
           TZ: Asia/Seoul

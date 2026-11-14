@@ -237,8 +237,33 @@ def ask(parts, temp=0.2):
     raise RuntimeError(f'모든 모델 실패: {err}')
 
 
+def transcript(vid):
+    """유튜브 자막(사람이 단 것 우선, 없으면 자동 자막). [mm:ss] 줄들과 언어. 없거나 막히면 (None, '')."""
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+    except ImportError:
+        return None, ''
+    try:
+        api = YouTubeTranscriptApi()
+        tl = api.list(vid)
+        tr = None
+        for finder in (tl.find_manually_created_transcript, tl.find_generated_transcript):
+            try:
+                tr = finder(['ko', 'en', 'en-US', 'en-GB'])
+                break
+            except Exception:
+                pass
+        if tr is None:
+            tr = next(iter(tl))                 # 다른 언어라도 하나
+        lines = [f'[{int(x.start) // 60:02d}:{int(x.start) % 60:02d}] {x.text}' for x in tr.fetch()]
+        return '\n'.join(lines), tr.language_code
+    except Exception as e:
+        log('    자막 못 받음:', type(e).__name__, str(e)[:80])
+        return None, ''
+
+
 def video_part(vid, start=None, end=None):
-    meta = {'fps': 0.1}                       # 1초 0.1장: 말하는 영상은 화면보다 소리가 중요, 토큰 1/3로
+    meta = {'fps': 0.01}                      # 11/14 의장 "오디오만": 화면은 100초에 한 장(사실상 소리만), 2분 반 영상 3,800토큰
     if start is not None:
         meta.update(startOffset=f'{start}s', endOffset=f'{end}s')
     return {'fileData': {'fileUri': watch_url(vid)}, 'videoMetadata': meta}
@@ -289,7 +314,12 @@ def ask_count(parts, temp=0.2):
     return txt, model, use
 
 
-def summarize(vid, seconds):
+def summarize(vid, seconds, script=None):
+    if script:
+        txt, model, use = ask_count([{'text': PROMPT.replace('이 유튜브 영상을', '아래 유튜브 영상 자막을') +
+                                      '\n[자막]\n' + script}])
+        log(f'    자막으로 정리, 토큰 {use.get("totalTokenCount")}')
+        return txt, model
     if seconds and seconds > (SEG_MIN + 10) * 60:
         pieces, model = [], ''
         for s in range(0, seconds, SEG_MIN * 60):
@@ -342,7 +372,7 @@ def load_state():
     return rows
 
 
-COLS = ['영상id', '상태', '시도', '파일', '위원', '채널', '제목', '게시일', '길이분', '토큰', '받은곳', '처리시각', '모델', '메모']
+COLS = ['영상id', '상태', '시도', '파일', '위원', '채널', '제목', '게시일', '길이분', '방식', '토큰', '받은곳', '처리시각', '모델', '메모']
 
 
 def save_state(rows):
@@ -395,13 +425,14 @@ def main():
         row = {'영상id': vid, '채널': channel, '제목': title, '게시일': date, '받은곳': it['origin'],
                '처리시각': now().strftime('%Y-%m-%d %H:%M'), '메모': it.get('memo', ''),
                '시도': str(int(st.get('시도') or 0) + 1)}
-        if it['who'] == '아야카상' or info['lang'].startswith('ja'):
+        script, slang = transcript(vid)
+        if it['who'] == '아야카상' or info['lang'].startswith('ja') or (slang.startswith('ja') and not info['lang']):
             row.update(상태='건너뜀', 메모='일본 유튜브는 제이미 몫')
             state[vid] = row
             log('  일본 → 건너뜀')
             continue
         try:
-            body, model = summarize(vid, info['seconds'])
+            body, model = summarize(vid, info['seconds'], script)
         except Exception as e:
             row.update(상태='실패', 메모=str(e)[:150])
             state[vid] = row
@@ -414,7 +445,7 @@ def main():
         head = (f'{title}\n'
                 f'출처: 유튜브 {channel} · {watch_url(vid)}\n'
                 f'게시일: {date[:4]}-{date[4:6]}-{date[6:]} · 길이: {mins}\n'
-                f'정리: {now():%Y-%m-%d %H:%M} KST · 제미나이({model}) 받아쓰기, 판단 없음\n'
+                f'정리: {now():%Y-%m-%d %H:%M} KST · 제미나이({model}) {"자막(" + slang + ")" if script else "소리"}로 받아쓰기, 판단 없음\n'
                 f'위원: {who}{" (의장 지정)" if it["who"] else " (제미나이가 고름)"} · 종류: 유튜브 · 받은 곳: {it["origin"]}\n'
                 + (f'의장 메모: {it["memo"]}\n' if it.get('memo') else '')
                 + '주의: 영상 속 숫자·의견은 출연자 말이며 그날 수집 데이터가 아니다. 판정에는 쓰지 않는다.\n\n')
@@ -425,7 +456,7 @@ def main():
                 drive.put(f'{DRIVE_DIR}/위원공부_유튜브/{fname}', data)
             except Exception as e:
                 log('  드라이브 올리기 실패:', str(e)[:100])
-        row.update(상태='완료', 파일=fname, 위원=who, 모델=model, 토큰=str(TOKENS['n']), 길이분=str(round(info['seconds'] / 60)))
+        row.update(상태='완료', 파일=fname, 위원=who, 모델=model, 토큰=str(TOKENS['n']), 방식='자막' if script else '소리', 길이분=str(round(info['seconds'] / 60)))
         log(f'    이 영상 토큰 합계 {TOKENS["n"]:,}')
         state[vid] = row
         save_state(state)
