@@ -7,7 +7,7 @@
 import numpy as np
 import pandas as pd
 
-MA_LIST = [5, 10, 20, 50, 60, 120, 200]
+MA_LIST = [5, 10, 20, 50, 60, 120, 150, 200]
 
 
 def ema(s, n):
