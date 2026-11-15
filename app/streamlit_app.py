@@ -639,11 +639,11 @@ TABLES += [('지수 · 변동성', ['VIX', 'VIX3M', 'VIX − VIX3M'])]
 PRESENTERS = [   # 2026-11-10 의장 확정 회의 순서. (내부 키, 탭 제목, 발표 파일 name에서 찾을 말) — 1. 시장은 탭 위 맨 위.
     # 스트림릿은 회의 자료라 위원 이름을 쓰지 않는다(의장). 찾을 말에 옛 위원 이름도 넣어 둔 것은 지난 발표 파일 호환용.
     # 2026-11-15 의장 "미스 시타델을 만들어서 회의 초반에 매일 보고" → 3. 수급·포지셔닝(뉴스 다음, 순서는 의장이 바꿀 수 있음)
-    ('뉴스', '2. 주요 뉴스', ['주요 뉴스', '국장']), ('수급', '3. 수급·포지셔닝', ['포지셔닝', '미스 시타델', '미스시타델']),
-    ('자금', '4. 자금 흐름', ['자금 흐름', '역도산']),
-    ('리스크', '5. 리스크 체크', ['리스크', '리오']), ('공포', '6. 공포와 탐욕', ['공포', '포보스']),
-    ('섹터', '7. 섹터 분석', ['섹터 분석', '피터', '데스크']), ('기술', '8. 기술적 분석', ['기술적', '미스 차트', '미스차트']),
-    ('일본', '9. 일본 분석', ['일본', '아야카']), ('긍정', '10. 긍정 요인', ['긍정', '엘피스']), ('기타', '11. 기타', ['기타'])]
+    ('뉴스', '2. 주요 뉴스', ['주요 뉴스', '국장']), ('수급', '3. 수급·포지셔닝', ['포지셔닝', '미스 시타델', '미스시타델', '자금 흐름', '역도산']),
+    # 2026-11-15 의장 "역도산은 폐지하고 모든 수급을 시타델이 하는 것으로 통합" → 4. 자금 흐름 칸을 3에 합침(옛 발표 파일 말도 3이 찾음)
+    ('리스크', '4. 리스크 체크', ['리스크', '리오']), ('공포', '5. 공포와 탐욕', ['공포', '포보스']),
+    ('섹터', '6. 섹터 분석', ['섹터 분석', '미스 밸류', '미스밸류', '피터', '데스크']), ('기술', '7. 기술적 분석', ['기술적', '미스 차트', '미스차트']),
+    ('일본', '8. 일본 분석', ['일본', '아야카']), ('긍정', '9. 긍정 요인', ['긍정', '엘피스']), ('기타', '10. 기타', ['기타'])]
 KEYS = {k: ks for k, _, ks in PRESENTERS}
 TOP_CARDS = ['S&P500', '나스닥', '코스피', '필라델피아 반도체(SOX)', '원/달러', '미국 10년']
 
@@ -836,7 +836,6 @@ with t1:
                       st.html(CARD.format(_news_html(more)))
             else:
                 st.info('간밤(전날 18시 이후) 한국어 뉴스가 없습니다.')
-    # 3 미스터 역도산: 섹터 ETF 지도, ETF 자금, 국내 외국인 수급
     # 3 미스 시타델: 누가 반드시 사야 하고 누가 이미 다 팔았나 (2026-11-15 의장, 시타델 GMI 자료)
     with T['수급']:
         data_head(speech(sc, KEYS['수급'], nm))
@@ -894,23 +893,12 @@ with t1:
             cols_ = [c for c in ['항목', '값', '전일', '1주 전', '1달 전', '판정', '무엇', '읽는 법(참고)'] if c in fpt]
             st.dataframe(fpt[cols_], hide_index=True, width='stretch')
 
-    with T['자금']:
-        data_head(speech(sc, KEYS['자금'], nm))
-        yd = csv(DAY, '역도산')
-        a, b = st.columns(2, gap='large')
-        if len(yd) and '60주 이격' in yd:
-            e = yd[yd['구분'] == 'ETF'].copy()
-            e['이름'] = e['ETF'].map(lambda x: f'{hmmod.SECTOR_KO.get(x, x)} {x}')
-            a.altair_chart(gap_bars(e, '이름', '60주 이격', '미국 섹터 ETF · 60주선 이격(100 = 선 위치)'), width='stretch')
-            b.altair_chart(gap_bars(e, '이름', '20주 이격', '미국 섹터 ETF · 20주선 이격'), width='stretch')
-        else:
-            a.info('역도산 지금판(_역도산.csv)이 없습니다.')
-        if len(sec) and '주_20주_이격도' in sec:
-            s_ = sec.assign(이름=sec['종목'].map(short), v=num(sec['주_20주_이격도']))
-            a.altair_chart(gap_bars(s_, '이름', 'v', '국내 섹터 ETF · 20주선 이격'), width='stretch')
+        # 2026-11-15 의장 "역도산은 폐지하고 모든 수급을 시타델이 하는 것으로 통합": ETF 자금·국내 수급도 여기
+        st.markdown('**ETF 자금 · 국내 수급**')
+        fca_, fcb_ = st.columns(2, gap='large')
         fl = csv(DAY, 'ETF자금')
         if len(fl) and '유입_5일' in fl:
-            for mk_, lbl_, where in (('미국', '미국', b), ('한국', '국내', b)):
+            for mk_, lbl_, where in (('미국', '미국', fca_), ('한국', '국내', fcb_)):
                 f_ = fl[fl['시장'].astype(str) == mk_].assign(v=lambda x: num(x['유입_5일']))
                 # 2026-11-11 SOXX 5일 +206억 달러(순자산의 47%) 오류: 하루·5일 유입이 순자산의 10%를 넘으면 좌수 자료 오류로 보고 뺀다
                 aum_ = num(f_['순자산']).abs()
@@ -1060,7 +1048,7 @@ with t1:
                             show_1y(key, raw)
         market_tables(R, ['지수 · 변동성'])
 
-    # 6 피터·데스크: 데스크 하위 탭(발표 파일), 콜로키움 100 히트맵(층별), 하루 등락 상·하위
+    # 6 미스 밸류·데스크: 데스크 하위 탭(발표 파일), 콜로키움 100 히트맵(층별), 하루 등락 상·하위
     with T['섹터']:
         data_head(speech(sc, KEYS['섹터'], nm))
         market_tables(R, ['지수'])
@@ -1075,6 +1063,19 @@ with t1:
             cols_ = [c for c in ['정식 종목명', '52주고점대비(%)', '10년_하락p', '잔차13주_하락p', '베타(주간2년)', '예외 정리'] if c in ex]
             st.markdown(f'**예외적 하락 (10년 자기역사 p ≤ 0.05 또는 베타 잔차 13주 p ≤ 0.05) · {len(hit)}종목**')
             st.dataframe(hit[cols_].sort_values(cols_[2] if len(cols_) > 2 else cols_[0]), hide_index=True, width='stretch')
+        # 섹터 ETF 60·20주선 지도: 2026-11-15 역도산 폐지 → 차트 칸으로(담당은 의장 확인 중)
+        yd = csv(DAY, '역도산')
+        a, b = st.columns(2, gap='large')
+        if len(yd) and '60주 이격' in yd:
+            e = yd[yd['구분'] == 'ETF'].copy()
+            e['이름'] = e['ETF'].map(lambda x: f'{hmmod.SECTOR_KO.get(x, x)} {x}')
+            a.altair_chart(gap_bars(e, '이름', '60주 이격', '미국 섹터 ETF · 60주선 이격(100 = 선 위치)'), width='stretch')
+            b.altair_chart(gap_bars(e, '이름', '20주 이격', '미국 섹터 ETF · 20주선 이격'), width='stretch')
+        else:
+            a.info('섹터 ETF 지도(_역도산.csv)가 없습니다.')
+        if len(sec) and '주_20주_이격도' in sec:
+            s_ = sec.assign(이름=sec['종목'].map(short), v=num(sec['주_20주_이격도']))
+            a.altair_chart(gap_bars(s_, '이름', 'v', '국내 섹터 ETF · 20주선 이격'), width='stretch')
         nx = csv(DAY, '닉스')
         if len(nx) and {'일_RSI', '일_50일_이격도', '월_5개월선'} <= set(nx.columns) and len(price):
             cl = price.set_index('yfinance 티커')['종가']
