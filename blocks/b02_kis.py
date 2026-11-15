@@ -84,7 +84,7 @@ try:
             first = EXCD.get(s['거래소'], 'NAS')
             for ex in [first] + [e for e in ['NAS', 'NYS', 'AMS'] if e != first and first != 'TSE']:
                 x = kis_get('/uapi/overseas-price/v1/quotations/price-detail', 'HHDFS76200200',
-                            {'AUTH': '', 'EXCD': ex, 'SYMB': s['코드']})
+                            {'AUTH': '', 'EXCD': ex, 'SYMB': str(s['코드']).replace('-', '/')})   # 한투 해외 기호는 BRK/B 식(11/16)
                 if x and num(x.get('last')):
                     r.update({'현재가': num(x.get('last')), '통화': x.get('curr'), 'PER': num(x.get('perx')),
                               'PBR': num(x.get('pbrx')), 'EPS': num(x.get('epsx')), 'BPS': num(x.get('bpsx')),
