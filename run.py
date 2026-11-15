@@ -2,16 +2,20 @@
 #   blocks/ 폴더의 블록 파일(b00 ~ b11)을 번호 순서대로 한 공간에서 실행한다(코랩에서 칸을 위에서부터 돌리는 것과 같음).
 #   한 블록이 실패해도 다음 블록은 계속 돈다. 블록 0(준비)이 실패하면 거기서 멈춘다.
 #   일부만 돌리기: python run.py 0 1 3 4   (블록 0과 11은 항상 포함)
+#   이름으로 돌리기: python run.py etfcard  (파일 이름에 그 글자가 든 블록만, 블록 0·2·11은 항상 포함)
 import glob, os, re, sys, traceback
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 
 only = {int(a) for a in sys.argv[1:] if a.isdigit()}
-G = {'__name__': '__colloquium__', 'ONLY': sorted(only)}
+names = [a for a in sys.argv[1:] if not a.isdigit()]
+G = {'__name__': '__colloquium__', 'ONLY': sorted(only) or ([-1] if names else []), 'ONLY_NAMES': names}   # 이름 실행도 시험 실행으로 본다
 for path in sorted(glob.glob('blocks/b[0-9][0-9]_*.py')):
     no = int(re.search(r'b(\d\d)_', path).group(1))
-    if only and no not in only | {0, 11}:
+    if names and not (no in {0, 2, 11} or any(n in os.path.basename(path) for n in names)):
+        continue
+    if only and not names and no not in only | {0, 11}:
         continue
     print(f'\n===== {os.path.basename(path)} =====', flush=True)
     try:
