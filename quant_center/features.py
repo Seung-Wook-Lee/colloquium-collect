@@ -57,10 +57,12 @@ def stocks(d):
     F = _r(d, '국내수급')
     if len(F):
         q = pd.DataFrame({'번호': F['번호'], 'f5': _num(F['외국인 5일(억원)']), 'f20': _num(F['외국인 20일(억원)']),
-                          'inst5': _num(F['기관 5일(억원)']), 'fstreak': F['외국인 연속'].map(_streak),
+                          'inst5': _num(F['기관 5일(억원)']), 'ind5': _num(F['개인 5일(억원)']), 'fstreak': F['외국인 연속'].map(_streak),
                           'dip_buy': F['표시'].astype(str).str.contains('주가↓·외국인↑').astype(int)})
         f = f.merge(q, on='번호', how='left')
     V = _r(d, '밸류에이션')
+    if len(V) and '시가총액(억원)' in V:
+        f = f.merge(pd.DataFrame({'번호': V['번호'], 'mcap_kr': _num(V['시가총액(억원)'])}), on='번호', how='left')
     if len(V):
         f = f.merge(pd.DataFrame({'번호': V['번호'], 'pbr': _num(V['PBR']), 'fper': _num(V['선행 PER(야후)']),
                                   'per_kis': _num(V['PER'])}), on='번호', how='left')
@@ -199,6 +201,15 @@ def stocks(d):
         f['rs5'] = f['ret5'] - pd.Series(idx).map(i5).values
         f['rs20'] = f['ret20'] - pd.Series(idx).map(i20).values
         f['peer20'] = f['ret20'] - f.groupby(['시장', 'layer'])['ret20'].transform('median')
+        # 11/17 운용사·외부 AI 반영: 중간 속도 추세(Winton·AQR), 방어주(Robeco·챗지), 가짜 바닥(제이미 B29)
+        for n in (63, 120, 126):
+            f[f'ret{n}'] = f['ticker'].map(P.apply(lambda x, n=n: ret(x, n)))
+        v126 = r.tail(126).std() * np.sqrt(252) * 100
+        f['vol126'] = f['ticker'].map(v126)
+        f['vol126_rank'] = f.groupby(['시장', 'layer'])['vol126'].rank(pct=True)
+        ma200 = P.apply(lambda x: x.dropna().tail(200).mean())
+        f['ma200'] = f['ticker'].map(ma200); f['ma50'] = f['ticker'].map(ma50)
+        f['survive'] = ((f['ticker'].map(last) >= f['ma200'] * 0.95) & ~((f['ma50'] < f['ma200']) & (f['ret5'] >= 5))).astype(int).where(f['ma200'].notna())
     # 블룸버그 12개월 선행 EPS(톰스뉴스 표, 미국 상위 30): 1주·YTD 변화, 선행 PER
     BB = _r(d, '블룸버그EPS')
     if len(BB):
@@ -281,13 +292,15 @@ def market(d):
     if len(C):
         g = dict(zip(C['항목'], _num(C['값'])))
         m.update(US10Y=g.get('미국 10년물'), REAL10Y=g.get('실질금리(10년 TIPS)'))
+        m['REAL10Y_1W'] = dict(zip(C['항목'], _num(C['1주 전']))).get('실질금리(10년 TIPS)')
     G = _r(d, '공포탐욕')
     if len(G):
         m['FG'] = float(_num(G.loc[G['구분'] == '종합', '점수']).iloc[0])
     P = _r(d, '수급포지셔닝')
     if len(P):
         g = dict(zip(P['항목'], _num(P['값'])))
-        m.update(CTA=g.get('CTA σ(근사)'), VOLT=g.get('변동성타기팅 노출(배)'))
+        m.update(CTA=g.get('CTA σ(근사)'), VOLT=g.get('변동성타기팅 노출(배)'), VXN_PCT=g.get('VXN 1년 백분위(%)'),
+                 VIX_PCT=g.get('VIX 1년 백분위(%)'), EWNDX_PCT=g.get('비율 1년 백분위(%)'))
     A = _r(d, 'ETF자금')
     if len(A):
         safe = A[(A['시장'] == '한국') & A['이름'].astype(str).str.contains('200|커버드콜|미국S&P500|미국나스닥100')]
