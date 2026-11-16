@@ -237,3 +237,86 @@ def basket(C, f, BK, defmode, LR, dd):
     cash = 100 - (T['목표비중'].sum() if len(T) else 0)
     T = pd.concat([T, pd.DataFrame([dict(종목='현금(빈 층·주문 한도·AI 상한)', 층='-', 목표비중=round(cash, 1), 회차1=None)])], ignore_index=True)
     return T, {k: round(v, 1) for k, v in W.items()}
+
+
+def relative(d, P, f):
+    """시장 안 백분위(낮은 값 = 좋음: 변동성·꼬리손실·베타 하위, 고점 근접 상위)와 같은 시장 AI 묶음 대비 상대 수익률."""
+    U = _u(d); r = P.pct_change(fill_method=None)
+    f = f.copy(); ok = f['layer'] != 'S0'
+    g = f[ok].groupby('시장')
+    f.loc[ok, 'vol60_mpct'] = g['vol60'].rank(pct=True)
+    f.loc[ok, 'es5_mpct'] = g['es5'].rank(pct=True, ascending=False)     # 손실 작을수록 낮은 백분위
+    f.loc[ok, 'beta_mpct'] = g['beta'].rank(pct=True)
+    f.loc[ok, 'dd52_mpct'] = g['dd52'].rank(pct=True, ascending=False)   # 고점에 가까울수록 낮은 백분위
+    for mk in f['시장'].unique():
+        ai = [t for t in P if t in U.index and U.at[t, '시장'] == mk and U.at[t, '층'] in AI]
+        if not ai:
+            continue
+        A = (1 + r[ai].mean(axis=1).fillna(0)).cumprod()
+        for n in (63, 120, 126):
+            f.loc[f['시장'] == mk, f'rs_ai{n}'] = f.loc[f['시장'] == mk, f'ret{n}'] - (A.iloc[-1] / A.iloc[-1 - n] - 1) * 100
+    return f
+
+
+def advisors(d, NM):
+    """외부자문사 MP(입력 폴더 외부자문사/ 또는 /mnt/project-files/외부자문사/의 *_MP_*.csv, 자문사마다 최신 1개).
+    돌려줌: {티커: (보유 자문사 수, 신규 편입 수)}, 자문사 평균 국가 비중 {'미국': %, '한국': %}, 읽은 파일."""
+    import glob, os, re
+    files = glob.glob(f'{d}/외부자문사/*_MP_*.csv') or glob.glob('/mnt/project-files/외부자문사/*_MP_*.csv')
+    latest = {}
+    for p in files:
+        k = os.path.basename(p).split('_MP_')[0]
+        if k not in latest or p > latest[k]:
+            latest[k] = p
+    U = _u(d); name2t = {}
+    for t, r in U.iterrows():
+        for c in ('정식 종목명', '원본 표기'):
+            if isinstance(r.get(c), str): name2t[r[c].strip()] = t
+    name2t.update(NM or {})
+    hold, cw = {}, []
+    for k, p in latest.items():
+        A = pd.read_csv(p, encoding='utf-8-sig')
+        A = A[A['시장'].isin(['미국', '한국'])]
+        A['w'] = pd.to_numeric(A['비중(%)'], errors='coerce').fillna(0)
+        tot = A.groupby('시장')['w'].sum()
+        if tot.sum() > 0: cw.append((tot / tot.sum() * 100).to_dict())
+        for _, r in A[A['w'] > 0].iterrows():
+            nm = str(r['종목']); new = '신규' in nm; nm = re.sub(r'\(.*?\)', '', nm).strip()
+            t = name2t.get(nm)
+            if t:
+                h, n = hold.get(t, (0, 0)); hold[t] = (h + 1, n + int(new))
+    avg = {mk: float(np.mean([c.get(mk, 0) for c in cw])) for mk in ('미국', '한국')} if cw else {}
+    return hold, avg, sorted(latest.values())
+
+
+def country(m, f, P, adv_avg, CC):
+    """국가 비중 규칙: 기본 = 자문사 평균 국가 비중(없으면 50/50) → 근거 있을 때만 기울임. 각 나라 하한 유지. 이유 한 줄."""
+    base = dict(adv_avg) if adv_avg else {'미국': 50.0, '한국': 50.0}
+    why = [f"기본 자문사 평균 미국 {base['미국']:.0f}%·한국 {base['한국']:.0f}%" if adv_avg else '기본 50/50(자문사 자료 없음)']
+    us, kr = base['미국'], base['한국']
+    dus, dkr = m.get('DEF_미국', 0), m.get('DEF_한국', 0)
+    if dus != dkr:
+        s = CC['국면차_이동'] * (1 if dus else -1); us -= s; kr += s
+        why.append(f"B00 국면 차이({'미국' if dus else '한국'}만 방어) → {CC['국면차_이동']}%p 이동")
+    try:
+        I = pd.read_csv(f"{m.get('_d')}/지수2년.csv", encoding='utf-8-sig', index_col=0)
+        g = lambda k: I[k].dropna().iloc[-1] / I[k].dropna().iloc[-64] - 1
+        rs = (g('^GSPC') - g('^KS11')) * 100
+        if abs(rs) >= CC['지수RS_문턱']:
+            s = CC['지수RS_이동'] * (1 if rs > 0 else -1); us += s; kr -= s
+            why.append(f"3달 지수 상대강도 S&P−코스피 {rs:+.1f}%p → {'미국' if rs > 0 else '한국'} +{CC['지수RS_이동']}%p")
+    except Exception:
+        pass
+    k = f[(f['시장'] == '한국') & f['f5'].notna()] if 'f5' in f else pd.DataFrame()
+    if len(k):
+        fs = float(k['f5'].sum())
+        if fs <= CC['외국인5일_문턱']:
+            us += CC['외국인_이동']; kr -= CC['외국인_이동']
+            why.append(f"한국 외국인 5일 합계 {fs:,.0f}억 → 한국 −{CC['외국인_이동']}%p")
+        elif fs >= -CC['외국인5일_문턱']:
+            us -= CC['외국인_이동']; kr += CC['외국인_이동']
+            why.append(f"한국 외국인 5일 합계 +{fs:,.0f}억 → 한국 +{CC['외국인_이동']}%p")
+    lo = CC['하한']
+    kr = min(max(kr, lo), 100 - lo); us = 100 - kr
+    why.append(f"하한 각 {lo}% → 미국 {us:.0f}%·한국 {kr:.0f}%")
+    return {'미국': us, '한국': kr}, ' / '.join(why)

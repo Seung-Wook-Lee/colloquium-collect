@@ -45,6 +45,12 @@ def run(d, cfg='blocks.yaml'):
     LR = O.layer_rs(d, P) if len(P) else {}
     f['lay_rs_rank'] = [LR.get((mk, l), (np.nan, 0))[0] for mk, l in zip(f['시장'], f['layer'])]
     f['lay_rs_top'] = [int(LR[(mk, l)][0] <= max(1, LR[(mk, l)][1] // 3)) if (mk, l) in LR else np.nan for mk, l in zip(f['시장'], f['layer'])]
+    # 11/17 의장: 방어 국면 기준은 절대값이 아니라 시장 안 상대 순위(한국은 한국끼리, 미국은 미국끼리)
+    f = O.relative(d, P, f)
+    ADV, ADV_W, ADV_F = O.advisors(d, B.get('자문사_이름', {}))   # 외부자문사 MP(S·C, 파일 생기면 자동)
+    f['adv_hold'] = [ADV.get(t, (0, 0))[0] for t in f['ticker']]
+    f['adv_new'] = [ADV.get(t, (0, 0))[1] for t in f['ticker']]
+    m['_d'] = d; m['ADV_W'] = ADV_W; m['ADV_FILES'] = ', '.join(ADV_F)
     MULT, WHY, FLOW = O.limits(d, P, f, OC) if len(P) else ({}, {}, {})
     CRW = O.crowding(d, P, f, m, OC) if len(P) else {}
     FLIP = O.cta_flip(d)
@@ -80,6 +86,8 @@ def run(d, cfg='blocks.yaml'):
         DEF = bool(m.get(f"DEF_{row['시장']}"))
         for bid, b in SB.items():
             if b.get('대상') == '개별주' and row['구분'] != '개별주':
+                out[bid] = '해당 없음'; continue
+            if '조건' in b and not _ev(b['조건'], row):   # 보너스 블록: 조건이 맞을 때만 셈
                 out[bid] = '해당 없음'; continue
             reg = b.get('국면')   # 강세 = 방어 국면이면 쉼, 방어 = 방어 국면에서만 셈
             if reg and ((reg == '강세') == DEF):
