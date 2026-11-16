@@ -8,6 +8,7 @@ import pandas as pd
 import yaml
 
 import features as F
+import orders as O
 
 LBL = {True: '통과', False: '불통과', None: '자료 없음'}
 
@@ -30,7 +31,23 @@ def run(d, cfg='blocks.yaml'):
     f = F.stocks(d)
     f = f[f['시장'].isin(['한국', '미국'])].reset_index(drop=True)
     m = F.market(d)
-    DEF = bool(m.get('ROT_DEF'))   # 방어 국면(AI÷비AI 비율 50일선 아래 + 20일 하락)
+    P = F._px(d)
+    # B00 시장별 방어 국면(챗지 식: 5일 중 3일 + 당일, 해제도 같은 방식, 그 사이 유지)
+    RG = O.regime(d, P, B['국면']) if len(P) else {}
+    for mk, v in RG.items():
+        m[f'DEF_{mk}'] = v['DEF']; m[f'ROT_G_{mk}'] = v['G']; m[f'ROT_M_{mk}'] = v['M']
+    m['ROT_DEF'] = int(any(v['DEF'] for v in RG.values()))
+    m.update(O.record(m))                      # 제이미 C_rate·C_techvol·C_breadth: 기록만
+    IR = O.index_regime(d)                     # 지수 252·21일 4국면: 기록만
+    for mk, v in IR.items(): m[f'IDX_{mk}'] = v
+    OC = B.get('주문', {})
+    LR = O.layer_rs(d, P) if len(P) else {}
+    f['lay_rs_rank'] = [LR.get((mk, l), (np.nan, 0))[0] for mk, l in zip(f['시장'], f['layer'])]
+    f['lay_rs_top'] = [int(LR[(mk, l)][0] <= max(1, LR[(mk, l)][1] // 3)) if (mk, l) in LR else np.nan for mk, l in zip(f['시장'], f['layer'])]
+    MULT, WHY, FLOW = O.limits(d, P, f, OC) if len(P) else ({}, {}, {})
+    CRW = O.crowding(d, P, f, m, OC) if len(P) else {}
+    FLIP = O.cta_flip(d)
+    for mk, v in FLIP.items(): m[f'CTA_FLIP_{mk}'] = v
     M = pd.DataFrame([dict(블록=bid, 질문=b['질문'], 공식=n, 결과=LBL[_ev(e, m)], 방향=side)
                       for bid, b in B['시장'].items() for n, e, side in b['공식']])
     SB = B['종목']
@@ -59,6 +76,7 @@ def run(d, cfg='blocks.yaml'):
         out = {'번호': row['번호'], '종목': row['종목'], '시장': row['시장'], '구분': row['구분'], '층': row.get('layer')}
         scores, why, allp, alln = [], [], 0, 0
         yes_blocks = []
+        DEF = bool(m.get(f"DEF_{row['시장']}"))
         for bid, b in SB.items():
             if b.get('대상') == '개별주' and row['구분'] != '개별주':
                 out[bid] = '해당 없음'; continue
@@ -82,7 +100,7 @@ def run(d, cfg='blocks.yaml'):
             if b['역할'] == '점수' and sc is not None:
                 scores.append(sc)
             if b['역할'] in ('핵심', '점수', '타이밍') and sc is not None:
-                yes_blocks.append((bid, b['질문'], sc >= 0.5))
+                yes_blocks.append((bid, b['질문'], sc >= 0.5, b.get('가중', 1)))
             if '통과식' in b:
                 out[bid] = {True: '통과', False: '탈락', None: '자료 없음'}[_ev(b['통과식'], row)]
             else:
@@ -120,10 +138,22 @@ def run(d, cfg='blocks.yaml'):
         out['5일(%)'] = None if pd.isna(row.get('ret5')) else round(row['ret5'], 1)
         out['빠지는 이유'] = ', '.join(why_dn)
         out['변수'] = row.get('변수', '')
-        ny = sum(1 for _, _, y in yes_blocks if y); nb = len(yes_blocks)
+        ny = sum(w for _, _, y, w in yes_blocks if y); nb = sum(w for *_, w in yes_blocks)
+        out['국면'] = ('방어' if DEF else '평상') + (f" · 지수 {IR[row['시장']]}" if row['시장'] in IR else '')
+        out['갈래'] = '주도' if _ev('dd52 >= -10', row) else '눌림'
+        out['가짜바닥아님'] = row.get('survive')
+        out['핵심관측'] = sum(1 for k in ('이익 전망이 오르나?', '회사가 튼튼한가?', '싼가? (줄 세우기 뼈대)', '퀀트 모델(BLOCK20)은 어떻게 보나?')
+                           if any(q == k for _, q, *_ in yes_blocks))
+        # 주문 한도(B27·B28·B29·쏠림·CTA 전환): 가장 엄격한 승수 하나
+        lay = row.get('layer'); mu, al = MULT.get(lay, 1.0), [WHY[lay]] if lay in WHY else []
+        if lay in CRW: mu = min(mu, OC.get('승수', 0.5)); al.append(CRW[lay])
+        fl = FLIP.get(row['시장'])
+        if fl is not None and fl > -OC.get('CTA_전환_%', 2) and _ev(f"beta > {OC.get('고베타', 1.2)}", row):
+            mu = min(mu, OC.get('승수', 0.5)); al.append(f'CTA 매도 전환까지 {fl}%(고베타)')
+        out['주문승수'] = mu; out['경보'] = ' / '.join(al)
         out['블록예'] = ny; out['블록수'] = nb; out['블록예비율'] = round(ny / nb, 2) if nb else None
-        out['블록 예'] = ' / '.join(f'{k} {q}' for k, q, y in yes_blocks if y)
-        out['블록 아니오'] = ' / '.join(f'{k} {q}' for k, q, y in yes_blocks if not y)
+        out['블록 예'] = ' / '.join(f'{k} {q}' for k, q, y, _ in yes_blocks if y)
+        out['블록 아니오'] = ' / '.join(f'{k} {q}' for k, q, y, _ in yes_blocks if not y)
         out['Sigma Check'] = row.get('sigma_note')
         out_rows.append(out)
     S = pd.DataFrame(out_rows)
@@ -182,20 +212,26 @@ def run(d, cfg='blocks.yaml'):
             ys = [x for x in ys if x != lab]; ns = [x for x in ns if x != lab]
             (ys if v >= 0.5 else ns).append(lab)
         S.at[i, '블록 예'] = ' / '.join(ys); S.at[i, '블록 아니오'] = ' / '.join(ns)
-        S.at[i, '블록예'] = len(ys); S.at[i, '블록수'] = len(ys) + len(ns)
-        S.at[i, '블록예비율'] = round(len(ys) / (len(ys) + len(ns)), 2) if ys or ns else None
-    filt = S[K_EARN].isin(['통과', '해당 없음']) & (S[K_EVENT] == '통과') & (S[K_HIGH] != '탈락')
+        wt = lambda L: sum(SB.get(x.split(' ')[0], {}).get('가중', 1) for x in L)
+        S.at[i, '블록예'] = wt(ys); S.at[i, '블록수'] = wt(ys) + wt(ns)
+        S.at[i, '블록예비율'] = round(wt(ys) / (wt(ys) + wt(ns)), 2) if ys or ns else None
+    filt = S[K_EARN].isin(['통과', '해당 없음']) & (S[K_EVENT] == '통과')   # B12 거르기 폐지 → 갈래(주도·눌림)
     S['판정'] = np.where(filt, np.where(S[K_SIZE].isin(['통과', '해당 없음']), '후보', '참고만'),
                         np.where(S[K_EARN] == '자료 없음', '자료 부족', '걸러짐'))
     S = S.rename(columns={K_SPLIT: '분할', K_CAP: '비중상한(%)', K_SELL: '매도신호'})
     S['싼가'] = pd.to_numeric(S[K_CHEAP], errors='coerce')
     S.loc[S['층'] == 'S0', '판정'] = '기준층(지수·현금·금, 추천 대상 아님)'
     R = B.get('추천', {})
-    cut, cut2, minb = R.get('추천선', 2 / 3), R.get('관찰선', 0.5), R.get('최소블록_방어' if DEF else '최소블록', 8)
-    enough = S['블록수'] >= np.where(S['구분'] == '개별주', minb, R.get('최소블록_ETF_방어' if DEF else '최소블록_ETF', 6))
-    S['국면'] = '방어(AI 묶음 약세)' if DEF else '평상'
+    cut, cut2 = R.get('추천선', 2 / 3), R.get('관찰선', 0.5)
+    dfr = S['국면'].astype(str).str.startswith('방어')
+    minb = np.where(dfr, np.where(S['구분'] == '개별주', R.get('최소블록_방어', 6), R.get('최소블록_ETF_방어', 6)),
+                    np.where(S['구분'] == '개별주', R.get('최소블록', 8), R.get('최소블록_ETF', 6)))
+    enough = (S['블록수'] >= minb) & (S['핵심관측'] >= R.get('핵심관측', 3))
     S['추천'] = np.where(S['판정'] != '후보', S['판정'], np.where(~enough, '자료 부족(블록 수 모자람)',
                 np.where(S['블록예비율'] >= cut, '추천', np.where(S['블록예비율'] >= cut2, '관찰', '대기'))))
+    # 제이미 B29: 눌림 갈래는 가짜 바닥이 아닐 때만 추천(아니면 관찰까지)
+    fake = (S['갈래'] == '눌림') & (S['가짜바닥아님'] == 0) & (S['추천'] == '추천')
+    S.loc[fake, '추천'] = '관찰'
     S = S.sort_values(['블록예비율', '싼가'], ascending=False)
     S = S.sort_values(['판정', '싼가', '점수'], ascending=[True, False, False])
     return S, pd.DataFrame(detail), M, m
