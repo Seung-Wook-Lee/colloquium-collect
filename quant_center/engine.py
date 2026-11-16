@@ -36,6 +36,7 @@ def run(d, cfg='blocks.yaml'):
     RG = O.regime(d, P, B['국면']) if len(P) else {}
     for mk, v in RG.items():
         m[f'DEF_{mk}'] = v['DEF']; m[f'ROT_G_{mk}'] = v['G']; m[f'ROT_M_{mk}'] = v['M']
+    if m.get('DEF_미국'): m['DEF_한국'] = 1   # 11/17 의장: 미국이 방어 국면이면 한국도 방어
     m['ROT_DEF'] = int(any(v['DEF'] for v in RG.values()))
     m.update(O.record(m))                      # 제이미 C_rate·C_techvol·C_breadth: 기록만
     IR = O.index_regime(d)                     # 지수 252·21일 4국면: 기록만
