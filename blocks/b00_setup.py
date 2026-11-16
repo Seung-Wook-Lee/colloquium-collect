@@ -36,7 +36,8 @@ try:
 except ImportError:
     IN_COLAB = False
 
-KEYS = ['KIS_APP_KEY', 'KIS_APP_SECRET', 'FRED_KEY', 'DART_KEY', 'SEC_EMAIL']
+KEYS = ['KIS_APP_KEY', 'KIS_APP_SECRET', 'FRED_KEY', 'DART_KEY', 'SEC_EMAIL',
+        'NAVER_CLIENT_ID', 'NAVER_CLIENT_SECRET', 'FINNHUB_KEY', 'TAVILY_KEY']   # 뉴스 키 4개는 2026-10-31 추가(없으면 그 통로만 건너뜀)
 SEC = {}
 for n in KEYS:
     try:
@@ -110,7 +111,9 @@ where = 'GitHub' if not IN_COLAB else '코랩'
 log(f'[준비] {NOW:%Y-%m-%d %H:%M} KST | 실행 {where} | 저장 폴더 {D_DATA}/{TODAY} | '
     + (f'드라이브에서 받은 누적 파일 {pulled}개 | ' if not IN_COLAB else '')
     + f'한투 키 {sum(bool(SEC[k]) for k in SEC if k.startswith("KIS"))}/2 | FRED 키 {"있음" if SEC["FRED_KEY"] else "없음"} | '
-    f'DART 키 {"있음" if SEC["DART_KEY"] else "없음"} | SEC 이메일 {"있음" if SEC["SEC_EMAIL"] else "없음"}')
+    f'DART 키 {"있음" if SEC["DART_KEY"] else "없음"} | SEC 이메일 {"있음" if SEC["SEC_EMAIL"] else "없음"} | '
+    f'뉴스 키 네이버 {"있음" if SEC["NAVER_CLIENT_ID"] and SEC["NAVER_CLIENT_SECRET"] else "없음"}·'
+    f'Finnhub {"있음" if SEC["FINNHUB_KEY"] else "없음"}·Tavily {"있음" if SEC["TAVILY_KEY"] else "없음"}')
 
 # 유니버스: 포트폴리오 폴더의 최신 콜로키움 100 종목표 (드라이브 한글 이름이 NFD일 수 있어 NFC로 맞춰 찾는다)
 cands = sorted((f for f in os.listdir(UNIV_DIR) if _is_univ(f)), key=_univ_key)

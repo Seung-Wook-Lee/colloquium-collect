@@ -7,6 +7,14 @@
 #                      2026-10-31 추가 — SK하이닉스 10/28 실적처럼 한국 종목 큰 뉴스가 수집에서 빠지던 구멍을 막는다.
 #                   ④ 아침 정리 기사: 국내 언론사의 '뉴욕증시 마감·간밤 해외증시·모닝 브리핑' 기사를 구글 뉴스 검색 RSS로 모은다.
 #                      한 언론사만 막혀도 다른 곳 기사가 잡히는 예비 통로. 2026-10-30 의장 "뉴스블록의 대안을 마련하자"
+#                   ⑥ DART 공시 제목: 한국 개별주의 어제·오늘 공시 전부. 자사주·배당·소각은 [주주환원], 증자·합병·수주는 [자본·지배구조]
+#                      꼬리표를 달고 먼저 싣는다. 2026-10-31 의장 "주주 환원 같은 건 공시가 뜨잖아, DART도 자주 봐야"
+#                   ⑦ 네이버 뉴스 검색 API: 한국 개별주, 제목+요약(키 NAVER_CLIENT_ID·NAVER_CLIENT_SECRET, 무료 하루 25,000회)
+#                      새 키는 네이버 클라우드 NAVER API HUB에서 발급(한시 무료, 유료 전환 땐 사전 공지)
+#                   무료 한도: API_LIMITS. 80% 넘으면 브리핑 맨 위 [사용량 주의], 95% 넘으면 그 통로를 쉰다(00_누적/00_API사용량.csv)
+#                   ⑧ Finnhub 종목 뉴스: 미국 개별주, 제목+요약(키 FINNHUB_KEY, 무료 분당 60회)
+#                   ⑨ 사건 검색(Tavily): 전일 ±5% 넘게 움직인 개별주만 '종목명 + 급등/급락 이유'로 검색(키 TAVILY_KEY, 무료 월 1,000)
+#                      ⑦⑧⑨는 키가 없으면 건너뛰고 점검 파일에 '건너뜀'으로 남긴다.
 #              (나) 국내 실적발표 일정: 한국 개별주의 DART 거래소공시 중 '기업설명회(IR) 개최'·'결산실적공시 예고'를
 #                   찾아 본문에서 날짜·시각을 읽는다. 오늘·어제 나온 '영업(잠정)실적' 공시도 함께 적는다.
 #              (다) 미국·일본 종목 실적발표 일정: 야후 실적 발표일(시각은 한국 시각으로 바꿈)
@@ -15,7 +23,8 @@
 #              (라) 미국 주요 경제지표 발표 일정: FRED 발표 달력(CPI·고용·PCE·GDP·FOMC 등).
 #                   FRED에는 발표 시각이 없어 통상 발표 시각(미국 동부)을 한국 시각으로 바꿔 '통상'이라 적는다.
 #              일정은 오늘부터 SCHED_DAYS일 안의 것만. 판정은 하지 않는다.
-#   소스     : 연합뉴스·야후 종목별·CNBC·구글 뉴스 검색 RSS(키 없음), DART OpenAPI(DART_KEY), 야후(키 없음), FRED API(FRED_KEY)
+#   소스     : 연합뉴스·야후 종목별·CNBC·구글 뉴스 검색 RSS(키 없음), DART OpenAPI(DART_KEY), 야후(키 없음), FRED API(FRED_KEY),
+#              네이버 검색 API(NAVER_CLIENT_ID·SECRET), Finnhub(FINNHUB_KEY), Tavily(TAVILY_KEY)
 #   읽는 것  : 수집데이터/00_누적/00_DART_고유번호.csv (블록 6이 만든 종목코드 → DART 고유번호)
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_뉴스.csv (시각, 제목, 요약, 링크, 출처, 종목)
 #              수집데이터/YYYYMMDD/YYYYMMDD_일정.csv (날짜, 시각, 구분, 대상, 내용, 출처)
@@ -56,6 +65,23 @@ ARCHIVE_PER_TICKER = 5    # 종목 뉴스 누적 파일에 한 종목 하루 최
 ARCHIVE_DAYS = 365        # 종목 뉴스 누적 파일 보관 기간(일)
 ARCHIVE = []              # 기업 카드용 종목 뉴스 누적(야후·구글, 브리핑 건수 제한 전)
 SCHED_DAYS = 7
+NAVER_PER_TICKER = 3      # 네이버 종목별: 한 종목 최대 건수
+NAVER_MAX = 40            # 네이버 종목별 전체 최대 건수
+FINNHUB_PER_TICKER = 2    # Finnhub 종목별: 한 종목 최대 건수
+FINNHUB_MAX = 30          # Finnhub 종목별 전체 최대 건수
+DART_MAX = 40             # DART 공시 전체 최대 건수
+DART_SKIP = r'임원ㆍ주요주주특정증권등소유상황보고서|임원·주요주주특정증권등소유상황보고서|특정증권등소유상황보고서'   # 너무 잦은 공시는 뺀다
+DART_RETURN = r'자기주식|자사주|배당|소각|주주환원|기업가치 ?제고|밸류업'   # [주주환원] 꼬리표 (고칠 곳)
+DART_CAPITAL = r'유상증자|무상증자|전환사채|신주인수권|교환사채|합병|분할|최대주주|대량보유|공개매수|단일판매|공급계약|타법인주식'
+MOVE_PCT = 5.0            # 사건 검색: 전일 등락률 절댓값이 이만큼 넘는 종목만
+API_LIMITS = {   # 무료 한도: 서비스 → (기간 '월'/'일', 한도). 80% 넘으면 브리핑 맨 위에 [사용량 주의] (2026-10-31 의장 "한도 전에 미리 알려줘")
+    'Tavily': ('월', 1000), '네이버 검색': ('일', 25000), 'Finnhub': ('일', 60 * 60 * 24),
+}
+API_WARN_PCT = 80         # 이 비율(%)을 넘으면 경고
+API_STOP_PCT = 95         # 이 비율(%)을 넘으면 그 달(그날)은 그 통로를 쉬어 한도를 넘기지 않는다
+USAGE = {}                # 오늘 쓴 호출 수(서비스별)
+API_WARN = []             # 브리핑 맨 위에 실을 경고
+MOVE_MAX = 10             # 사건 검색: 하루 최대 종목 수(종목당 Tavily 1크레딧, 무료 월 1,000)
 ET_TZ = ZoneInfo('America/New_York')
 US_RELEASES = {   # FRED 발표 이름(정확히 같아야 함) → (한국어 이름, 통상 발표 시각(미국 동부))
     'Consumer Price Index': ('미국 CPI(소비자물가)', '08:30'),
@@ -248,6 +274,233 @@ try:                                    # ⑤ 한국·일본 종목별 — 구�
     msgs.append(f'한국·일본 종목별 {len(got)}건' + (f'(조회 실패 {n_fail}종목)' if n_fail else ''))
 except Exception as e:
     msgs.append(f'한국·일본 종목별 실패({type(e).__name__} {e})')
+f_use = f'{KEEP}/00_API사용량.csv'
+use_old = pd.read_csv(f_use, dtype={'날짜': str}, encoding='utf-8-sig') if os.path.exists(f_use) else pd.DataFrame(columns=['날짜', '서비스', '건수'])
+use_old = use_old[use_old['날짜'] != TODAY]       # 같은 날 다시 돌리면 그날 줄은 새로 쓴다
+
+
+def _used(svc):
+    """이번 달(또는 오늘)까지 쓴 양: 누적 파일 + 오늘 지금까지"""
+    per = API_LIMITS[svc][0]
+    pre = TODAY[:6] if per == '월' else TODAY
+    past = use_old[(use_old['서비스'] == svc) & use_old['날짜'].astype(str).str.startswith(pre)]['건수'].sum()
+    return int(past) + USAGE.get(svc, 0)
+
+
+def _room(svc):
+    """한도의 API_STOP_PCT% 전이면 True"""
+    return _used(svc) < API_LIMITS[svc][1] * API_STOP_PCT / 100
+
+
+def _use(svc, n=1):
+    USAGE[svc] = USAGE.get(svc, 0) + n
+
+
+def _tag(nm):
+    """공시 제목에 붙일 꼬리표: 주주환원은 의장이 특히 챙김(2026-10-31)"""
+    if _re.search(DART_RETURN, nm):
+        return '[주주환원] '
+    if _re.search(DART_CAPITAL, nm):
+        return '[자본·지배구조] '
+    return ''
+
+
+try:                                    # ⑥ DART 공시 제목 — 한국 개별주의 어제·오늘 공시 전부(주주환원 꼬리표)
+    if not SEC.get('DART_KEY'):
+        raise RuntimeError('DART_KEY 없음')
+    cpath = f'{KEEP}/00_DART_고유번호.csv'
+    if os.path.exists(cpath):
+        cc6 = pd.read_csv(cpath, dtype=str).set_index('stock_code')['corp_code']
+    elif 'corp_codes' in globals():
+        cc6 = corp_codes().set_index('stock_code')['corp_code']
+    else:
+        raise RuntimeError('DART 고유번호 목록 없음(블록 6을 한 번 돌려야 함)')
+    kr6 = u[(u['시장'] == '한국') & (u['구분'] == '개별주')]
+    kr6 = pd.concat([kr6[kr6['보유/관심'] == '보유'], kr6[kr6['보유/관심'] != '보유']])
+    bgn6 = (today - dt.timedelta(days=1)).strftime('%Y%m%d')
+    pool, n_fail = [], 0
+    for _, s in kr6.iterrows():
+        corp = cc6.get(s['코드'])
+        if not corp:
+            continue
+        time.sleep(0.3)
+        try:
+            j = requests.get('https://opendart.fss.or.kr/api/list.json', timeout=30,
+                             params={'crtfc_key': SEC['DART_KEY'], 'corp_code': corp, 'bgn_de': bgn6,
+                                     'end_de': TODAY, 'page_count': 100}).json()
+        except Exception:
+            n_fail += 1
+            continue
+        for x in j.get('list') or []:
+            nm = _re.sub(r'\s+', ' ', x.get('report_nm', '')).strip()
+            if _re.search(DART_SKIP, nm):
+                continue
+            d = x['rcept_dt']
+            row = {'시각(한국)': f'{d[4:6]}-{d[6:8]} --:--', '제목': _tag(nm) + nm + (f' (제출 {x["flr_nm"]})' if x.get('flr_nm') and x['flr_nm'] != x.get('corp_name') else ''),
+                   '요약': '', '링크': f'https://dart.fss.or.kr/dsaf001/main.do?rcpNo={x["rcept_no"]}',
+                   '출처': 'DART 공시', '종목': s['정식 종목명']}
+            ARCHIVE.append(dict(row, 번호=s['번호']))
+            pool.append(dict(row, 보유=s['보유/관심'] == '보유', 환원=bool(_tag(nm))))
+    pool = sorted(pool, key=lambda x: (not x.pop('환원'), not x.pop('보유')))    # 주주환원·자본 먼저, 그다음 보유
+    got = pool[:DART_MAX]
+    news += got
+    msgs.append(f'DART 공시 {len(got)}건(주주환원·자본 {sum(1 for x in got if x["제목"].startswith("["))})'
+                + (f'(조회 실패 {n_fail}종목)' if n_fail else ''))
+except Exception as e:
+    msgs.append(f'DART 공시 실패({type(e).__name__} {e})')
+
+try:                                    # ⑦ 네이버 뉴스 검색 API — 한국 개별주, 제목+요약
+    if not (SEC.get('NAVER_CLIENT_ID') and SEC.get('NAVER_CLIENT_SECRET')):
+        raise RuntimeError('네이버 키 없음')
+    # 2026-07 이후 새 키는 네이버 클라우드 NAVER API HUB에서만 나온다(개발자센터 신규 신청 종료).
+    # HUB 주소를 먼저 쓰고, 안 되면 옛 개발자센터 주소로 한 번 더 시도한다(옛 방식은 2027-06 종료 예정).
+    NAVER_EPS = [('https://naverapihub.apigw.ntruss.com/search/v1/news',
+                  {'X-NCP-APIGW-API-KEY-ID': SEC['NAVER_CLIENT_ID'], 'X-NCP-APIGW-API-KEY': SEC['NAVER_CLIENT_SECRET']}),
+                 ('https://openapi.naver.com/v1/search/news.json',
+                  {'X-Naver-Client-Id': SEC['NAVER_CLIENT_ID'], 'X-Naver-Client-Secret': SEC['NAVER_CLIENT_SECRET']})]
+    if not _room('네이버 검색'):
+        raise RuntimeError('오늘 무료 한도 거의 다 씀')
+    kr7 = u[(u['시장'] == '한국') & (u['구분'] == '개별주')]
+    kr7 = pd.concat([kr7[kr7['보유/관심'] == '보유'], kr7[kr7['보유/관심'] != '보유']])
+    pool, seen, n_fail = [], set(), 0
+    for _, s in kr7.iterrows():
+        time.sleep(0.15)
+        name = s['정식 종목명']
+        try:
+            for ep, hdr in list(NAVER_EPS):
+                _use('네이버 검색')
+                r = requests.get(ep, headers=hdr, timeout=30, params={'query': f'"{name}"', 'display': 30, 'sort': 'date'})
+                if r.status_code in (401, 403, 404) and len(NAVER_EPS) > 1:
+                    NAVER_EPS.remove((ep, hdr))      # 이 주소는 이 키로 안 됨 → 다음 주소로, 이후 종목도 그 주소만
+                    continue
+                break
+            r.raise_for_status()
+            items = r.json().get('items') or []
+        except Exception:
+            n_fail += 1
+            continue
+        k = 0
+        for it in items:
+            try:
+                t = parsedate_to_datetime(it.get('pubDate')).astimezone(KST)
+            except Exception:
+                continue
+            title = _text(it.get('title'))
+            if t < since or title in seen or name.replace(' ', '') not in title.replace(' ', ''):
+                continue
+            seen.add(title)
+            x = {'시각(한국)': t.strftime('%m-%d %H:%M'), '제목': title, '요약': _text(it.get('description'))[:200],
+                 '링크': it.get('originallink') or it.get('link') or '', '출처': '네이버 종목별', '종목': name}
+            if k < ARCHIVE_PER_TICKER:
+                ARCHIVE.append(dict(x, 번호=s['번호']))
+            if k < NAVER_PER_TICKER:
+                pool.append(dict(x, 보유=s['보유/관심'] == '보유'))
+            k += 1
+    pool = sorted(pool, key=lambda x: x['시각(한국)'], reverse=True)
+    pool = sorted(pool, key=lambda x: not x.pop('보유'))
+    got = sorted(pool[:NAVER_MAX], key=lambda x: x['시각(한국)'], reverse=True)
+    news += got
+    msgs.append(f'네이버 종목별 {len(got)}건' + (f'(조회 실패 {n_fail}종목)' if n_fail else ''))
+except Exception as e:
+    msgs.append(f'네이버 종목별 건너뜀({type(e).__name__} {e})')
+
+try:                                    # ⑧ Finnhub 종목 뉴스 — 미국 개별주, 제목+요약 (무료 분당 60회)
+    if not SEC.get('FINNHUB_KEY'):
+        raise RuntimeError('FINNHUB_KEY 없음')
+    us8 = u[(u['시장'] == '미국') & (u['구분'] == '개별주')]
+    us8 = pd.concat([us8[us8['보유/관심'] == '보유'], us8[us8['보유/관심'] != '보유']])
+    pool, seen, n_fail = [], set(), 0
+    for _, s in us8.iterrows():
+        time.sleep(1.1)
+        try:
+            _use('Finnhub')
+            r = requests.get('https://finnhub.io/api/v1/company-news', timeout=30,
+                             params={'symbol': s['yfinance 티커'], 'from': (today - dt.timedelta(days=1)).isoformat(),
+                                     'to': today.isoformat(), 'token': SEC['FINNHUB_KEY']})
+            r.raise_for_status()
+            items = r.json() or []
+        except Exception:
+            n_fail += 1
+            continue
+        k = 0
+        for it in sorted(items, key=lambda z: z.get('datetime') or 0, reverse=True):
+            t = dt.datetime.fromtimestamp(it.get('datetime') or 0, KST)
+            title = _text(it.get('headline'))
+            if t < since or not title or title in seen:
+                continue
+            seen.add(title)
+            media = it.get('source') or ''
+            x = {'시각(한국)': t.strftime('%m-%d %H:%M'), '제목': f'{title} ({media})' if media else title,
+                 '요약': _text(it.get('summary'))[:300], '링크': it.get('url') or '', '출처': 'Finnhub 종목별',
+                 '종목': s['정식 종목명']}
+            if k < ARCHIVE_PER_TICKER:
+                ARCHIVE.append(dict(x, 번호=s['번호']))
+            if k < FINNHUB_PER_TICKER:
+                pool.append(dict(x, 보유=s['보유/관심'] == '보유'))
+            k += 1
+    pool = sorted(pool, key=lambda x: x['시각(한국)'], reverse=True)
+    pool = sorted(pool, key=lambda x: not x.pop('보유'))
+    got = sorted(pool[:FINNHUB_MAX], key=lambda x: x['시각(한국)'], reverse=True)
+    news += got
+    msgs.append(f'Finnhub 종목별 {len(got)}건' + (f'(조회 실패 {n_fail}종목)' if n_fail else ''))
+except Exception as e:
+    msgs.append(f'Finnhub 종목별 건너뜀({type(e).__name__} {e})')
+
+try:                                    # ⑨ 사건 검색(Tavily) — 전일 ±MOVE_PCT% 넘게 움직인 개별주만, 이유를 찾는다
+    if not SEC.get('TAVILY_KEY'):
+        raise RuntimeError('TAVILY_KEY 없음')
+    f_px = f'{DAY}/{TODAY}_시세.csv'
+    if not os.path.exists(f_px):
+        raise RuntimeError('오늘 시세 파일 없음(블록 1)')
+    px = pd.read_csv(f_px, encoding='utf-8-sig')
+    px = px[(px['구분'] == '개별주') & (px['등락률(%)'].abs() >= MOVE_PCT)]
+    px = px.reindex(px['등락률(%)'].abs().sort_values(ascending=False).index).head(MOVE_MAX)
+    got, n_fail = [], 0
+    for _, s in px.iterrows():
+        name, chg, up = s['정식 종목명'], s['등락률(%)'], s['등락률(%)'] > 0
+        if s['시장'] == '미국':
+            q = f'{name} ({s["yfinance 티커"]}) stock {"jumps" if up else "falls"} why'
+        else:
+            q = f'{name} 주가 {"급등" if up else "급락"} 이유'
+        if not _room('Tavily'):
+            msgs.append('사건 검색: 이번 달 Tavily 무료 한도 거의 다 써서 쉼')
+            break
+        try:
+            _use('Tavily')
+            r = requests.post('https://api.tavily.com/search', timeout=60,
+                              headers={'Authorization': f'Bearer {SEC["TAVILY_KEY"]}'},
+                              json={'query': q, 'topic': 'news', 'days': 2, 'max_results': 3, 'search_depth': 'basic'})
+            r.raise_for_status()
+            items = r.json().get('results') or []
+        except Exception:
+            n_fail += 1
+            continue
+        for it in items:
+            try:
+                hm = parsedate_to_datetime(it.get('published_date')).astimezone(KST).strftime('%m-%d %H:%M')
+            except Exception:
+                hm = (it.get('published_date') or '')[:16]
+            x = {'시각(한국)': hm, '제목': f'({chg:+.1f}%) ' + _text(it.get('title')),
+                 '요약': _text(it.get('content'))[:300], '링크': it.get('url') or '', '출처': '사건 검색',
+                 '종목': name}
+            got.append(x)
+            ARCHIVE.append(dict(x, 번호=s['번호']))
+    news += got
+    msgs.append(f'사건 검색 {len(px)}종목 {len(got)}건' + (f'(검색 실패 {n_fail})' if n_fail else ''))
+except Exception as e:
+    msgs.append(f'사건 검색 건너뜀({type(e).__name__} {e})')
+try:                                    # 무료 한도 사용량 누적: 00_누적/00_API사용량.csv, 80% 넘으면 경고
+    use_new = pd.DataFrame([{'날짜': TODAY, '서비스': k, '건수': v} for k, v in USAGE.items()], columns=['날짜', '서비스', '건수'])
+    pd.concat([use_old, use_new], ignore_index=True).to_csv(f_use, index=False, encoding='utf-8-sig')
+    for svc, (per, lim) in API_LIMITS.items():
+        n = _used(svc)
+        if n >= lim * API_WARN_PCT / 100:
+            API_WARN.append(f'{svc} 무료 한도 {per} {lim:,}회 중 {n:,}회 사용({n / lim:.0%})'
+                            + (' — 한도 직전이라 쉬는 중' if n >= lim * API_STOP_PCT / 100 else ''))
+    msgs.append('API 사용 ' + ', '.join(f'{k} {_used(k):,}/{API_LIMITS[k][1]:,}({API_LIMITS[k][0]})' for k in USAGE)
+                + (f' | 경고 {len(API_WARN)}' if API_WARN else ''))
+except Exception as e:
+    msgs.append(f'API 사용량 기록 실패({type(e).__name__} {e})')
 try:                                    # 기업 카드용 누적: 00_누적/00_종목뉴스.csv (링크·제목 중복 제거, ARCHIVE_DAYS일 보관)
     f_arc = f'{KEEP}/00_종목뉴스.csv'
     arc_cols = ['날짜', '번호', '종목', '시각(한국)', '제목', '요약', '출처', '링크']
