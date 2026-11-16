@@ -126,7 +126,7 @@ NEWS_TASK = '''국장(밤새 경제 브리핑)으로 오늘 회의 첫 발언을
 
 5. 원자재: WTI·금·구리
 
-6. 심리: 공포탐욕·VIX
+6. 심리·신용: 공포탐욕·VIX·하이일드 스프레드
 
 7. 돈의 흐름: ETF 자금 쏠림 상위·하위, 국내 외국인 5일 순매수 상위·하위, MMF 잔고(있으면)
 
@@ -171,7 +171,8 @@ else:
     plan = [('경제브리핑', '국장', NEWS_TASK, lambda: brief, False),
             ('피터', '미스 밸류 + 섹터 데스크', PETER_TASK,
              lambda: brief + '\n\n[밸류에이션.csv]\n' + _txt('밸류에이션.csv', 30000) +
-             '\n\n[DART실적.csv]\n' + _txt('DART실적.csv', 15000) + '\n\n[SEC실적.csv]\n' + _txt('SEC실적.csv', 20000), False),
+             '\n\n[DART실적.csv]\n' + _txt('DART실적.csv', 15000) + '\n\n[SEC실적.csv]\n' + _txt('SEC실적.csv', 20000) +
+             '\n\n[데스크수급.csv]\n' + _txt('데스크수급.csv', 6000) + '\n\n[데스크수급상세.csv]\n' + _txt('데스크수급상세.csv', 15000), False),
             ('엘피스', '엘피스', ELPIS_TASK,
              lambda: brief + '\n\n[밤새 경제 브리핑]\n' + out.get('경제브리핑', '(없음)') +
              '\n\n[미스 밸류 보고]\n' + out.get('피터', '(없음)'), False)]

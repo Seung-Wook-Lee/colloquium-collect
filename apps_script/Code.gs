@@ -3,7 +3,7 @@
  *
  * GitHub에서 돌아가는 수집 프로그램이 의장님 구글 드라이브의 파일을 읽고 쓰도록 이어 주는 창구입니다.
  * - 의장님 계정으로 실행되므로 구글 클라우드 설정이 필요 없습니다.
- * - 아래 ALLOWED 폴더 4개 밖은 읽지도 쓰지도 않습니다.
+ * - 아래 ALLOWED 폴더 5개 밖은 읽지도 쓰지도 않습니다.
  * - 비밀 토큰이 맞는 요청만 받습니다. 토큰은 setup()을 한 번 실행하면 만들어지고,
  *   실행 로그에 한 번 보입니다. 그 값을 GitHub Secrets의 DRIVE_TOKEN에 넣습니다.
  *
@@ -13,7 +13,7 @@
  *   3) 나온 웹 앱 URL을 GitHub Secrets의 DRIVE_URL에 넣습니다.
  */
 
-const ALLOWED = ['콜로키움', '콜로키움 수집데이터', '콜로키움 코딩 모음', '페르소나 스토리'];
+const ALLOWED = ['콜로키움', '콜로키움 수집데이터', '콜로키움 코딩 모음', '페르소나 스토리', '실전 투자 자료'];
 
 function setup() {
   const props = PropertiesService.getScriptProperties();
