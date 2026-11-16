@@ -12,7 +12,7 @@ us=big[(big['구분']=='개별주')&(big['시장']=='미국')&(~big['종목'].st
 ee=big[big['구분']!='개별주'].sort_values(['싼가','점수'],ascending=False)
 allc=pd.concat([kr,us,ee])
 rec=allc[allc['추천']=='추천']; obs=allc[allc['추천']=='관찰'].sort_values(['싼가','점수'],ascending=False)
-pick=pd.concat([rec,obs.head(6)])
+pick=rec   # 관찰 등급을 임의 개수로 끼워 넣지 않음(11/17 의장)
 # 오늘 등락(한국 장중)
 tk=[t for t in pick['ticker'] if str(t).endswith(('.KS','.KQ'))]
 today={}
