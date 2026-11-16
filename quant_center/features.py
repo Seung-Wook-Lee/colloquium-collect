@@ -254,6 +254,17 @@ def stocks(d):
         var.append(' / '.join(f"{r['시기']} {r['사건']} → {r['방향']}" for _, r in CAL.iterrows()
                               if any(w and w in s2 for w in str(r['영향 업종 낱말']).split('|'))) if len(CAL) else '')
     f['변수'] = var
+    # 대형 이벤트 앞 수급 경계(11/17 의장): 날짜가 확인된 사건이 7일 안이고 '영향 층'에 들면 event_near = 1
+    near = [0] * len(f)
+    if len(CAL) and '날짜' in CAL and '영향 층' in CAL:
+        today = pd.Timestamp.now(tz='Asia/Seoul').normalize().tz_localize(None)
+        for _, r in CAL.iterrows():
+            dt = pd.to_datetime(r['날짜'], errors='coerce')
+            if pd.isna(dt) or not (0 <= (dt - today).days <= 7):
+                continue
+            lays = str(r['영향 층']).split('|')
+            near = [1 if (n or lay in lays) else 0 for n, lay in zip(near, f['layer'].astype(str))]
+    f['event_near'] = near
     f['event_hit'] = f['event_words'] != ''
     f['sector'] = f['번호'].map(sect)
     return f
@@ -293,6 +304,18 @@ def market(d):
             return (np.nansum(c) - n) / (n * n - n)
         m['CORR20'] = float(mc(r.tail(20))); m['CORR1Y'] = float(mc(r.tail(252)))
         m['CORR_JUMP'] = m['CORR20'] - m['CORR1Y']
+        # 순환 국면(11/17 의장 역추적): AI 묶음(S1·S2·S3) ÷ 비AI 방어 묶음(S5 금융·S6 방어·내수) 비율
+        try:
+            U = pd.read_csv(f'{d}/유니버스.csv', encoding='utf-8-sig').drop_duplicates('yfinance 티커')
+            lay = dict(zip(U['yfinance 티커'], U['층']))
+            rr = P.pct_change(fill_method=None)
+            ai = [t for t in P if lay.get(t) in ('S1', 'S2', 'S3')]; df = [t for t in P if lay.get(t) in ('S5', 'S6')]
+            A = (1 + rr[ai].mean(axis=1).fillna(0)).cumprod(); N = (1 + rr[df].mean(axis=1).fillna(0)).cumprod(); Rt = A / N
+            m['ROT_GAP50'] = float(Rt.iloc[-1] / Rt.tail(50).mean() * 100 - 100)
+            m['ROT_CH20'] = float(Rt.iloc[-1] / Rt.iloc[-21] * 100 - 100)
+            m['ROT_DEF'] = int(m['ROT_GAP50'] < 0 and m['ROT_CH20'] < 0)
+        except Exception:
+            pass
     try:   # BLOCK20 아침보고 [국면] 줄
         t = open(f'{d}/아침보고.txt', encoding='utf-8').read()
         for k, c in (('미국', 'US_BEAR'), ('한국', 'KR_BEAR')):

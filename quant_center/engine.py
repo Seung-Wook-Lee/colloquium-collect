@@ -30,6 +30,7 @@ def run(d, cfg='blocks.yaml'):
     f = F.stocks(d)
     f = f[f['시장'].isin(['한국', '미국'])].reset_index(drop=True)
     m = F.market(d)
+    DEF = bool(m.get('ROT_DEF'))   # 방어 국면(AI÷비AI 비율 50일선 아래 + 20일 하락)
     M = pd.DataFrame([dict(블록=bid, 질문=b['질문'], 공식=n, 결과=LBL[_ev(e, m)], 방향=side)
                       for bid, b in B['시장'].items() for n, e, side in b['공식']])
     SB = B['종목']
@@ -61,6 +62,9 @@ def run(d, cfg='blocks.yaml'):
         for bid, b in SB.items():
             if b.get('대상') == '개별주' and row['구분'] != '개별주':
                 out[bid] = '해당 없음'; continue
+            reg = b.get('국면')   # 강세 = 방어 국면이면 쉼, 방어 = 방어 국면에서만 셈
+            if reg and ((reg == '강세') == DEF):
+                out[bid] = '국면 제외'; continue
             ok = []
             for k, (n, e, st, src) in enumerate(b['공식']):
                 r = R[(i, bid, k)]; rt = rate[(bid, k)]
@@ -187,8 +191,9 @@ def run(d, cfg='blocks.yaml'):
     S['싼가'] = pd.to_numeric(S[K_CHEAP], errors='coerce')
     S.loc[S['층'] == 'S0', '판정'] = '기준층(지수·현금·금, 추천 대상 아님)'
     R = B.get('추천', {})
-    cut, cut2, minb = R.get('추천선', 2 / 3), R.get('관찰선', 0.5), R.get('최소블록', 8)
-    enough = S['블록수'] >= np.where(S['구분'] == '개별주', minb, R.get('최소블록_ETF', 6))
+    cut, cut2, minb = R.get('추천선', 2 / 3), R.get('관찰선', 0.5), R.get('최소블록_방어' if DEF else '최소블록', 8)
+    enough = S['블록수'] >= np.where(S['구분'] == '개별주', minb, R.get('최소블록_ETF_방어' if DEF else '최소블록_ETF', 6))
+    S['국면'] = '방어(AI 묶음 약세)' if DEF else '평상'
     S['추천'] = np.where(S['판정'] != '후보', S['판정'], np.where(~enough, '자료 부족(블록 수 모자람)',
                 np.where(S['블록예비율'] >= cut, '추천', np.where(S['블록예비율'] >= cut2, '관찰', '대기'))))
     S = S.sort_values(['블록예비율', '싼가'], ascending=False)
