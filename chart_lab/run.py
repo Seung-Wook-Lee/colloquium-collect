@@ -229,6 +229,16 @@ def run(name):
     u = load_universe(gd)
     u = pick(u, cfg.get('대상'))
     src = cfg.get('자료', '한투')
+    extra = cfg.get('추가종목') or []          # 유니버스 밖 비교용(예: SPY·QQQ 긴 역사). 야후 자료일 때만.
+    if extra:
+        if src != '야후':
+            log('[추가종목] 한투 자료에는 없어서 건너뜀(자료: 야후 에서만)')
+        else:
+            add = pd.DataFrame([{'번호': str(e['번호']), '코드': str(e['티커']), 'yfinance 티커': str(e['티커']),
+                                 '정식 종목명': str(e.get('이름', e['티커'])), '시장': e.get('시장', '미국'),
+                                 '층': e.get('층', ''), '구분': e.get('구분', 'ETF')} for e in extra])
+            u = pd.concat([u, add], ignore_index=True)
+            log(f'[추가종목] {", ".join(add["yfinance 티커"])}')
     data = load_yahoo(u, tfs) if src == '야후' else load_kis(gd, tfs)
     idx = load_index()
     log(f'[실험] {name} | 기본봉 {cfg.get("기본봉", "일봉")} | 자료 {src} | 대상 {len(u)}종목 | 규칙 {len(rules)}개 | 중복 제외 {cd}봉')
