@@ -3,12 +3,26 @@ sys.path.insert(0,'qblocks'); import features as F
 f=F.stocks('in').set_index('종목'); S=pd.read_csv('out_판정표.csv').set_index('종목')
 P=pd.read_csv('in/가격2년.csv',index_col=0,parse_dates=True)
 B=yaml.safe_load(open('qblocks/blocks.yaml',encoding='utf-8'))['종목']
-PICK=[('삼성전자','반도체'),('삼성중공업','조선'),('현대모비스','자동차 부품'),('SK텔레콤','통신'),('TIGER 증권','증권 ETF'),
-      ('KODEX 미국S&P500','미국 지수'),('TIGER 미국필라델피아반도체나스닥','미국 반도체')]
-DROP=[('하나금융지주','관찰 등급(블록 4/8). ETF 보유 종목 반영 후 추천 등급이 된 TIGER 증권(블록 7/8, 60일 변동성 38%)으로 교체'),
-      ('SOL 조선TOP3플러스·PLUS 글로벌HBM반도체','추천 등급이나 조선은 삼성중공업과 중복, HBM은 60일 변동성 63%로 안정성 기준 초과'),('SK하이닉스','시스템 추천(블록 9/11)이지만 60일 변동성 76%, 외국인 5일 −1조 576억·20일 −7조 3,920억 동시 순매도 → 안정성 기준 탈락'),
-      ('삼성증권','시스템 추천(블록 7/10)이지만 외국인 5일 −215억·20일 −496억 동시 순매도 → 안정성 기준 탈락'),
-      ('NVIDIA·GE Vernova·Caterpillar','시스템 추천 미국 개별주 → 의장 지시(미국은 국내 상장 ETF로)에 따라 필라델피아반도체 ETF로 대신')]
+# 7종목은 엔진 결과로만 뽑는다(손으로 적는 목록 없음, 11/17 의장). 규칙은 blocks.yaml '추천'에서 읽는다.
+RC=yaml.safe_load(open('qblocks/blocks.yaml',encoding='utf-8')).get('추천',{})
+N_KR,N_US,VMAX=RC.get('국내수',5),RC.get('미국ETF수',2),RC.get('변동성상한',60)
+AS=S.reset_index()
+AS['미국ETF']=(AS['시장']=='한국')&(AS['구분']!='개별주')&AS['종목'].astype(str).str.contains('미국')
+cand=AS[AS['추천']=='추천'].sort_values(['블록예비율','싼가','점수'],ascending=False)
+PICK,DROP=[],[]
+for _,r in cand.iterrows():
+    nm=r['종목']; rf=f.loc[nm] if nm in f.index else None
+    why=[]
+    if r['시장']!='한국': why.append('미국 개별·해외 상장 → 국내 상장 ETF로만 편입(룰 2장)')
+    if rf is not None and not pd.isna(rf.get('vol60')) and rf['vol60']>VMAX: why.append(f"60일 변동성 {rf['vol60']:.0f}% > {VMAX}%")
+    if rf is not None and (rf.get('f5') or 0)<0 and (rf.get('f20') or 0)<0: why.append(f"외국인 5일 {rf['f5']:,.0f}억·20일 {rf['f20']:,.0f}억 동시 순매도")
+    if why: DROP.append((nm,' / '.join(why))); continue
+    grp='us' if r['미국ETF'] else 'kr'
+    if sum(1 for _,g in PICK if g==grp) >= (N_US if grp=='us' else N_KR):
+        DROP.append((nm,f"추천 등급이나 순위 밖(예 비율 {r['블록예비율']}, 싼가 {r['싼가']})")); continue
+    PICK.append((nm,grp))
+PICK=[(nm,str(f.loc[nm,'sector']) if nm in f.index and 'sector' in f.columns else '') for nm,_ in PICK]
+TODAY=pd.Timestamp.now(tz='Asia/Seoul').strftime('%Y%m%d')
 def n(v,d=1,s=''):
     return '–' if v is None or pd.isna(v) else f'{v:,.{d}f}{s}'
 def spark(tk):
@@ -79,15 +93,15 @@ h1{font-size:17pt;margin:0;color:#0b3d6e}.sub{color:#6b7585;margin:2px 0 8px}
 h2{font-size:11pt;color:#0b3d6e;margin:10px 0 4px}'''
 mk=pd.read_csv('out_시장블록.csv'); burden=mk[(mk['방향']=='부담')&(mk['결과']=='통과')]['공식'].tolist(); opp=mk[(mk['방향']=='기회')&(mk['결과']=='통과')]['공식'].tolist()
 doc=f'''<!doctype html><html><head><meta charset="utf-8"><title>오늘의 추천 종목</title><style>{css}</style></head><body>
-<h1>오늘의 추천 종목</h1><div class="sub">2026-11-16 14:30 · 퀀트센터 · 유니버스 200종목 전체 판정 · 국내 5종목, 국내 상장 미국 ETF 2종목</div>
+<h1>오늘의 추천 종목</h1><div class="sub">{TODAY} · 퀀트센터 · 국면 {html.escape(str(AS['국면'].iloc[0]) if '국면' in AS else '')} · 엔진 추천 등급에서 국내 {N_KR}·국내 상장 미국 ETF {N_US} (추천 등급이 모자라면 모자란 대로)</div>
 <div class="rule"><b>선정 기준</b><br>
-1) 거르기: 최근 분기 이익 증가(한 분기 꺾임은 앞 분기 증가+추정치 상향이면 통과), 사건 역풍 없음, 52주 고점에서 −10% 넘게 내려옴, 연매출 10조 원 이상<br>
+1) 거르기: 최근 분기 이익 증가, 사건 역풍·7일 안 대형 이벤트 없음, 연매출 10조 원 이상(평상 국면은 52주 고점 −10% 밖 추가)<br>
 2) 판정: 점수·타이밍·핵심 블록 14개마다 공식 과반 통과면 예. 예 2/3 이상 추천, 1/2 이상 관찰<br>
 3) 안정성: 60일 변동성 60% 이하, 외국인 5일·20일 동시 순매도 아님<br>
-4) ETF는 실제 보유 상위 10종목의 이익·전망·재무·밸류를 보유 비중으로 가중 평균하여 판정<br>5) 미국은 국내 상장 ETF로 편입: S&P500 지수와 추천 등급 필라델피아반도체(NVIDIA·브로드컴 포함)<br>
+4) ETF는 실제 보유 상위 10종목의 이익·전망·재무·밸류를 보유 비중으로 가중 평균하여 판정<br>5) 미국은 국내 상장 ETF로 편입. 순서: 블록 예 비율 → 싼가 → 점수<br>
 <b>시장 부담</b> {html.escape(', '.join(burden))} · <b>기회</b> {html.escape(', '.join(opp))}</div>
 {''.join(cards)}
 <h2>제외 종목 및 사유</h2>{drop}
 <div class="sub" style="margin-top:8px">블록 표시: 초록 충족, 빨강 미충족, 회색 자료 없음. 분할 2차는 주봉 MACD 오실레이터 상승 구간. 백테스트 검증은 팀Q에서 진행 예정. 추천 후 10일 성과는 11/26 점검.</div>
 </body></html>'''
-open('/mnt/project-files/퀀트센터/추천7_20261116.html','w',encoding='utf-8').write(doc)
+open(f'추천7_{TODAY}.html','w',encoding='utf-8').write(doc)
