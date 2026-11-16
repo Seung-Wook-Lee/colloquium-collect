@@ -1,0 +1,208 @@
+"""판정 엔진: 날짜(자료 폴더)를 넣으면 시장 블록 + 종목 블록 전부를 계산.
+종목 하나든 전 종목이든 같은 계산. 블록·공식은 blocks.yaml만 고친다."""
+import math
+import sys
+
+import numpy as np
+import pandas as pd
+import yaml
+
+import features as F
+
+LBL = {True: '통과', False: '불통과', None: '자료 없음'}
+
+
+
+def _ev(expr, row):
+    env = {k: (None if (isinstance(v, float) and math.isnan(v)) else v) for k, v in row.items()}
+    names = compile(expr, '<f>', 'eval').co_names
+    if any(env.get(n) is None for n in names):
+        return None            # 쓰는 칸 중 하나라도 자료 없음이면 '자료 없음'
+    try:
+        v = eval(expr, {'__builtins__': {}}, env)
+        return None if v is None else bool(v)
+    except (TypeError, NameError):
+        return None
+
+
+def run(d, cfg='blocks.yaml'):
+    B = yaml.safe_load(open(cfg, encoding='utf-8'))
+    f = F.stocks(d)
+    f = f[f['시장'].isin(['한국', '미국'])].reset_index(drop=True)
+    m = F.market(d)
+    M = pd.DataFrame([dict(블록=bid, 질문=b['질문'], 공식=n, 결과=LBL[_ev(e, m)], 방향=side)
+                      for bid, b in B['시장'].items() for n, e, side in b['공식']])
+    SB = B['종목']
+    Q = {b['질문']: k for k, b in SB.items()}   # 질문으로 블록 찾기(번호가 바뀌어도 됨)
+    K_EARN, K_EVENT, K_SIZE, K_HOT = Q['이익이 늘고 있나?'], Q['사건 역풍이 있나?'], [k for q, k in Q.items() if q.startswith('추천할 만큼')][0], Q['너무 많이 올랐나?']
+    K_HIGH = Q['고점 부근이 아닌가?']; K_CHEAP = Q['싼가? (줄 세우기 뼈대)']
+    last = int(list(SB)[-1][1:])
+    K_SPLIT, K_CAP, K_SELL = f'B{last+1:02d}_분할', f'B{last+2:02d}_비중상한(%)', f'B{last+3:02d}_매도신호'
+    # 1) 공식별 결과
+    rows = [s.to_dict() for _, s in f.iterrows()]
+    R = {}   # (i, bid, k) -> 결과
+    for i, row in enumerate(rows):
+        for bid, b in SB.items():
+            if b.get('대상') == '개별주' and row['구분'] != '개별주':
+                continue
+            for k, (n, e, st, src) in enumerate(b['공식']):
+                R[(i, bid, k)] = _ev(e, row)
+    # 2) 변별력: 전 종목 통과율
+    rate = {}
+    for bid, b in SB.items():
+        for k in range(len(b['공식'])):
+            v = [R[key] for key in R if key[1] == bid and key[2] == k and R[key] is not None]
+            rate[(bid, k)] = (sum(v) / len(v)) if v else None
+    detail, out_rows = [], []
+    for i, row in enumerate(rows):
+        out = {'번호': row['번호'], '종목': row['종목'], '시장': row['시장'], '구분': row['구분'], '층': row.get('layer')}
+        scores, why, allp, alln = [], [], 0, 0
+        yes_blocks = []
+        for bid, b in SB.items():
+            if b.get('대상') == '개별주' and row['구분'] != '개별주':
+                out[bid] = '해당 없음'; continue
+            ok = []
+            for k, (n, e, st, src) in enumerate(b['공식']):
+                r = R[(i, bid, k)]; rt = rate[(bid, k)]
+                detail.append(dict(번호=row['번호'], 종목=row['종목'], 블록=bid, 질문=b['질문'], 공식=n, 상태=st, 출처=src,
+                                   결과=LBL[r], 전종목_통과율=None if rt is None else round(rt, 2)))
+                if r is None:
+                    continue
+                ok.append(r)
+                if r and b['역할'] in ('핵심', '점수', '타이밍'):
+                    why.append((rt, n))
+            if b['역할'] in ('점수', '타이밍', '핵심'):
+                allp += sum(ok); alln += len(ok)
+            # 자료 없는 공식이 절반을 넘으면 이 블록은 점수 없음(자료 한 개로 만점 방지)
+            sc = (sum(ok) / len(ok)) if ok and len(ok) * 2 >= len(b['공식']) else None
+            if b['역할'] == '점수' and sc is not None:
+                scores.append(sc)
+            if b['역할'] in ('핵심', '점수', '타이밍') and sc is not None:
+                yes_blocks.append((bid, b['질문'], sc >= 0.5))
+            if '통과식' in b:
+                out[bid] = {True: '통과', False: '탈락', None: '자료 없음'}[_ev(b['통과식'], row)]
+            else:
+                out[bid] = None if sc is None else round(sc, 2)
+        out['통과'] = allp; out['자료있는공식'] = alln
+        out['점수'] = round(float(np.mean(scores)), 3) if scores else None
+        why.sort()   # 드문 공식(통과율 낮은 것) 먼저 = 이 종목만의 이유
+        out['왜'] = ' / '.join(n for _, n in why[:4])
+        # B21 위험 값
+        out['변동성60(%)'] = None if pd.isna(row.get('vol60')) else round(row['vol60'], 1)
+        out['꼬리손실(%)'] = None if pd.isna(row.get('es5')) else round(row['es5'], 1)
+        # B22 분할 차수
+        four = all(_ev(e, row) for e in ['rsi_d <= 30', 'gap50 <= 90', 'close < m5', 'osc_w > osc_w1'])
+        out[K_SPLIT] = '3차' if four else ('2차' if _ev('osc_w > osc_w1', row) else '1차')
+        # B23 비중 상한(BLOCK20 반켈리)
+        out[K_CAP] = None if pd.isna(row.get('cap')) else round(row['cap'] * 100, 1)
+        # B24 팔 때인가
+        sell = []
+        if out.get(K_EARN) == '탈락': sell.append('이익 꺾임')
+        if out.get(K_EVENT) == '탈락': sell.append('사건 역풍 ' + row.get('event_words', ''))
+        if out.get(K_HIGH) == '탈락': sell.append(f"고점 부근(52주 고점 대비 {row.get('dd52')}%)")
+        if isinstance(out.get(K_HOT), float) and out[K_HOT] > 0: sell.append('너무 많이 오름')
+        if _ev('f5 < 0 and f20 < 0', row): sell.append('외국인 5·20일 순매도')
+        out[K_SELL] = ', '.join(sell)
+        # 빠지는 이유(20일 하락일 때)
+        why_dn = []
+        if _ev('ret20 < 0', row):
+            if _ev('f20 < 0', row): why_dn.append('외국인 20일 순매도')
+            if _ev('sec_flow5 < 0', row): why_dn.append('업종 ETF 자금 이탈')
+            if _ev('rs20 < 0', row): why_dn.append('시장보다 약함')
+            if _ev('peer20 < 0', row): why_dn.append('동료보다 약함')
+            if _ev('est30 < 0', row): why_dn.append('이익 추정치 하향')
+            if not why_dn: why_dn.append('시장 따라 하락(종목 고유 이유 없음)')
+        out['20일(%)'] = None if pd.isna(row.get('ret20')) else round(row['ret20'], 1)
+        out['5일(%)'] = None if pd.isna(row.get('ret5')) else round(row['ret5'], 1)
+        out['빠지는 이유'] = ', '.join(why_dn)
+        out['변수'] = row.get('변수', '')
+        ny = sum(1 for _, _, y in yes_blocks if y); nb = len(yes_blocks)
+        out['블록예'] = ny; out['블록수'] = nb; out['블록예비율'] = round(ny / nb, 2) if nb else None
+        out['블록 예'] = ' / '.join(f'{k} {q}' for k, q, y in yes_blocks if y)
+        out['블록 아니오'] = ' / '.join(f'{k} {q}' for k, q, y in yes_blocks if not y)
+        out['Sigma Check'] = row.get('sigma_note')
+        out_rows.append(out)
+    S = pd.DataFrame(out_rows)
+    # ETF: 실제 보유 종목(상위 10, 비중)으로 이익·전망·튼튼·싼가 블록을 비중 가중 평균(ETF보유.csv, ETF멤버.csv)
+    S['구성종목'] = ''
+    try:
+        H = pd.read_csv(f'{d}/ETF보유.csv', encoding='utf-8-sig'); MI = pd.read_csv(f'{d}/ETF멤버.csv', encoding='utf-8-sig').set_index('멤버')
+    except FileNotFoundError:
+        H, MI = pd.DataFrame(columns=['번호', '멤버', '이름', '비중']), pd.DataFrame()
+    K15 = Q['이익 전망이 오르나?']; K16 = Q['회사가 튼튼한가?']
+    t2i = dict(zip(f['ticker'], S.index[S['번호'].isin(f['번호'])])) if False else {}
+    num2row = {n: i for i, n in zip(S.index, S['번호'])}
+    tk2num = dict(zip(f['ticker'], f['번호']))
+    def nz(x):
+        return x is not None and not (isinstance(x, float) and math.isnan(x))
+    def mscore(t):
+        if t in tk2num and tk2num[t] in num2row:
+            r = S.loc[num2row[tk2num[t]]]
+            e = {'통과': 1.0, '탈락': 0.0}.get(r[K_EARN])
+            g = lambda k: pd.to_numeric(r[k], errors='coerce')
+            return e, g(K15), g(K16), g(K_CHEAP)
+        if t not in MI.index:
+            return None, None, None, None
+        m = MI.loc[t]
+        eq = m['eqg'] if nz(m['eqg']) else m['eg']
+        e = None if not nz(eq) else float(eq > 0)
+        o = None if not (nz(m['feps']) and nz(m['teps'])) else float(m['feps'] > m['teps'])
+        st = [float(m['roe'] >= 0.10) if nz(m['roe']) else None, float(m['fcf'] > 0) if nz(m['fcf']) else None,
+              float(m['debt'] / m['ebitda'] <= 3) if nz(m['debt']) and nz(m['ebitda']) and m['ebitda'] > 0 else None]
+        st = [x for x in st if x is not None]
+        c = None if not (nz(m['fpe']) and nz(m['tpe'])) else float(m['fpe'] < m['tpe'])
+        return e, o, (sum(st) / len(st) if st else None), c
+    for n, g in H.groupby('번호'):
+        if n not in num2row: continue
+        i = num2row[n]
+        sc = [(w, mscore(t)) for t, w in zip(g['멤버'], g['비중'])]
+        S.at[i, '구성종목'] = ','.join(g['이름'].astype(str).head(10))
+        def wavg(j):
+            v = [(w, s[j]) for w, s in sc if s[j] is not None and not pd.isna(s[j])]
+            tw = sum(w for w, _ in v)
+            return (sum(w * x for w, x in v) / tw, len(v)) if tw else (None, 0)
+        e, ne = wavg(0)
+        if e is not None:
+            S.at[i, K_EARN] = '통과' if e > 0.5 else '탈락'
+            S.at[i, '구성_이익통과'] = f"보유 비중 {e*100:.0f}% 이익 증가({ne}종목)"
+        for j, k in ((1, K15), (2, K16), (3, K_CHEAP)):
+            v, _ = wavg(j)
+            if v is not None: S.at[i, k] = round(v, 2)
+        # 블록 예/아니오 다시 세기
+        ys = str(S.at[i, '블록 예']).split(' / ') if isinstance(S.at[i, '블록 예'], str) and S.at[i, '블록 예'] else []
+        ns = str(S.at[i, '블록 아니오']).split(' / ') if isinstance(S.at[i, '블록 아니오'], str) and S.at[i, '블록 아니오'] else []
+        for k in (K15, K16, K_CHEAP):
+            v = pd.to_numeric(S.at[i, k], errors='coerce')
+            if pd.isna(v): continue
+            lab = f"{k} {SB[k]['질문']}"
+            ys = [x for x in ys if x != lab]; ns = [x for x in ns if x != lab]
+            (ys if v >= 0.5 else ns).append(lab)
+        S.at[i, '블록 예'] = ' / '.join(ys); S.at[i, '블록 아니오'] = ' / '.join(ns)
+        S.at[i, '블록예'] = len(ys); S.at[i, '블록수'] = len(ys) + len(ns)
+        S.at[i, '블록예비율'] = round(len(ys) / (len(ys) + len(ns)), 2) if ys or ns else None
+    filt = S[K_EARN].isin(['통과', '해당 없음']) & (S[K_EVENT] == '통과') & (S[K_HIGH] != '탈락')
+    S['판정'] = np.where(filt, np.where(S[K_SIZE].isin(['통과', '해당 없음']), '후보', '참고만'),
+                        np.where(S[K_EARN] == '자료 없음', '자료 부족', '걸러짐'))
+    S = S.rename(columns={K_SPLIT: '분할', K_CAP: '비중상한(%)', K_SELL: '매도신호'})
+    S['싼가'] = pd.to_numeric(S[K_CHEAP], errors='coerce')
+    S.loc[S['층'] == 'S0', '판정'] = '기준층(지수·현금·금, 추천 대상 아님)'
+    R = B.get('추천', {})
+    cut, cut2, minb = R.get('추천선', 2 / 3), R.get('관찰선', 0.5), R.get('최소블록', 8)
+    enough = S['블록수'] >= np.where(S['구분'] == '개별주', minb, R.get('최소블록_ETF', 6))
+    S['추천'] = np.where(S['판정'] != '후보', S['판정'], np.where(~enough, '자료 부족(블록 수 모자람)',
+                np.where(S['블록예비율'] >= cut, '추천', np.where(S['블록예비율'] >= cut2, '관찰', '대기'))))
+    S = S.sort_values(['블록예비율', '싼가'], ascending=False)
+    S = S.sort_values(['판정', '싼가', '점수'], ascending=[True, False, False])
+    return S, pd.DataFrame(detail), M, m
+
+
+if __name__ == '__main__':
+    d = sys.argv[1]
+    S, D, M, m = run(d)
+    S.to_csv(f'{d}/../out_판정표.csv', index=False, encoding='utf-8-sig')
+    D.to_csv(f'{d}/../out_공식별결과.csv', index=False, encoding='utf-8-sig')
+    M.to_csv(f'{d}/../out_시장블록.csv', index=False, encoding='utf-8-sig')
+    print(M.to_string(index=False))
+    print(S['판정'].value_counts().to_dict())
+    cols = ['종목', '구분', '층', '점수', '5일(%)', '20일(%)', '분할', '매도신호', '빠지는 이유']
+    print(S[(S['판정'] == '후보') & (S['구분'] == '개별주')][cols].head(25).to_string(index=False))
