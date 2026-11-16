@@ -21,6 +21,15 @@ for _,r in cand.iterrows():
     if sum(1 for _,g in PICK if g==grp) >= (N_US if grp=='us' else N_KR):
         DROP.append((nm,f"추천 등급이나 순위 밖(예 비율 {r['블록예비율']}, 싼가 {r['싼가']})")); continue
     PICK.append((nm,grp))
+import orders as O
+_m=pd.read_csv('out_시장블록.csv')
+DEFK=str(AS.loc[AS['시장']=='한국','국면'].iloc[0]).startswith('방어') if (AS['시장']=='한국').any() else False
+KEEP=[nm for nm,_ in PICK]
+CB=cand[cand['시장'].eq('한국')&~cand['종목'].isin([a for a,_ in DROP if '순위 밖' not in _])].copy()
+CB['vol60']=[f.loc[n,'vol60'] if n in f.index else np.nan for n in CB['종목']]
+_P=F._px('in'); LR=O.layer_rs('in',_P)
+BKT,LW=O.basket(CB,f,RC.get('바구니',{}) or yaml.safe_load(open('qblocks/blocks.yaml',encoding='utf-8'))['바구니'],DEFK,LR,O.basket_dd('in',_P))
+BKT.to_csv(f'추천바구니_{pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y%m%d")}.csv',index=False,encoding='utf-8-sig')
 PICK=[(nm,str(f.loc[nm,'sector']) if nm in f.index and 'sector' in f.columns else '') for nm,_ in PICK]
 TODAY=pd.Timestamp.now(tz='Asia/Seoul').strftime('%Y%m%d')
 def n(v,d=1,s=''):
@@ -74,8 +83,10 @@ for i,(nm,sec) in enumerate(PICK,1):
 <span class="tag t{'a' if tag=='추천' else 'b'}">{tag} · {blk}</span></div>
 <div class="grid"><div class="lft">{spark(r['ticker'])}
 {bar('60일 변동성',r['vol60'],80)}{bar('하루 꼬리손실',r['es5'],15)}{bar('고점 대비',r['dd52'],60,False)}
-<div class="sm">종가 {n(r['close'],0)} · 베타 {n(r['beta'],2)} · 분할 {s['분할']} · 비중상한 {n(s['비중상한(%)'],1,'%')}</div></div>
+<div class="sm">종가 {n(r['close'],0)} · 베타 {n(r['beta'],2)} · 국면 {s.get('국면','')} · 주문 승수 {s.get('주문승수','')} · 분할 1/3(5·10거래일 재확인) · 비중상한 {n(s['비중상한(%)'],1,'%')}</div></div>
 <div class="rgt">{rs}</div></div><div class="dots">{dots(nm)}</div></div>''')
+bk=''.join(f"<tr><td>{html.escape(str(r['종목']))}</td><td>{r['층']}</td><td>{r['목표비중']}%</td><td>{'' if pd.isna(r['회차1']) else str(r['회차1'])+'%'}</td><td>{'' if pd.isna(r.get('주문승수')) else r['주문승수']}</td><td>{html.escape(str(r.get('경보','') or ''))}</td></tr>" for _,r in BKT.iterrows())
+bk=f"<h2>추천 바구니 (층별 비중, 국면 {'방어' if DEFK else '평상'}, 층 비중 {LW})</h2><table border=1 cellspacing=0 cellpadding=3><tr><th>종목</th><th>층</th><th>목표 비중</th><th>1회차(1/3)</th><th>주문 승수</th><th>경보</th></tr>{bk}</table><div class=sub>1회차 뒤 5·10거래일에 같은 조건을 다시 충족하면 1/3씩 추가. 직전 추천 바구니가 −5% 이하면 이번 비중 절반.</div>"
 drop=''.join(f'<div class="row"><span class="k">{html.escape(a)}</span><span class="v">{html.escape(b)}</span></div>' for a,b in DROP)
 css='''@page{size:A4;margin:11mm 10mm}body{font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:#1d2433;font-size:8.6pt;line-height:1.4;margin:0}
 h1{font-size:17pt;margin:0;color:#0b3d6e}.sub{color:#6b7585;margin:2px 0 8px}
@@ -101,6 +112,7 @@ doc=f'''<!doctype html><html><head><meta charset="utf-8"><title>오늘의 추천
 4) ETF는 실제 보유 상위 10종목의 이익·전망·재무·밸류를 보유 비중으로 가중 평균하여 판정<br>5) 미국은 국내 상장 ETF로 편입. 순서: 블록 예 비율 → 싼가 → 점수<br>
 <b>시장 부담</b> {html.escape(', '.join(burden))} · <b>기회</b> {html.escape(', '.join(opp))}</div>
 {''.join(cards)}
+{bk}
 <h2>제외 종목 및 사유</h2>{drop}
 <div class="sub" style="margin-top:8px">블록 표시: 초록 충족, 빨강 미충족, 회색 자료 없음. 분할 2차는 주봉 MACD 오실레이터 상승 구간. 백테스트 검증은 팀Q에서 진행 예정. 추천 후 10일 성과는 11/26 점검.</div>
 </body></html>'''

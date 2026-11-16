@@ -204,3 +204,36 @@ def basket_dd(d, P):
     last = L[L['추천일'] == L['추천일'].max()]
     rs = [P[t].dropna().iloc[-1] / b - 1 for t, b in zip(last['티커'], last['기준가']) if t in P and P[t].notna().any() and b]
     return None if not rs else round(float(np.mean(rs)) * 100, 2)
+
+
+def basket(C, f, BK, defmode, LR, dd):
+    """층별 비중 바구니. C = 거르기 끝난 추천 등급 후보(국내 상장), 순서 = 엔진 순서.
+    층비중(국면별) × 업종 상대강도 가감(AQR) → 방어 국면 AI 합산 상한 → 층 안은 60일 변동성 역수(Winton) → 주문승수 → 낙폭 한도(Millennium).
+    남는 비중은 현금. 1회차 주문 = 목표비중 ÷ 분할."""
+    W = dict(BK['층비중_방어' if defmode else '층비중_평상'])
+    adj = BK.get('업종RS_가감', 0)
+    for lay in W:
+        rk = LR.get(('한국', lay))
+        if rk:
+            third = max(1, rk[1] // 3)
+            W[lay] *= (1 + adj) if rk[0] <= third else ((1 - adj) if rk[0] > rk[1] - third else 1)
+    tot = sum(W.values()); W = {k: v / tot * 100 for k, v in W.items()}
+    if defmode:
+        ai = sum(W[k] for k in AI if k in W)
+        if ai > BK['AI한도_방어']:
+            for k in AI:
+                if k in W: W[k] *= BK['AI한도_방어'] / ai
+    rows = []
+    for lay, g in C.groupby('층', sort=False):
+        g = g.head(BK['층당최대'])
+        if lay not in W or not len(g):
+            continue
+        iv = 1 / g['vol60'].clip(lower=5)
+        for (_, r), w in zip(g.iterrows(), iv / iv.sum()):
+            tgt = W[lay] * w * r['주문승수'] * (BK['낙폭승수'] if dd is not None and dd <= BK['낙폭한도'] else 1)
+            rows.append(dict(종목=r['종목'], 층=lay, 목표비중=round(tgt, 1), 회차1=round(tgt / BK['분할'], 1),
+                             주문승수=r['주문승수'], 국면=r['국면'], 경보=r.get('경보', ''), 갈래=r.get('갈래', '')))
+    T = pd.DataFrame(rows)
+    cash = 100 - (T['목표비중'].sum() if len(T) else 0)
+    T = pd.concat([T, pd.DataFrame([dict(종목='현금(빈 층·주문 한도·AI 상한)', 층='-', 목표비중=round(cash, 1), 회차1=None)])], ignore_index=True)
+    return T, {k: round(v, 1) for k, v in W.items()}
