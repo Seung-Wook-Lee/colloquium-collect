@@ -58,7 +58,7 @@ def ks_page(s, per, end):
         f = dict(d='stck_bsop_date', o='stck_oprc', h='stck_hgpr', l='stck_lwpr', c='stck_clpr', v='acml_vol')
     else:
         rows = _ks_call('/uapi/overseas-price/v1/quotations/dailyprice', 'HHDFS76240000',
-                        {'AUTH': '', 'EXCD': s['_excd'], 'SYMB': s['코드'], 'GUBN': KS_GUBN[per], 'BYMD': end, 'MODP': '1'})
+                        {'AUTH': '', 'EXCD': s['_excd'], 'SYMB': str(s['코드']).replace('-', '/'), 'GUBN': KS_GUBN[per], 'BYMD': end, 'MODP': '1'})
         if rows is None:
             return None
         f = dict(d='xymd', o='open', h='high', l='low', c='clos', v='tvol')

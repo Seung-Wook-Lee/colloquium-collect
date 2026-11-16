@@ -9,7 +9,7 @@
 #   소스     : KIS Developers 실전 서버 (블록 0의 한투 키 2개 필요, 요청 간격 0.3초·재시도 2회), 야후(선행 PER)
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_밸류에이션.csv
 #              수집데이터/YYYYMMDD/YYYYMMDD_진단_한투추정실적.json (시험용, 형식 확인 뒤 없앨 예정)
-#   쓰는 위원: 피터·섹터 위원(밸류에이션), 미스 차트 가점 ⑨(외국인 소진율)
+#   쓰는 위원: 미스 밸류·섹터 위원(밸류에이션), 미스 차트 가점 ⑨(외국인 소진율)
 #   주의     : 한투 PER은 직전 연간 EPS 기준 → 최근 4분기(TTM) PER은 블록 6(DART)·7(SEC)이 다시 계산
 #   고칠 곳  : 미국 종목이 '실패'로 나오면 EXCD(거래소 코드표)
 #   실패하면 : 한투가 막히면(해외 접속 차단 등) 같은 칸을 야후 값으로 채우고 출처에 '야후 (한투 실패로 대체)'라고 적는다
@@ -84,7 +84,7 @@ try:
             first = EXCD.get(s['거래소'], 'NAS')
             for ex in [first] + [e for e in ['NAS', 'NYS', 'AMS'] if e != first and first != 'TSE']:
                 x = kis_get('/uapi/overseas-price/v1/quotations/price-detail', 'HHDFS76200200',
-                            {'AUTH': '', 'EXCD': ex, 'SYMB': s['코드']})
+                            {'AUTH': '', 'EXCD': ex, 'SYMB': str(s['코드']).replace('-', '/')})   # 한투 해외 기호는 BRK/B 식(11/16)
                 if x and num(x.get('last')):
                     r.update({'현재가': num(x.get('last')), '통화': x.get('curr'), 'PER': num(x.get('perx')),
                               'PBR': num(x.get('pbrx')), 'EPS': num(x.get('epsx')), 'BPS': num(x.get('bpsx')),

@@ -1,0 +1,54 @@
+name: 유튜브 공부자료
+
+# 의장 추천 유튜브 링크와 정기 채널 새 영상을 제미나이로 받아 적어 위원 공부자료 txt로 (2026-11-14 의장)
+# 결과: 드라이브 '콜로키움 수집데이터/유튜브/위원공부_유튜브/' + 이 저장소 youtube-data 브랜치 youtube/out/
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: '유튜브 주소(여러 개는 쉼표). 주소 뒤에 띄어쓰고 위원 이름을 붙여도 됨. 비우면 링크 목록·정기 채널만'
+        required: false
+        default: ''
+  schedule:
+    - cron: '30 23 * * *'     # 한국 08:30 (아침 방송 뒤, 10시 회의 전)
+    - cron: '0 12 * * *'      # 한국 21:00 (저녁 방송 뒤)
+
+concurrency: youtube
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write          # youtube-data 브랜치에 결과를 쌓기 위해
+    steps:
+      - uses: actions/checkout@v5
+      - name: 지난 결과(youtube-data 브랜치) 가져오기
+        run: |
+          mkdir -p youtube/out
+          if git fetch --depth 1 origin youtube-data 2>/dev/null; then
+            git archive FETCH_HEAD youtube/out | tar -x
+          fi
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install requests youtube-transcript-api==1.2.5
+      - name: 받아 적기
+        env:
+          TZ: Asia/Seoul
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+          YT_URLS: ${{ github.event.inputs.urls }}
+        run: python youtube/run.py
+      - name: 결과를 youtube-data 브랜치에 쌓기(처리목록·txt 전부, 한 커밋으로 덮어씀)
+        if: always()
+        run: |
+          [ -n "$(ls -A youtube/out)" ] || exit 0
+          D=$(mktemp -d); mkdir -p $D/youtube && cp -r youtube/out $D/youtube/
+          cd $D && git init -q -b youtube-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -qm "유튜브 공부자료 $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M')"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" youtube-data
