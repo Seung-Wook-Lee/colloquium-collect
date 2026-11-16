@@ -69,6 +69,20 @@ UP_MEANS = {
 }
 
 
+_OPP = {
+    '주가 오름': '주가 내림', '불안 커짐': '불안 줄어듦', '신용 불안 커짐': '신용 불안 줄어듦',
+    '스트레스 커짐': '스트레스 줄어듦', '금리 오름(주식 밸류 부담)': '금리 내림(주식 밸류 부담 덜함)',
+    '물가 오름(금리 인하 어려워짐)': '물가 내림(금리 인하 여지)', '원화 약세(외국인 수급 부담)': '원화 강세',
+    '달러 강세(신흥국·원자재 부담)': '달러 약세', '유가 오름(물가 부담)': '유가 내림(물가 부담 덜함)',
+    '고용 약해짐': '고용 나아짐', '고용 강해짐': '고용 약해짐', '침체 위험 커짐': '침체 위험 줄어듦',
+    '침체 신호 가까워짐': '침체 신호에서 멀어짐', '자금시장 빡빡해짐': '자금시장 풀림',
+    '유동성 늘어남': '유동성 줄어듦', '경기 기대 커짐': '경기 기대 줄어듦',
+    '장단기 금리차 벌어짐': '장단기 금리차 좁아짐', '성장 추정 올라감': '성장 추정 내려감',
+    '엔화 약세': '엔화 강세', '엔보다 원화가 약해짐': '엔보다 원화가 강해짐',
+    '안전자산 선호·달러 약세 쪽': '안전자산 선호 줄어듦', '50일선에서 더 멀리 위로': '50일선 쪽으로 내려옴'
+}  # 내려갈 때의 뜻
+
+
 def interpret(grp, name, v, mo_chg, pp, hi_gap=None):
     """grp 묶음, name 항목, v 현재값, mo_chg 1달 전 대비(%p 또는 %), pp 차이 단위 여부, hi_gap 최고 대비(%)"""
     if v is None or (isinstance(v, float) and math.isnan(v)):
@@ -87,15 +101,113 @@ def interpret(grp, name, v, mo_chg, pp, hi_gap=None):
         elif mo_chg > 0:
             parts.append(f'한 달 새 올라옴 → {meaning}' if meaning else '한 달 새 올라옴')
         else:
-            opp = {'주가 오름': '주가 내림', '불안 커짐': '불안 줄어듦', '신용 불안 커짐': '신용 불안 줄어듦',
-                   '스트레스 커짐': '스트레스 줄어듦', '금리 오름(주식 밸류 부담)': '금리 내림(주식 밸류 부담 덜함)',
-                   '물가 오름(금리 인하 어려워짐)': '물가 내림(금리 인하 여지)', '원화 약세(외국인 수급 부담)': '원화 강세',
-                   '달러 강세(신흥국·원자재 부담)': '달러 약세', '유가 오름(물가 부담)': '유가 내림(물가 부담 덜함)',
-                   '고용 약해짐': '고용 나아짐', '고용 강해짐': '고용 약해짐', '침체 위험 커짐': '침체 위험 줄어듦',
-                   '침체 신호 가까워짐': '침체 신호에서 멀어짐', '자금시장 빡빡해짐': '자금시장 풀림',
-                   '유동성 늘어남': '유동성 줄어듦', '경기 기대 커짐': '경기 기대 줄어듦',
-                   '장단기 금리차 벌어짐': '장단기 금리차 좁아짐', '성장 추정 올라감': '성장 추정 내려감',
-                   '엔화 약세': '엔화 강세', '엔보다 원화가 약해짐': '엔보다 원화가 강해짐',
-                   '안전자산 선호·달러 약세 쪽': '안전자산 선호 줄어듦', '50일선에서 더 멀리 위로': '50일선 쪽으로 내려옴'}
-            parts.append(f'한 달 새 내려옴 → {opp.get(meaning, "")}'.rstrip(' →') if meaning else '한 달 새 내려옴')
+            parts.append(f'한 달 새 내려옴 → {_OPP.get(meaning, "")}'.rstrip(' →') if meaning else '한 달 새 내려옴')
     return '. '.join(p for p in parts if p)
+
+
+# ---------------------------------------------------------------- 묶음 한 줄 해석
+# 2026-11-05 의장 "스트림릿은 해석도 첨부, 내용은 조금 줄이고" → 화면 맨 위에 밤새 브리핑과 같은 번호 묶음마다
+# 한두 문장. 규칙 코드로 만든다(AI 원고 아님). it = {항목: {'now','d1','mo','ytd','hi','text'}}, 변화는 %·%p.
+def _ok(x):
+    return x is not None and not (isinstance(x, float) and math.isnan(x))
+
+
+def _short(n):
+    return {'필라델피아 반도체(SOX)': 'SOX', '니케이225': '닛케이', '하이일드 스프레드': '하이일드'}.get(n, n)
+
+
+def _idx_note(it):
+    names = [n for n in it if _ok(it[n].get('d1')) and '이격도' not in n]
+    if not names:
+        return ''
+    up = [n for n in names if it[n]['d1'] > 0]
+    out = [f'전일 {len(up)}개 오르고 {len(names) - len(up)}개 내림'
+           + (f'(가장 크게 움직인 건 {_short(max(names, key=lambda n: abs(it[n]["d1"])))} '
+              f'{it[max(names, key=lambda n: abs(it[n]["d1"]))]["d1"]:+.1f}%)' if names else '')]
+    mo = [n for n in names if _ok(it[n].get('mo'))]
+    if mo:
+        w = min(mo, key=lambda n: it[n]['mo'])
+        b = max(mo, key=lambda n: it[n]['mo'])
+        if it[b]['mo'] < 0:
+            out.append(f'한 달로는 모두 내림, 가장 많이 빠진 건 {_short(w)} {it[w]["mo"]:+.1f}%')
+        elif it[w]['mo'] > 0:
+            out.append(f'한 달로는 모두 오름, 가장 강한 건 {_short(b)} {it[b]["mo"]:+.1f}%')
+        else:
+            out.append(f'한 달로는 {_short(b)} {it[b]["mo"]:+.1f}%가 가장 강하고 {_short(w)} {it[w]["mo"]:+.1f}%가 가장 약함')
+    hi = [n for n in names if _ok(it[n].get('hi'))]
+    deep = [f'{_short(n)} {it[n]["hi"]:.0f}%' for n in hi if it[n]['hi'] <= -10]
+    if deep:
+        out.append('고점보다 10% 넘게 내려온 것: ' + ', '.join(deep))
+    elif hi:
+        out.append('모두 고점에서 10% 안쪽')
+    if '코스피 50일 이격도' in it and _ok(it['코스피 50일 이격도'].get('now')):
+        v = it['코스피 50일 이격도']['now']
+        out.append(f'코스피 50일 이격도 {v:.0f}, {LEVEL["코스피 50일 이격도"](v)}')
+    return '. '.join(out) + '.'
+
+
+def _rate_note(it):
+    out = []
+    f = it.get('기준금리(범위)')
+    if f:
+        mo, ytd = f.get('mo'), f.get('ytd')
+        how = '그대로' if not _ok(mo) or abs(mo) < 0.01 else ('인상' if mo > 0 else '인하')
+        yr = '' if not _ok(ytd) else (', 올해 변화 없음' if abs(ytd) < 0.01 else f', 올해 {ytd:+.2f}%p')
+        out.append(f'연준 기준금리 {f.get("text") or ""}, 한 달 새 {how}{yr}')
+    for k in ['미국 10년', '미국 30년']:
+        r = it.get(k)
+        if not r or not _ok(r.get('now')):
+            continue
+        s = f'{k[3:]} {r["now"]:.2f}%: {LEVEL[k](r["now"])}'
+        if _ok(r.get('mo')):
+            s += f', 한 달 새 {r["mo"]:+.2f}%p'
+        out.append(s)
+    ten, fed = it.get('미국 10년'), it.get('기준금리(범위)')
+    if ten and ten.get('mo') is not None and _ok(ten.get('mo')) and abs(ten['mo']) >= 0.05:
+        out.append('장기금리가 내려와 주식 밸류 부담은 한 달 전보다 덜함' if ten['mo'] < 0
+                   else '장기금리가 올라 주식 밸류 부담이 한 달 전보다 커짐')
+    return '. '.join(out) + '.' if out else ''
+
+
+def _move_note(it, unit='%'):
+    out = []
+    for n, r in it.items():
+        if not _ok(r.get('mo')):
+            continue
+        meaning = UP_MEANS.get(n, '')
+        if abs(r['mo']) < 1:
+            out.append(f'{_short(n)} 한 달 새 거의 그대로({r["mo"]:+.1f}%)')
+        else:
+            word = meaning if r['mo'] > 0 else _OPP.get(meaning, '')
+            out.append(f'{_short(n)} 한 달 {r["mo"]:+.1f}%' + (f', {word}' if word else ''))
+    return '. '.join(out) + '.' if out else ''
+
+
+def _mood_note(it, fg=None):
+    out = []
+    if fg:
+        out.append(f'공포탐욕 {fg[0]:.0f}({fg[1]})')
+    for n in ['VIX', '하이일드 스프레드']:
+        r = it.get(n)
+        if r and _ok(r.get('now')):
+            s = f'{_short(n)} {r["now"]:.2f}{"%" if "스프레드" in n else ""}: {LEVEL[n](r["now"])}'
+            if _ok(r.get('mo')):
+                s += f', 한 달 새 {r["mo"]:+.2f}{"%p" if "스프레드" in n else "%"}'
+            out.append(s)
+    return '. '.join(out) + '.' if out else ''
+
+
+def section_note(key, it, fg=None):
+    """key: '지수'·'금리'·'환율'·'원자재'·'심리' → 묶음 한두 문장"""
+    try:
+        if key == '지수':
+            return _idx_note(it)
+        if key == '금리':
+            return _rate_note(it)
+        if key in ('환율', '원자재'):
+            return _move_note(it)
+        if key == '심리':
+            return _mood_note(it, fg)
+    except Exception:
+        return ''
+    return ''

@@ -26,7 +26,7 @@ try:                                        # 스트림릿 클라우드: Secrets
 except Exception:
     pass
 import drive  # noqa: E402
-from interp import interpret  # noqa: E402
+from interp import interpret, section_note  # noqa: E402
 
 D_DATA = '콜로키움 수집데이터'
 D_MEET = '콜로키움/오늘의 시장해석'          # 회의록·시장해석 txt
