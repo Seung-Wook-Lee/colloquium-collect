@@ -2,6 +2,7 @@
 # [블록 5] 리스크 — 시장이 얼마나 불안한가
 #   하는 일  : (가) CNN 공포탐욕 종합 점수와 7개 지표: 점수·판정·원천값과 한 줄 해석
 #              (나) 리스크 표: 변동성(VIX·VIX3M·MOVE), 신용(하이일드·투자등급 스프레드),
+#                   위기 관리(하이일드 실효수익률·CCC·BBB 스프레드, 하이일드 20일 변화 속도 — 2026-11-05 의장),
 #                   금융 스트레스(세인트루이스·캔자스시티·시카고 NFCI·조정 NFCI),
 #                   침체 신호(10년−2년·10년−3개월·샴 룰·침체 확률·실업수당 4주 평균),
 #                   자금 경색(SOFR−IORB·순유동성 4주 변화)
@@ -141,6 +142,37 @@ try:
     rk('변동성', 'MOVE', YS.get('MOVE'), chair='55~60 고점, 100~110 저점, 70~90 Normal', general='채권시장 변동성', src='야후 ^MOVE')
     rk('신용', '하이일드 스프레드', FS.get('BAMLH0A0HYM2'), unit='%', chair='3~4% 주의, 5% 이상 위기 징후', src='FRED BAMLH0A0HYM2')
     rk('신용', '투자등급 스프레드', FS.get('BAMLC0A0CM'), unit='%', general='1.5% 위면 우량 회사채도 긴장', src='FRED BAMLC0A0CM')
+    # (다) 위기 관리(2026-11-05 의장): 수준 + 속도. 의장 기준이 정해지면 chair 칸과 RISK_RULES에 넣는다.
+    #      ICE 지표는 FRED가 최근 약 3년만 주므로 '2년 최고'는 수집 범위(2년 전 1월부터) 안의 최고다.
+    def _hi2(s):
+        if s is None or not len(s):
+            return ''
+        return f'수집 범위 최고 {s.max():.2f}({s.idxmax():%Y-%m-%d}), 최저 {s.min():.2f}'
+    hy_ey = FS.get('BAMLH0A0HYM2EY')
+    rk('위기 관리', '하이일드 실효수익률', hy_ey, unit='%',
+       general='정크본드 기업이 실제로 내는 금리. 2021년 4%대 = 아주 낙관, 7~8% = 긴축기 부담, '
+               '9~10% 위 = 2022·2023년 고점권, 2020년 3월 약 11%',
+       src='FRED BAMLH0A0HYM2EY', note=_hi2(hy_ey))
+    ccc = FS.get('BAMLH0A3HYC')
+    rk('위기 관리', 'CCC 이하 스프레드', ccc, unit='%',
+       general='가장 약한 회사채. 위기 때 먼저 벌어짐. 10% 위 = 약한 회사 돈줄 긴장, 2020년 3월 약 20%',
+       src='FRED BAMLH0A3HYC', note=_hi2(ccc))
+    rk('위기 관리', 'BBB 스프레드', FS.get('BAMLC0A4CBBB'), unit='%',
+       general='투자등급 맨 아래. 2% 위 = 우량 회사채 끝단까지 긴장(강등되면 하이일드로 떨어짐)', src='FRED BAMLC0A4CBBB')
+    hy = FS.get('BAMLH0A0HYM2')
+    if hy is not None and len(hy) > 25:
+        sp = (hy - hy.shift(20)).dropna()   # 20영업일(약 한 달) 변화
+        r = rk('위기 관리', '하이일드 스프레드 20일 변화', sp, unit='%p',
+               general='수준보다 속도. 한 달 새 +1%p 이상 = 급격한 신용 경색(2020년 3월·2022년 여름에 나옴)',
+               src='FRED BAMLH0A0HYM2 계산')
+        if sp.iloc[-1] >= 1:
+            r['표시'] = '한 달 새 +1%p 이상: 급격한 신용 경색 속도'
+    if hy_ey is not None and len(hy_ey) > 25:
+        ey = (hy_ey - hy_ey.shift(20)).dropna()
+        r = rk('위기 관리', '하이일드 실효수익률 20일 변화', ey, unit='%p',
+               general='한 달 새 +1%p 이상 = 회사 자금 조달 비용 급등', src='FRED BAMLH0A0HYM2EY 계산')
+        if ey.iloc[-1] >= 1:
+            r['표시'] = '한 달 새 +1%p 이상: 조달 비용 급등'
     for k, sid in [('세인트루이스', 'STLFSI4'), ('캔자스시티', 'KCFSI'), ('시카고 NFCI', 'NFCI'), ('시카고 조정 NFCI', 'ANFCI')]:
         rk('금융 스트레스', k, FS.get(sid), general='0 = 평균, 0 위 = 스트레스·긴축, 1 위 = 높음', src=f'FRED {sid}')
     rk('침체 신호', '10년−2년', FS.get('T10Y2Y'), unit='%p', chair='마이너스일 경우 경기침체 가능성↑', src='FRED T10Y2Y')
