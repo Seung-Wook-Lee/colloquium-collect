@@ -8,3 +8,7 @@
 - ETF는 보유 상위 10종목(`ETF보유.csv`, `ETF멤버.csv`)의 이익·전망·재무·밸류를 보유 비중 가중 평균.
 - `fetch_*.py`: 야후·DART 보조 자료 수집. `fetch_per3.py`: 자기 3년 PER 밴드.
 - `gen7.py`·`gen_blocks.py` + `topdf.js`(Node Playwright): 추천 보고서·블록 구성 PDF.
+
+## 매일 실행
+1. 07시 수집 파일(드라이브 '콜로키움 수집데이터' 오늘 폴더)을 입력 폴더(/mnt/project-files/퀀트센터/입력/)에 같은 이름(시세.csv, 닉스.csv, 국내수급.csv …)으로 받는다. 보조 자료(가격2년·지수2년·재무·ETF보유·PER3년)는 fetch_*.py로 갱신.
+2. `python engine.py <입력 폴더>` → 판정표. `python gen7.py` → 오늘의 추천 종목 HTML, `node topdf.js` → PDF.

@@ -300,4 +300,9 @@ def market(d):
             if g: m[c] = int(g.group(2)) / 100 if g.group(1) == '하락' else 0.0
     except FileNotFoundError:
         pass
+    try:   # 코스피 50일 이격(의장 기준: 125 과열주의, 130 과열)
+        ix = pd.read_csv(f'{d}/지수2년.csv', index_col=0)['^KS11'].dropna()
+        m['KS_GAP50'] = float(ix.iloc[-1] / ix.iloc[-50:].mean() * 100)
+    except Exception:
+        pass
     return m
