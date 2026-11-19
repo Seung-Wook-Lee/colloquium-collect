@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))   # nyx.py(닉스 지표), blocks/b09_exc.py(예외 검정)
 import features as F  # noqa: E402
 import nyx  # noqa: E402
@@ -184,7 +184,7 @@ def report(Z, SB, H):
             k = f'{w}주'; zz = z[z[k].notna()]
             if zz['날짜'].nunique() < 8: continue
             y, n = zz[zz[bid] >= 0.5][k], zz[zz[bid] < 0.5][k]
-            ic = zz.groupby('날짜').apply(lambda g: g[bid].corr(g[k], method='spearman') if g[bid].nunique() > 1 else np.nan,
+            ic = zz.groupby('날짜').apply(lambda g: g[bid].rank().corr(g[k].rank()) if g[bid].nunique() > 1 else np.nan,
                                           include_groups=False).dropna()
             rows.append(dict(블록=bid, 질문=b['질문'], 영문=b.get('영문', ''), 국면=reg or '전체', 기간=k, 날짜수=zz['날짜'].nunique(),
                              예_종목수=len(y), 예_평균수익률=round(y.mean(), 2), 예_승률=round((y > 0).mean() * 100, 1),
@@ -245,6 +245,7 @@ def walk(Z, SB, H, first_test_year):
 
 
 def main(d, cfg=None, step='W-FRI', workers=None):
+    d = os.path.abspath(d)   # 기준일 폴더의 링크가 상대 경로로 깨지지 않게
     B = QCC.load_blocks(cfg)
     global TOPN
     BT = B.get('성적표', {}); TOPN = int(BT.get('상위', 5))
@@ -258,7 +259,7 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     cache = os.path.join(d, '..', '블록점수이력.csv')
     old = pd.read_csv(cache, encoding='utf-8-sig') if os.path.exists(cache) else pd.DataFrame()
     sig = ','.join(sorted(mask)) + '|' + ','.join(SB for SB in B['종목'])
-    if len(old) and old.get('_설정', pd.Series([''])).iloc[0] != sig:
+    if len(old) and str(old.get('_설정', pd.Series([''])).iloc[0]) != sig:
         old = pd.DataFrame()   # 블록·칸이 바뀌면 처음부터 다시
     have = set(pd.to_datetime(old['날짜']).dt.date) if len(old) else set()
     todo = [t for t in dates if t.date() not in have or t == dates[-1]]
@@ -269,8 +270,9 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     Z = Z[Z['층'] != 'S0']
     fw = pd.DataFrame([forward(L, H, tk, pd.Timestamp(t)) for tk, t in zip(Z['ticker'], Z['날짜'])], index=Z.index)
     Z = pd.concat([Z.drop(columns=[c for c in fw.columns if c in Z]), fw], axis=1)
-    Z['_설정'] = sig
-    Z.to_csv(cache, index=False, encoding='utf-8-sig')
+    Z['_설정'] = ''
+    Z.loc[Z.index[:1], '_설정'] = sig   # 설정 표시는 첫 줄에만(파일 크기)
+    Z.round(3).to_csv(cache, index=False, encoding='utf-8-sig')
     SB = B['종목']
     R = report(Z, SB, H)
     R.to_csv(os.path.join(d, '..', '블록성적.csv'), index=False, encoding='utf-8-sig')
