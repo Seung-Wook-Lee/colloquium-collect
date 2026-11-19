@@ -529,7 +529,7 @@ def gukjang(c, EV, CAL):
         T = T[~T['제목'].astype(str).str.contains('(?<![A-Za-z])' + BAN.pattern.replace('^', ''))]
         for _, x in T.iterrows():
             stock = f" · {x['종목']} 전일 {p(x['등락률(%)'], 2)}" if ok(x.get('종목')) and str(x['종목']) else ''
-            out.append(L(f"[{x['판정']}] {x['시각(한국)']} {x['출처']}", str(x['제목']) + stock,
+            out.append(L(f"[{x['판정']}] {x.get('구분', '')} {x['시각(한국)']} {x['출처']}", str(x['제목']) + stock,
                          f"FinBERT 긍정 {n(x['긍정'], 2)} · 부정 {n(x['부정'], 2)}(07시 주가뉴스.csv)"))
     elif len(N):
         ok_src = R['승인매체']
