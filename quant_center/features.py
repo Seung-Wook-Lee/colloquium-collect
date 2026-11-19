@@ -151,6 +151,10 @@ def stocks(d):
         key = f['ticker'].astype(str).str.upper().str.replace(r'\.(KS|KQ)$', '', regex=True)
         f['sec_gap60'] = key.map(h['sec_gap60'])
         f['sec_flow5'] = key.map(h['sec_flow5'])
+        # 11/19 완성도: 어떤 업종 ETF 상위 10에도 없는 개별주는 같은 시장·층 종목들이 받은 업종 ETF 값(중앙값)으로 채움
+        for c in ('sec_gap60', 'sec_flow5'):
+            fill = f.groupby(['시장', 'layer'])[c].transform('median')
+            f[c] = f[c].where(f[c].notna() | (f['구분'] != '개별주'), fill)
     # 재무 건전성·연매출(야후 info, 200종목)
     H = _r(d, '재무건전성')
     if len(H):
