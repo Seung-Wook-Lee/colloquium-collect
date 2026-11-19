@@ -44,7 +44,7 @@ for _,r in rec.iterrows(): L.append(f"  추천: {r['종목']}")
 L.append('  관찰(조건 2개): '+', '.join(f"{r['종목']}(빠진 조건: {', '.join(k for k in ['싸다','돈이 들어온다','돌아섰다'] if r[k]!='예')})" for _,r in obs.iterrows()))
 L.append('')
 L.append(f"3. 후보군: 200종목 중 거르기(이익 증가·사건 역풍·연매출 10조) 통과 개별주 {len(kr)+len(us)}개, ETF {len(ee)}개")
-L.append('  싼가 = 동료 대비 선행 PER·PBR 순위·선행<TTM·FCF 수익률 통과 비율(0~1, 줄 세우기 뼈대). 나머지 점수 = 전망·재무·Sigma Check·수급·추세·업종·BLOCK20 블록 평균')
+L.append('  싼가 = 동료 대비 선행 PER·PBR 순위·선행<TTM·FCF 수익률 통과 비율(0~1, 줄 세우기 기준). 나머지 점수 = 전망·재무·Sigma Check·수급·추세·업종·BLOCK20 블록 평균')
 for name,d in (('한국',kr),('미국',us)):
     L.append(f"  [{name}] "+', '.join(f"{r['종목']} 싼가 {r['싼가']:.2f}·{r['점수']:.2f}" for _,r in d.iterrows()))
 L.append("  [ETF] "+', '.join(f"{r['종목']} 싼가 {r['싼가']:.2f}·{r['점수']:.2f}" for _,r in ee.head(15).iterrows()))
