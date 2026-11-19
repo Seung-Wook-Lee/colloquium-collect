@@ -311,6 +311,9 @@ def stocks(d):
     f['turn_ok'] = (t2 | (f.get('above50', pd.Series(0, index=f.index)) == 1)).astype(int)
     # 한 분기 꺾임 봐주기: 앞 분기 이익 전년비 증가 + 추정치 상향(자료 없으면 0)
     f['earn_relief'] = ((f.get('prev_op_yoy', np.nan) > 0) & (f['est30'] > 0) & (f['up30'] >= f['dn30'])).astype(int) if 'est30' in f else 0
+    # 11/19 의장: 매출이 늘고 있으면 이익 감소만으로 거르지 않는다(이익률 조건은 거르기에서 뺌). 이익 자료 없으면 비움
+    _rv = f['rev_yoy'] if 'rev_yoy' in f else pd.Series(np.nan, index=f.index)
+    f['earn_ok'] = ((f['op_yoy'] > 0) | (_rv > 0) | (f['earn_relief'] == 1)).astype(int).where(f['op_yoy'].notna())
     # 동료 비교: 같은 시장·같은 층 개별주 안에서 순위(1에 가까울수록 좋음)
     stk = f['구분'] == '개별주'
     g = [f['시장'], f['layer']]
