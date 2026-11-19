@@ -233,6 +233,27 @@ def backtest(W, IN, use_drive, tday, B, S):
         return {}
 
 
+def bottom(W, use_drive, B, S):
+    """11/19 의장: 바닥 근접도(quant_center/bottom.py) 매일. 블록33 지문으로 미국 지수가 바닥 즈음인지, 그 점수일 때 13·26주 뒤 지수 수익률."""
+    cache = f'{W}/블록점수이력.csv'
+    try:
+        if not os.path.exists(cache) and use_drive:
+            import drive
+            raw = drive.get(f'{CARRY}/블록점수이력.csv')
+            if raw:
+                open(cache, 'wb').write(raw)
+        if not os.path.exists(cache):
+            log('[바닥] 블록점수이력 없음 → 건너뜀'); return {}
+        import bottom as BOT
+        one, test, _ = BOT.run(W, S, B.get('바닥'))
+        r = one.iloc[0]
+        log(f"[바닥] 근접도 {r['원점수']} (과거 {r['과거백분위']}백분위, 경보 {r['경보']}) · 검정 AUC {test.iloc[0]['AUC']}")
+        return {k: open(f'{W}/{k}', 'rb').read() for k in ('바닥근접도.csv', '바닥근접도_검정.csv', '바닥근접도_닮은주.csv', '바닥근접도_이력.csv') if os.path.exists(f'{W}/{k}')}
+    except Exception as e:
+        log(f'[바닥] 실패 → 건너뜀: {str(e)[:160]}')
+        return {}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--date'); ap.add_argument('--local'); ap.add_argument('--skip-fetch', action='store_true')
@@ -299,6 +320,7 @@ def main():
     f = F.stocks(IN)
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
     BTO = backtest(W, IN, use_drive, tday, B, S) if (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
+    BTO.update(bottom(W, use_drive, B, S))
 
     # 4) 위원 원고
     if os.path.exists(f'{IN}/아침보고.txt'):

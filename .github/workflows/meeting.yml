@@ -56,6 +56,7 @@ jobs:
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
           TEAMQ_DIR: ${{ github.workspace }}/team_q
           QC_PRIVATE: ${{ github.workspace }}/team_q_private/colloquium_private
+          FRED_KEY: ${{ secrets.FRED_KEY }}
         run: |
           ARGS=""
           if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi
