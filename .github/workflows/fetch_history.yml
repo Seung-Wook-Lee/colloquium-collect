@@ -1,0 +1,21 @@
+name: fetch_history
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: pip install -q pandas requests xlrd openpyxl
+      - run: python research/fetch_history.py
+      - name: 결과를 data-history 가지에 올림
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git checkout -B data-history
+          git add -f history/*.csv
+          git commit -m "과거 자료(FRED·GPR) $(date -u +%F)"
+          git push -f origin data-history
