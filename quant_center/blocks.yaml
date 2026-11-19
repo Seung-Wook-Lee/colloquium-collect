@@ -87,14 +87,11 @@
     - [한 분기 꺾여도 앞 분기 증가 + 추정치 상향이면 통과, earn_relief == 1, 확정, 11/16 의장 한 분기 꺾임]
   B12:
     질문: 제2의 젠슨 황 있나?
-    영문: 'event study price shock, negative news words'
+    영문: 'event filter (news keywords)'
     역할: 거르기
-    통과식: shock_own == 0 and shock_layer == 0 and not news_hit
+    통과식: not event_hit
     공식:
-    - [최근 5일 시장을 뺀 하루 하락이 −3σ 아래로 없음(종목 사건), shock_own == 0, 확정, 11/19 의장 사건 연구 abnormal return]
-    - [최근 5일 같은 층 절반 이상이 같은 날 −2σ 아래로 빠진 적 없음(업종 사건 = 제2의 젠슨 황), shock_layer == 0, 확정, 11/19 의장 사건 연구]
-    - [업종 부정 낱말이 오늘 뉴스 제목에 없음, not news_hit, 확정, 11/15 의장 업종 낱말]
-    # 11/19 의장: 손으로 쓰던 사건상태.csv는 판정에서 뺌(AI가 쓴 표)
+    - [업종 사건 낱말 오늘 뉴스에 없음 + 진행 중 사건(사건상태.csv) 없음, not event_hit, 확정, 11/15·11/16 의장]
   B13:   # 11/19 의장: 구 B13(연매출 10조 원)은 블록이 아니라 추천 자격 설정 → 추천.최소매출원
     질문: 추세가 진짜인가?
     영문: 'EWMAC forecast, Carver · Frog-in-the-pan'
@@ -326,14 +323,14 @@
     미국: [lt_net, lt_up, lt_dn, lt_net_prev, lt_funds]       # 13F = 미국 상장 주식만
   칸과거:   # 성적(과거 4·12·26·52주)을 잴 수 있는지: 가격 = 2년 가격으로 재계산, BLOCK20 = team_q 워크포워드 기록,
             # 공시 = 발표일 기준 재계산 가능(작업 필요), 누적 = 수집일부터 매일 쌓임(과거 없음), 없음 = 그날 스냅샷만
-    가격: [shock_own, shock_layer, ewmac16, ewmac32, ewmac, ret252, fip_id, resmom, resmom_mpct, max21_mpct, above50, beta, beta_mpct, body_d, cci_d, close, dd52, dd52_mpct, es5_mpct, gap50, gap60w, lay_rs_top, m5, m5gap,
+    가격: [ewmac16, ewmac32, ewmac, ret252, fip_id, resmom, resmom_mpct, max21_mpct, above50, beta, beta_mpct, body_d, cci_d, close, dd52, dd52_mpct, es5_mpct, gap50, gap60w, lay_rs_top, m5, m5gap,
           osc_d, osc_d1, osc_w, osc_w1, osc_w2, p10, p3, p5, pctb_d, peer20, res13p, res4p, ret126, ret63, rs20, rs5,
           rs_ai120, rs_ai126, rs_ai63, rsi_d, rsi_w, sto_k_d, sup_touch_d, tail_low_d, up10_13, vol60_mpct, vol_w, sec_gap60,
           VIX, MOVE, VIX_VIX3M, HY, STLFSI, SOFR_IORB, US10Y, T10Y2Y, KS_GAP50, KR_BEAR, US_BEAR, CORR_JUMP, ROT_DEF, FG, GPR_PCT]
     BLOCK20: [p126, n0_126, p63, n0_63, combo1m]
     공시: [lt_net, lt_up, lt_dn, lt_net_prev, lt_funds, op_yoy, opm_yoy, opm2, rev_yoy, rev_krw, fscore, z, fcf, roe, debt_ebitda, per_ttm, per_rank, pbr_rank, fcf_yield, per_pct3]
     누적: [f5, f20, fstreak, dip_buy, inst5, pension20, ind5, mcap_kr, etf_flow5, etf_flow20, sec_flow5, adv_hold, adv_new,
-          CTA, VOLT, KR_SAFE_FLOW5, SPX_FPER, event_hit, news_hit]
+          CTA, VOLT, KR_SAFE_FLOW5, SPX_FPER, event_hit]
     없음: [est30, est90, up30, dn30, peer_est30, fper, peer_fper, surprise, surp4, accel, earn_relief, opm_ok, bb_eps1w, bb_epsytd, bb_ret1w]
 장기펀드:   # 11/19 의장: 장기·보수 성향 펀드 13F(미국 주식) '지난 분기 늘렸나' → 보너스 블록(fetch_13f.py). GIC는 13F 없음
   시작: '2013-01-01'
