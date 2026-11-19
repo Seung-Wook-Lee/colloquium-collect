@@ -245,10 +245,11 @@ def bottom(W, use_drive, B, S):
         if not os.path.exists(cache):
             log('[바닥] 블록점수이력 없음 → 건너뜀'); return {}
         import bottom as BOT
-        one, test, _ = BOT.run(W, S, B.get('바닥'))
-        r = one.iloc[0]
-        log(f"[바닥] 근접도 {r['원점수']} (과거 {r['과거백분위']}백분위, 경보 {r['경보']}) · 검정 AUC {test.iloc[0]['AUC']}")
-        return {k: open(f'{W}/{k}', 'rb').read() for k in ('바닥근접도.csv', '바닥근접도_검정.csv', '바닥근접도_닮은주.csv', '바닥근접도_이력.csv') if os.path.exists(f'{W}/{k}')}
+        for idx in (B.get('바닥') or {}).get('지수', ['^GSPC', '^NDX']):   # S&P500·나스닥100 둘 다
+            one, test, _ = BOT.run(W, S, B.get('바닥'), idx)
+            r = one.iloc[0]
+            log(f"[바닥] {idx} 근접도 {r['원점수']} (과거 {r['과거백분위']}백분위, 경보 {r['경보']}) · 검정 AUC {test.iloc[0]['AUC']}")
+        return {os.path.basename(k): open(k, 'rb').read() for k in glob.glob(f'{W}/바닥근접도*.csv')}
     except Exception as e:
         log(f'[바닥] 실패 → 건너뜀: {str(e)[:160]}')
         return {}
