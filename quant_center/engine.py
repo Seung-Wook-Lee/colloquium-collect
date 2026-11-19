@@ -75,7 +75,8 @@ def st_judge(S, c):
         sc = lambda k: pd.to_numeric(S[f'_sc_{k}'] if f'_sc_{k}' in S else val(k), errors='coerce')
         ok_pass = lambda k: val(k).isin(['통과', '해당 없음'])
         fell = pd.Series(True, index=S.index)
-        for k in P.get('떨어짐', []): fell &= ok_pass(k)
+        nodata = pd.Series(False, index=S.index)
+        for k in P.get('떨어짐', []): fell &= ok_pass(k); nodata |= val(k).eq('자료 없음')   # 11/20 상장 1년 안 된 종목(스페이스X)은 '고점 부근'이 아니라 자료 없음
         good = pd.Series(True, index=S.index)
         for k in P.get('우량_통과', []): good &= ok_pass(k)
         for k in P.get('우량_예', []): good &= (sc(k) >= 0.5)
@@ -84,9 +85,9 @@ def st_judge(S, c):
         seen = RK.notna().sum(axis=1) >= P.get('순위_최소관측', 2)
         cut_r = P.get('추천선', 0.5)
         cand = S['판정'] == '후보'
-        S['원칙'] = np.where(~fell, '고점 부근(안 떨어짐)', np.where(~good, '우량 아님', '떨어진 우량주'))
-        S['추천'] = np.where(~cand, S['판정'], np.where(~fell, '대기(고점 부근)', np.where(~good, '대기(우량 아님)',
-                    np.where(~seen, '자료 부족(블록 수 모자람)', np.where(S['순위점수'] >= cut_r, '추천', '관찰')))))
+        S['원칙'] = np.where(nodata, '떨어짐 자료 없음', np.where(~fell, '고점 부근(안 떨어짐)', np.where(~good, '우량 아님', '떨어진 우량주')))
+        S['추천'] = np.where(~cand, S['판정'], np.where(nodata, '자료 부족(52주 고점 없음)', np.where(~fell, '대기(고점 부근)', np.where(~good, '대기(우량 아님)',
+                    np.where(~seen, '자료 부족(블록 수 모자람)', np.where(S['순위점수'] >= cut_r, '추천', '관찰'))))))
         c['info']['판정기준'] = (f"원칙: 떨어짐 {P.get('떨어짐')} 통과 → 우량 {P.get('우량_통과')} 통과·{P.get('우량_예')} 예 → "
                               f"순위 {P.get('순위')} 평균 ≥ {cut_r} 추천, 아래는 관찰")
         return S
