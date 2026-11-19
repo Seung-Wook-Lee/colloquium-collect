@@ -143,7 +143,7 @@ def run(d, cfg='blocks.yaml'):
     SB = B['종목']
     Q = {b['질문']: k for k, b in SB.items()}   # 질문으로 블록 찾기(번호가 바뀌어도 됨)
     K_EARN, K_EVENT, K_HOT = Q['이익이 늘고 있나?'], Q['제2의 젠슨 황 있나?'], Q['너무 많이 올랐나?']
-    K_HIGH = Q['고점 부근이 아닌가?']; K_CHEAP = Q['그래서 싼가?']
+    K_HIGH = Q['고점 부근이 아닌가?']; K_CHEAP = Q['그래서, 지금 싼가?']
     last = int(list(SB)[-1][1:])
     K_SPLIT, K_CAP, K_SELL = f'B{last+1:02d}_분할', f'B{last+2:02d}_비중상한(%)', f'B{last+3:02d}_매도신호'
     # 1) 공식별 결과
@@ -261,7 +261,7 @@ def run(d, cfg='blocks.yaml'):
         H = pd.read_csv(f'{d}/ETF보유.csv', encoding='utf-8-sig'); MI = pd.read_csv(f'{d}/ETF멤버.csv', encoding='utf-8-sig').set_index('멤버')
     except FileNotFoundError:
         H, MI = pd.DataFrame(columns=['번호', '멤버', '이름', '비중']), pd.DataFrame()
-    K15 = Q['이익 전망이 오르나?']; K16 = Q['회사가 튼튼한가?']
+    K15 = Q['이익 전망이 오르나?']; K16 = Q['돈을 잘 버나?']; K16B = Q['빚에 안 무너지나?']   # 11/19 튼튼 → 수익성·재무 안전
     t2i = dict(zip(f['ticker'], S.index[S['번호'].isin(f['번호'])])) if False else {}
     num2row = {n: i for i, n in zip(S.index, S['번호'])}
     tk2num = dict(zip(f['ticker'], f['번호']))
@@ -272,18 +272,18 @@ def run(d, cfg='blocks.yaml'):
             r = S.loc[num2row[tk2num[t]]]
             e = {'통과': 1.0, '탈락': 0.0}.get(r[K_EARN])
             g = lambda k: pd.to_numeric(r[k], errors='coerce')
-            return e, g(K15), g(K16), g(K_CHEAP)
+            return e, g(K15), g(K16), g(K16B), g(K_CHEAP)
         if t not in MI.index:
-            return None, None, None, None
+            return None, None, None, None, None
         m = MI.loc[t]
         eq = m['eqg'] if nz(m['eqg']) else m['eg']
         e = None if not nz(eq) else float(eq > 0)
         o = None if not (nz(m['feps']) and nz(m['teps'])) else float(m['feps'] > m['teps'])
-        st = [float(m['roe'] >= 0.10) if nz(m['roe']) else None, float(m['fcf'] > 0) if nz(m['fcf']) else None,
-              float(m['debt'] / m['ebitda'] <= 3) if nz(m['debt']) and nz(m['ebitda']) and m['ebitda'] > 0 else None]
+        st = [float(m['roe'] >= 0.10) if nz(m['roe']) else None, float(m['fcf'] > 0) if nz(m['fcf']) else None]
         st = [x for x in st if x is not None]
+        sf = float(m['debt'] / m['ebitda'] <= 3) if nz(m['debt']) and nz(m['ebitda']) and m['ebitda'] > 0 else None
         c = None if not (nz(m['fpe']) and nz(m['tpe'])) else float(m['fpe'] < m['tpe'])
-        return e, o, (sum(st) / len(st) if st else None), c
+        return e, o, (sum(st) / len(st) if st else None), sf, c
     for n, g in H.groupby('번호'):
         if n not in num2row: continue
         i = num2row[n]
@@ -297,13 +297,13 @@ def run(d, cfg='blocks.yaml'):
         if e is not None:
             S.at[i, K_EARN] = '통과' if e > 0.5 else '탈락'
             S.at[i, '구성_이익통과'] = f"보유 비중 {e*100:.0f}% 이익 증가({ne}종목)"
-        for j, k in ((1, K15), (2, K16), (3, K_CHEAP)):
+        for j, k in ((1, K15), (2, K16), (3, K16B), (4, K_CHEAP)):
             v, _ = wavg(j)
             if v is not None: S.at[i, k] = round(v, 2); S.at[i, f'_sc_{k}'] = v
         # 블록 예/아니오 다시 세기
         ys = str(S.at[i, '블록 예']).split(' / ') if isinstance(S.at[i, '블록 예'], str) and S.at[i, '블록 예'] else []
         ns = str(S.at[i, '블록 아니오']).split(' / ') if isinstance(S.at[i, '블록 아니오'], str) and S.at[i, '블록 아니오'] else []
-        for k in (K15, K16, K_CHEAP):
+        for k in (K15, K16, K16B, K_CHEAP):
             v = pd.to_numeric(S.at[i, k], errors='coerce')
             if pd.isna(v): continue
             lab = f"{k} {SB[k]['질문']}"
