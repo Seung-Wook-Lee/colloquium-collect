@@ -524,7 +524,14 @@ def gukjang(c, EV, CAL):
         for _, s in X.iterrows():
             out.append(L(f"{str(s['날짜'])[5:]} {s['시각(한국)']}", f"{s['구분']} {s['대상']} — {s['내용']}", f"확인: {s['확인']}, 출처 {s['출처']}"))
     N = c.news
-    if len(N):
+    T = _read(c.d, '주가뉴스')   # 11/20 의장: 주가 관련 뉴스 10건 + FinBERT 긍정·부정(07시 b09_newstop.py)
+    if len(T):
+        T = T[~T['제목'].astype(str).str.contains('(?<![A-Za-z])' + BAN.pattern.replace('^', ''))]
+        for _, x in T.iterrows():
+            stock = f" · {x['종목']} 전일 {p(x['등락률(%)'], 2)}" if ok(x.get('종목')) and str(x['종목']) else ''
+            out.append(L(f"[{x['판정']}] {x['시각(한국)']} {x['출처']}", str(x['제목']) + stock,
+                         f"FinBERT 긍정 {n(x['긍정'], 2)} · 부정 {n(x['부정'], 2)}(07시 주가뉴스.csv)"))
+    elif len(N):
         ok_src = R['승인매체']
         X = N[N['출처'].astype(str).map(lambda x: any(m in x for m in ok_src)) & ~N['제목'].astype(str).str.contains('(?<![A-Za-z])' + BAN.pattern.replace('^', ''))].head(R['기사수'])
         for _, x in X.iterrows():
