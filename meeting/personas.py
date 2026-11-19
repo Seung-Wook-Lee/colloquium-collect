@@ -3,6 +3,7 @@
 규칙  : 숫자는 파일 값 그대로, 판정은 엔진 칸 또는 rules.yaml 문턱, 문장은 이 파일의 틀(위원마다 함수 하나).
 출력  : 회의원고.txt(사람이 읽는 대본), 발표.json(스트림릿 '회의 발표' 화면), 오늘의한종목.csv
 페르소나를 고칠 때: 숫자·낱말·순서는 rules.yaml, 문장 틀은 이 파일의 해당 위원 함수만 고친다."""
+import datetime as dt
 import json
 import math
 
@@ -597,6 +598,34 @@ def render_json(sections, today, note=''):
             mem.append(item)
     return json.dumps({'date': f'{today:%Y%m%d}', 'note': note or '코드 자동 생성(meeting/personas.py). AI가 쓰지 않음.', 'members': mem}, ensure_ascii=False, indent=1,
                       default=lambda o: None if isinstance(o, float) and math.isnan(o) else (o.item() if hasattr(o, 'item') else str(o)))
+
+
+def premarket(c, Q, today):
+    """미장전 시황(미스터 마켓, 22:00 회의 맨 앞). Q = daily.py가 받은 야후 시세표(이름·티커·값·전일대비(%)·시각)."""
+    P = c.R.get('미장전', {})
+    out = []
+    if Q is not None and len(Q):
+        for _, q in Q.iterrows():
+            if pd.isna(q['값']):
+                continue
+            chg = q['전일대비(%)']
+            big = (q['티커'].endswith('=F') and q['티커'] in ('ES=F', 'NQ=F', 'YM=F') and pd.notna(chg) and abs(chg) >= P.get('크게움직임_선물(%)', 1))
+            out.append(L(q['이름'], f"{n(q['값'], 2)}" + (f" ({'+' if chg >= 0 else ''}{chg:.2f}%)" if pd.notna(chg) else '') + (' — 선물 큰 움직임' if big else ''),
+                         f"야후 {q['티커']}, {q['시각']} 기준, 전일 종가 대비"))
+    else:
+        out.append(L('시세', '야후 시세를 받지 못함', '미장전 시세 받기 실패'))
+    S = _read(c.d, '일정')
+    if len(S):
+        t0, t1 = P.get('밤일정_시작', '18:00'), P.get('밤일정_끝', '08:00')
+        d0, d1 = str(today), str(today + dt.timedelta(days=1))
+        tm = S['시각(한국)'].astype(str).str.extract(r'(\d\d:\d\d)')[0].fillna('')
+        night = S[S['구분'].astype(str).str.startswith('미국') & (((S['날짜'].astype(str) == d0) & (tm >= t0)) | ((S['날짜'].astype(str) == d1) & (tm != '') & (tm < t1)))]
+        night = night[~night['대상'].astype(str).map(banned)]
+        if len(night):
+            out.append(L('오늘 밤 미국 일정', ' / '.join(f"{r['시각(한국)']} {r['대상']} {r['내용']}" for _, r in night.iterrows()), f'07시 일정.csv, 한국 시각 {d0} {t0} ~ {d1} {t1}'))
+        else:
+            out.append(L('오늘 밤 미국 일정', '없음', f'07시 일정.csv, 한국 시각 {d0} {t0} ~ {d1} {t1}'))
+    return out
 
 
 def ask_index(c):

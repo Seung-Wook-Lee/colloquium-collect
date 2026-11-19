@@ -61,4 +61,5 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 - 위원을 고칠 때: 숫자·낱말·순서·한 종목 규칙은 `meeting/rules.yaml`, 문장 틀은 `meeting/personas.py`의 그 위원 함수만 고친다.
 - 손 시험: `python meeting/daily.py --local <입력 폴더> --skip-fetch`.
 - 돌발 질문(원고에 없는 질문): `python meeting/ask.py --dir <그날 드라이브 폴더> "질문"` — 종목 이름이면 담당 위원이 그날 판정표 줄, 위원 이름·낱말이면 원고 그 위원 칸, 없으면 '룰 미정' + 장부(`회의록/돌발질문_장부.csv`). 규칙은 rules.yaml `돌발질문`. 그날 폴더에 `YYYYMMDD_종목색인.csv`(별칭·담당 데스크)도 올라간다.
+- 하루 두 번 회의(11/19 의장): 07시 수집 뒤 국장전 원고(`YYYYMMDD_*`), 21:00(한국)에 미장전 원고(`YYYYMMDD_미장전_*`, `최신_미장전_회의원고.txt`). 미장전은 07시 파일 + 야후 가격·RSS를 다시 받아 엔진을 다시 돌리고 맨 앞에 미장전 시황(rules.yaml `미장전`)을 붙인다. 손으로: Actions → 회의 원고 자동 생성 → session 미장전.
 - 팀Q(비공개 저장소) 아침보고·퀀트자료를 매일 받으려면 Secrets에 `TEAMQ_TOKEN`(team_q 읽기 권한)을 넣는다. 없으면 전날 사본을 쓰고 원고 머리에 기준일을 적는다.

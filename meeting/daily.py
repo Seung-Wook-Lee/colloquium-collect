@@ -186,6 +186,24 @@ def fetch(W, IN):
     return done
 
 
+def premarket_quotes(R):
+    """미장전 시세: rules.yaml 미장전.시세의 야후 티커 지금 값·전일 종가 대비."""
+    import yfinance as yf
+    rows = []
+    for name, tk in R.get('미장전', {}).get('시세', []):
+        try:
+            h = yf.Ticker(tk).history(period='5d', interval='1d', auto_adjust=False)
+            h = h['Close'].dropna()
+            v, prev = float(h.iloc[-1]), (float(h.iloc[-2]) if len(h) > 1 else float('nan'))
+            ts = h.index[-1]
+            rows.append(dict(이름=name, 티커=tk, 값=v, **{'전일대비(%)': (v / prev - 1) * 100 if prev == prev and prev else float('nan')},
+                             시각=f'{ts:%m-%d}'))
+        except Exception as e:   # noqa: BLE001
+            rows.append(dict(이름=name, 티커=tk, 값=float('nan'), **{'전일대비(%)': float('nan')}, 시각=''))
+            log(f'[미장전 시세] {tk} 실패: {str(e)[:80]}')
+    return pd.DataFrame(rows, columns=['이름', '티커', '값', '전일대비(%)', '시각'])
+
+
 def judge(W, S):
     """11/19 의장: 콜로키움 판단 층. 엔진(블록33) 판정표 위에서 최종 포트폴리오를 정하는 코드는 비공개(colloquium_private/gen_port.py)."""
     try:
@@ -269,6 +287,7 @@ def bottom(W, use_drive, B, S):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--date'); ap.add_argument('--local'); ap.add_argument('--skip-fetch', action='store_true')
+    ap.add_argument('--session', default='국장전', choices=['국장전', '미장전'])   # 11/19 의장: 10시 국장전·22시 미장전
     a = ap.parse_args()
     now = dt.datetime.now(KST)
     today = a.date or now.strftime('%Y%m%d')
@@ -331,7 +350,7 @@ def main():
     import features as F
     f = F.stocks(IN)
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
-    BTO = backtest(W, IN, use_drive, tday, B, S) if (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
+    BTO = backtest(W, IN, use_drive, tday, B, S) if a.session == '국장전' and (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
     BTO.update(bottom(W, use_drive, B, S))
 
     # 4) 위원 원고
@@ -339,19 +358,25 @@ def main():
         first = open(f'{IN}/아침보고.txt', encoding='utf-8').read().splitlines()[1:2]
         note.append('팀Q 자료 ' + (first[0][:40] if first else ''))
     c, sec = PER.build(IN, S, M, m, f, R, B.get('추천', {}), tday, EV, CAL)
+    PFX = f'{today}_' if a.session == '국장전' else f'{today}_미장전_'
+    if a.session == '미장전':
+        Q = premarket_quotes(R)
+        sec.insert(0, ('0 미장전 시황', '미스터 마켓', '미장전 시황', PER.premarket(c, Q, tday), [], ''))
+        note.insert(0, '미장전 회의(22:00) — 07시 파일 + 야후 가격(오늘 한국 종가까지)·RSS 다시 받아 엔진 다시 실행')
+        Q.to_csv(f'{IN}/미장전시세.csv', index=False, encoding='utf-8-sig')
     head = ' | '.join(note)
     txt = PER.render_txt(sec, tday, c.picks, head)
     js = PER.render_json(sec, tday, head)
     pk = PER.picks_csv(c.picks)
-    outs = {f'{today}_회의원고.txt': txt.encode('utf-8'), f'{today}_발표.json': js.encode('utf-8'),
-            f'{today}_오늘의한종목.csv': pk.to_csv(index=False).encode('utf-8-sig'),
-            f'{today}_판정표.csv': S.to_csv(index=False).encode('utf-8-sig'),
-            f'{today}_시장블록.csv': M.to_csv(index=False).encode('utf-8-sig'),
-            f'{today}_사건상태.csv': EV.to_csv(index=False).encode('utf-8-sig'),
-            f'{today}_변수달력.csv': CAL.to_csv(index=False).encode('utf-8-sig'),
-            f'{today}_종목색인.csv': PER.ask_index(c).to_csv(index=False).encode('utf-8-sig')}
-    outs.update({f'{today}_{k}': v for k, v in BTO.items()})
-    outs.update(judge(W, S))
+    outs = {f'{PFX}회의원고.txt': txt.encode('utf-8'), f'{PFX}발표.json': js.encode('utf-8'),
+            f'{PFX}오늘의한종목.csv': pk.to_csv(index=False).encode('utf-8-sig'),
+            f'{PFX}판정표.csv': S.to_csv(index=False).encode('utf-8-sig'),
+            f'{PFX}시장블록.csv': M.to_csv(index=False).encode('utf-8-sig'),
+            f'{PFX}사건상태.csv': EV.to_csv(index=False).encode('utf-8-sig'),
+            f'{PFX}변수달력.csv': CAL.to_csv(index=False).encode('utf-8-sig'),
+            f'{PFX}종목색인.csv': PER.ask_index(c).to_csv(index=False).encode('utf-8-sig')}
+    outs.update({f'{PFX}{k}': v for k, v in BTO.items()})
+    outs.update({(k if a.session == '국장전' else f'미장전_{k}'): v for k, v in judge(W, S).items()})
     for k, v in outs.items():
         open(f'{OUT}/{k}', 'wb').write(v)
     log(f'[원고] {len(sec)}칸, 오늘의 한 종목 {c.picks.get("센터", {}).get("종목") or "해당 없음"}')
@@ -366,7 +391,7 @@ def main():
             except Exception as e:
                 fail.append(f'{k}({e})')
         try:
-            drive.put(f'{D_DATA}/최신_회의원고.txt', txt.encode('utf-8'))
+            drive.put(f'{D_DATA}/최신_' + ('' if a.session == '국장전' else '미장전_') + '회의원고.txt', txt.encode('utf-8'))
         except Exception as e:
             fail.append(f'최신_회의원고.txt({e})')
         for name in sorted(set(carry_up)) + ['00_사건로그.csv']:
@@ -378,7 +403,7 @@ def main():
                     fail.append(f'{name}({e})')
         log(f'[올리기] 실패: {", ".join(fail) or "없음"}')
         try:
-            drive.put(f'{D_DATA}/{today}/{today}_회의원고_점검.txt', '\n'.join(LOG).encode('utf-8'))
+            drive.put(f'{D_DATA}/{today}/{PFX}회의원고_점검.txt', '\n'.join(LOG).encode('utf-8'))
         except Exception:
             pass
         if fail:
