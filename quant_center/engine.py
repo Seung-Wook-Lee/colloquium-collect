@@ -240,7 +240,7 @@ def run(d, cfg='blocks.yaml'):
         out['국면'] = ('방어' if DEF else '평상') + (f" · 지수 {IR[row['시장']]}" if row['시장'] in IR else '')
         out['갈래'] = '주도' if _ev('dd52 >= -10', row) else '눌림'
         out['가짜바닥아님'] = row.get('survive')
-        out['핵심관측'] = sum(1 for k in B.get('추천', {}).get('핵심블록', ['B13', 'B18', 'B19'])
+        out['핵심관측'] = sum(1 for k in B.get('추천', {}).get('핵심블록', ['B13', 'B21', 'B22'])
                            if any(b == k for b, *_ in yes_blocks))
         # 주문 한도(B27·B28·B29·쏠림·CTA 전환): 가장 엄격한 승수 하나
         lay = row.get('layer'); mu, al = MULT.get(lay, 1.0), [WHY[lay]] if lay in WHY else []
