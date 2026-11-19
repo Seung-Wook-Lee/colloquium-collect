@@ -400,11 +400,14 @@ def main():
     todo, seen = [], set()
     for it in links_from_everywhere() + channel_new_videos():
         st = state.get(it['vid'], {})
-        if it['vid'] in seen or st.get('상태') == '완료' or int(st.get('시도') or 0) >= 3:
+        if it['vid'] in seen or st.get('상태') in ('완료', '건너뜀') or int(st.get('시도') or 0) >= 3:
             continue
         seen.add(it['vid'])
         todo.append(it)
     log(f'할 일 {len(todo)}개 (한 번에 최대 {MAX_VIDEOS}개)')
+    if not todo:
+        return 0                               # 10분마다 돌므로 할 일이 없으면 아무것도 쓰지 않는다
+    open(os.path.join(HERE, '.changed'), 'w').write('1')
     done = 0
     for it in todo[:MAX_VIDEOS]:
         vid = it['vid']
