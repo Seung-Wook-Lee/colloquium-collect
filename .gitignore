@@ -8,3 +8,5 @@ meeting/__pycache__/
 
 # 11/19 비공개 설정(team_q colloquium_private) 받는 자리
 team_q_private/
+quant_center/blocks.yaml
+meeting/seed/
