@@ -1,0 +1,17 @@
+name: 비공개 설정 받기 점검
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: Seung-Wook-Lee/team_q
+          ref: main
+          path: team_q_private
+          sparse-checkout: colloquium_private
+          token: ${{ secrets.TEAMQ_TOKEN }}
+      - name: 파일 목록(내용은 출력하지 않음)
+        run: ls -R team_q_private/colloquium_private | head -30
