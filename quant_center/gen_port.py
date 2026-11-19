@@ -88,7 +88,8 @@ for mk in ('미국', '한국'):
             add(mk, e, rf, lay, rest, f"유입 섹터 ETF(업종RS {rk[0]}/{rk[1]}위, 5일 자금 {e['f5']:+.0f})", '')
             continue
         # 3) 나머지: 블록 점수 순 개별주
-        C = Sm[(Sm['판정'] == '후보') & (Sm['구분'] == '개별주')].sort_values(['블록예비율', '싼가'], ascending=False)
+        KEY = B['추천'].get('기준', '블록예비율') if B['추천'].get('기준', '블록예비율') in Sm else '블록예비율'
+        C = Sm[(Sm['판정'] == '후보') & (Sm['구분'] == '개별주')].sort_values([KEY, '싼가'], ascending=False)
         pick = []
         for _, r in C.iterrows():
             if core is not None and r['번호'] == core['번호']: continue
@@ -99,9 +100,15 @@ for mk in ('미국', '한국'):
             vm, why = _vm(r)
             if vm <= PC['제외_승수이하']:
                 OUT.append(f"{r['종목']}({why})"); continue
+            mm = r.get('메타배수', 1.0); mm = 1.0 if pd.isna(mm) else float(mm)   # 메타라벨링 비중 배수(코어에는 안 씀)
+            if mm <= 0:
+                OUT.append(f"{r['종목']}(메타 확률 {r.get('메타확률')} ≤ 0.5)"); continue
+            if mm < 1:
+                vm *= mm; why = (why + ' / ' if why else '') + f"메타 ×{mm:.2f}"
             beta = max(float(rf.get('beta') or 1), 0.1); vol = max(float(rf.get('vol60') or 30), 5)
             tilt = (1 / beta) * (30 / vol) if dfm else beta * (1 + abs(min(float(rf.get('dd52') or 0), 0)) / 100)
-            pick.append((r, rf, r['블록예비율'] * tilt, vm, why))
+            base = (float(r[KEY]) + 20) / 40 if KEY == '종합점수' else r['블록예비율']   # 종합점수 −20~+20 → 0~1
+            pick.append((r, rf, base * tilt, vm, why))
             if len(pick) >= PC['층당최대'] - (core is not None): break
         if not pick:
             if core is not None:   # 다른 후보가 없으면 층 몫 전부 코어
