@@ -32,7 +32,7 @@ def _cap(n, mk):
 
 
 def _vm(r):
-    """기존 블록 연결(국면 무관): B12 싼가 아니오 → ×밸류_승수, B23 너무 많이 올랐나 예 → ×과열_승수"""
+    """기존 블록 연결(국면 무관): B13 싼가 아니오 → ×밸류_승수, B24 너무 많이 올랐나 예 → ×과열_승수"""
     vm, why = 1.0, []
     b17, b19 = pd.to_numeric(r.get(PC['밸류블록']), errors='coerce'), pd.to_numeric(r.get(PC['과열블록']), errors='coerce')
     if not pd.isna(b17) and b17 < 0.5: vm *= PC['밸류_승수']; why.append(f"{PC['밸류블록']} 싼가 아니오({b17:.2f})")
