@@ -140,6 +140,43 @@ def today_rows(S, blocks):
     return T
 
 
+def buy_test(raw, start='2018-01-01'):
+    """11/20 의장: 나스닥 '준비'(≥0.5)·'경보'(≥0.9) 주에 무엇을 살까 — QQQM(QQQ로 과거 연장)·XLK·우리 미국 개별주 중 고베타·저베타 1/3.
+    베타 = 그 주까지 1년 나스닥100 대비. 13·26주 뒤 절대 수익률·승률·13주 안 최대 낙폭. 개별주는 오늘 유니버스라 생존 편향 있음."""
+    import yfinance as yf
+    import qc_config as QCC
+    U = pd.read_csv(os.path.join(QCC.private_dir(), 'seed', '유니버스.csv'), encoding='utf-8-sig').drop_duplicates('yfinance 티커')
+    us = U[(U['시장'] == '미국') & (U['구분'] == '개별주')]['yfinance 티커'].tolist()
+    E = yf.download(['QQQ', 'XLK', '^NDX'] + us, start=start, auto_adjust=True, progress=False)['Close']
+    nd = E['^NDX'].dropna(); P = E[[t for t in us if t in E]].reindex(nd.index).ffill(limit=3)
+    r = np.log(P).diff(); mr = np.log(nd).diff()
+
+    def fwd(px, t, n):
+        px = px.dropna(); i = px.index.searchsorted(t, side='right') - 1
+        if i < 0 or i + n >= len(px):
+            return np.nan, np.nan
+        seg = px.iloc[i:i + n + 1]
+        return (seg.iloc[-1] / seg.iloc[0] - 1) * 100, (seg.min() / seg.iloc[0] - 1) * 100
+    rows = []
+    for t, sc in raw.dropna().items():
+        i = P.index.searchsorted(t, side='right') - 1
+        if i < 252:
+            continue
+        m = mr.iloc[i - 251:i + 1]; beta = r.iloc[i - 251:i + 1].apply(lambda x: x.cov(m) / m.var()).dropna()
+        grp = {'QQQM(QQQ)': ['QQQ'], 'XLK': ['XLK'], '고베타 1/3': beta[beta >= beta.quantile(2 / 3)].index, '저베타 1/3': beta[beta <= beta.quantile(1 / 3)].index}
+        for g, ts in grp.items():
+            for h, n in (('13주', 63), ('26주', 126)):
+                v = [fwd(E[x] if x in ('QQQ', 'XLK') else P[x], t, n) for x in ts]
+                rows.append(dict(날짜=t, 점수=sc, 대상=g, 기간=h, 수익=np.nanmean([a for a, _ in v]), 낙폭=np.nanmean([b for _, b in v])))
+    R = pd.DataFrame(rows); out = []
+    for nm, lo in (('모든 주', -1), ('준비(≥0.5)', 0.5), ('경보(≥0.9)', 0.9)):
+        for g in ('QQQM(QQQ)', 'XLK', '고베타 1/3', '저베타 1/3'):
+            a = R[(R['점수'] >= lo) & (R['대상'] == g)]; a13 = a[a['기간'] == '13주']; a26 = a[a['기간'] == '26주']
+            out.append({'구간': nm, '대상': g, '주수': len(a13), '13주 평균': round(a13['수익'].mean(), 1), '13주 승률': round((a13['수익'].dropna() > 0).mean() * 100, 1),
+                        '13주 안 최대낙폭': round(a13['낙폭'].mean(), 1), '26주 평균': round(a26['수익'].mean(), 1), '26주 승률': round((a26['수익'].dropna() > 0).mean() * 100, 1)})
+    return pd.DataFrame(out)
+
+
 def run(W, S=None, cfg=None, idx='^GSPC'):
     """idx: 정답·낙폭을 잴 지수(^GSPC S&P500, ^NDX 나스닥100). 11/19 의장: 이번 조정은 나스닥이 −10% 넘어 조정장"""
     from scipy.stats import mannwhitneyu
@@ -232,6 +269,11 @@ def run(W, S=None, cfg=None, idx='^GSPC'):
     for k, v in (('바닥근접도', ONE), ('바닥근접도_검정', TEST), ('바닥근접도_닮은주', AN)):
         v.to_csv(f'{W}/{k}{tag}.csv', index=False, encoding='utf-8-sig')
     HIST.to_csv(f'{W}/바닥근접도_이력{tag}.csv', encoding='utf-8-sig')
+    if idx == '^NDX' and C.get('무엇을살까', True):
+        try:
+            buy_test(raw[raw.index <= w.index[-27]]).to_csv(f'{W}/바닥근접도_무엇을살까{tag}.csv', index=False, encoding='utf-8-sig')
+        except Exception as e:   # noqa: BLE001
+            print(f'[바닥] 무엇을 살까 실패: {e}')
     print(ONE.T.to_string()); print(TEST.T.to_string())
     return ONE, TEST, AN
 
