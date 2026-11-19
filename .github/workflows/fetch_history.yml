@@ -5,13 +5,15 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
       - run: pip install -q pandas requests xlrd openpyxl
       - run: python research/fetch_history.py
+        env:
+          FRED_KEY: ${{ secrets.FRED_KEY }}
       - name: 결과를 data-history 가지에 올림
         run: |
           git config user.name "github-actions"; git config user.email "actions@github.com"
