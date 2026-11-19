@@ -5,3 +5,6 @@ youtube/out/
 news_lab/out/
 work_meeting/
 meeting/__pycache__/
+
+# 11/19 비공개 설정(team_q colloquium_private) 받는 자리
+team_q_private/

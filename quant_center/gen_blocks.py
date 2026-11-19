@@ -1,5 +1,6 @@
-import yaml, html
-B=yaml.safe_load(open('qblocks/blocks.yaml',encoding='utf-8'))
+import yaml, html, sys
+sys.path.insert(0, 'qblocks'); import qc_config as QCC
+B=QCC.load_blocks()
 e=html.escape
 RC={'거르기':'#b4232f','점수':'#1f7a4a','핵심':'#0b3d6e','타이밍':'#a05a00','매도':'#6b2fb0','비중':'#4a5568','정보':'#4a5568'}
 def tbl(sec):

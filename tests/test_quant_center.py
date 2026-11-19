@@ -15,7 +15,13 @@ import combine  # noqa: E402
 import engine  # noqa: E402
 import meta  # noqa: E402
 
-B = yaml.safe_load(open(os.path.join(QC, 'blocks.yaml'), encoding='utf-8'))
+import qc_config as QCC  # noqa: E402
+
+try:   # 11/19: blocks.yaml은 비공개(team_q colloquium_private). 없으면 설정이 필요한 시험만 건너뜀
+    B = QCC.load_blocks()
+except FileNotFoundError:
+    B = None
+need_private = pytest.mark.skipif(B is None, reason='비공개 blocks.yaml 없음(QC_PRIVATE)')
 
 
 # ---- 합산(Carver)
@@ -92,6 +98,7 @@ def test_judge_needs_combine_first_when_using_composite():
         engine.run_stages(pd.DataFrame(), _ctx(['거르기', '판정', '합산']))
 
 
+@need_private
 def test_yaml_order_is_valid():
     order = B['순서']
     assert set(order) <= set(engine.STAGES)
@@ -99,6 +106,7 @@ def test_yaml_order_is_valid():
 
 
 # ---- 완성도 점검표
+@need_private
 def test_korean_flow_not_missing_for_us():
     f = pd.DataFrame({'시장': ['한국', '미국'], '구분': ['개별주', '개별주'], 'layer': ['S1', 'S1'], 'ticker': ['a', 'b']})
     sc = B['완성도']['칸범위']
@@ -106,11 +114,13 @@ def test_korean_flow_not_missing_for_us():
     assert list(audit.scope_mask('rsi_d', f, sc)) == [True, True]
 
 
+@need_private
 def test_financials_exempt_from_ebitda():
     f = pd.DataFrame({'시장': ['한국', '한국'], '구분': ['개별주', '개별주'], 'layer': ['S5', 'S1'], 'ticker': ['a', 'b']})
     assert list(audit.scope_mask('debt_ebitda', f, B['완성도']['칸범위'])) == [False, True]
 
 
+@need_private
 def test_every_formula_variable_has_history_class():
     known = set().union(*map(set, B['완성도']['칸과거'].values()))
     for sec in ('시장', '종목'):
@@ -150,6 +160,7 @@ def test_issuer_name_normalize():
     assert fetch_13f.norm('Johnson & Johnson') == fetch_13f.norm('JOHNSON AND JOHNSON')
 
 
+@need_private
 def test_b36_is_bonus_only_when_increased():
     b = B['종목']['B21']
     assert b['조건'] == 'lt_net > 0' and b.get('대상') == '개별주'

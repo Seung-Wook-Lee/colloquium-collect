@@ -27,6 +27,9 @@ import numpy as np
 import pandas as pd
 import yaml
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import qc_config as QCC  # noqa: E402
+
 UA = f"colloquium-research {os.environ.get('SEC_EMAIL') or 'admin@example.org'}"   # SEC 요구: 수집기 이름 + 연락처(GitHub Secrets SEC_EMAIL)
 HERE = os.path.dirname(os.path.abspath(__file__))
 STOP = {'INC', 'CORP', 'CORPORATION', 'CO', 'COMPANY', 'LTD', 'LIMITED', 'PLC', 'HOLDINGS', 'HLDGS', 'HOLDING', 'GROUP',
@@ -88,7 +91,7 @@ def table(cik, acc, cache):
 
 
 def build(d, cache, since=None):
-    B = yaml.safe_load(open(os.path.join(HERE, 'blocks.yaml'), encoding='utf-8'))
+    B = QCC.load_blocks()
     C = B['장기펀드']
     U = pd.read_csv(f'{d}/유니버스.csv', encoding='utf-8-sig')
     U = U[(U['시장'] == '미국') & (U['구분'] == '개별주')]

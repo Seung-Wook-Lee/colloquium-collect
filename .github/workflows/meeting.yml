@@ -23,7 +23,7 @@ concurrency: meeting
 jobs:
   meeting:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
       - name: 팀Q 아침보고·퀀트자료 받기(TEAMQ_TOKEN 있을 때만, 없으면 전날 사본)
@@ -34,6 +34,15 @@ jobs:
           ref: block20-V2611
           path: team_q
           sparse-checkout: research/daily
+          token: ${{ secrets.TEAMQ_TOKEN }}
+      - name: 비공개 설정 받기(블록 문턱·종목 목록·판단 코드, team_q colloquium_private. TEAMQ_TOKEN 필요)
+        uses: actions/checkout@v5
+        continue-on-error: true
+        with:
+          repository: Seung-Wook-Lee/team_q
+          ref: main
+          path: team_q_private
+          sparse-checkout: colloquium_private
           token: ${{ secrets.TEAMQ_TOKEN }}
       - uses: actions/setup-python@v6
         with:
@@ -47,6 +56,7 @@ jobs:
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
           TEAMQ_DIR: ${{ github.workspace }}/team_q
+          QC_PRIVATE: ${{ github.workspace }}/team_q_private/colloquium_private
         run: |
           ARGS=""
           if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi

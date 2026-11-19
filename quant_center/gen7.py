@@ -1,10 +1,10 @@
 import sys, html, pandas as pd, numpy as np, yaml
-sys.path.insert(0,'qblocks'); import features as F
+sys.path.insert(0,'qblocks'); import features as F; import qc_config as QCC
 f=F.stocks('in').set_index('종목'); S=pd.read_csv('out_판정표.csv').set_index('종목')
 P=pd.read_csv('in/가격2년.csv',index_col=0,parse_dates=True)
-B=yaml.safe_load(open('qblocks/blocks.yaml',encoding='utf-8'))['종목']
+B=QCC.load_blocks()['종목']
 # 7종목은 엔진 결과로만 뽑는다(손으로 적는 목록 없음, 11/17 의장). 규칙은 blocks.yaml '추천'에서 읽는다.
-RC=yaml.safe_load(open('qblocks/blocks.yaml',encoding='utf-8')).get('추천',{})
+RC=QCC.load_blocks().get('추천',{})
 N_KR,N_US,VMAX=RC.get('국내수',5),RC.get('미국ETF수',2),RC.get('변동성상한',60)
 AS=S.reset_index()
 AS['미국ETF']=(AS['시장']=='한국')&(AS['구분']!='개별주')&AS['종목'].astype(str).str.contains('미국')
@@ -28,7 +28,7 @@ KEEP=[nm for nm,_ in PICK]
 CB=cand[cand['시장'].eq('한국')&~cand['종목'].isin([a for a,_ in DROP if '순위 밖' not in _])].copy()
 CB['vol60']=[f.loc[n,'vol60'] if n in f.index else np.nan for n in CB['종목']]
 _P=F._px('in'); LR=O.layer_rs('in',_P)
-BKT,LW=O.basket(CB,f,RC.get('바구니',{}) or yaml.safe_load(open('qblocks/blocks.yaml',encoding='utf-8'))['바구니'],DEFK,LR,O.basket_dd('in',_P))
+BKT,LW=O.basket(CB,f,RC.get('바구니',{}) or QCC.load_blocks()['바구니'],DEFK,LR,O.basket_dd('in',_P))
 BKT.to_csv(f'추천바구니_{pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y%m%d")}.csv',index=False,encoding='utf-8-sig')
 PICK=[(nm,str(f.loc[nm,'sector']) if nm in f.index and 'sector' in f.columns else '') for nm,_ in PICK]
 TODAY=pd.Timestamp.now(tz='Asia/Seoul').strftime('%Y%m%d')
