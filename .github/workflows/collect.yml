@@ -24,6 +24,13 @@ jobs:
           cache: pip
       - name: 라이브러리 설치
         run: pip install -r requirements.txt
+      - name: 뉴스 감성 모델 라이브러리(FinBERT, CPU판)   # 11/19 의장 B20 제2의 젠슨 황
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install "transformers>=4.40"
+      - name: 뉴스 감성 모델 캐시
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-finbert-v1
       - name: 자료 수집
         env:
           TZ: Asia/Seoul
