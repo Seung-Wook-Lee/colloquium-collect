@@ -2,7 +2,7 @@
 Claude는 문장을 쓰지 않고 이 프로그램 출력을 그대로 옮긴다. 규칙은 rules.yaml '돌발질문'.
 
 쓰는 법:
-  python meeting/ask.py --dir <그날 드라이브 폴더를 받은 곳> "삼성전자 지금 팔아야 하나?"
+  python meeting/ask.py --dir <그날 드라이브 폴더를 받은 곳> [--session 미장전] "삼성전자 지금 팔아야 하나?"
   폴더에는 YYYYMMDD_판정표.csv, YYYYMMDD_회의원고.txt(있으면 YYYYMMDD_종목색인.csv)가 있어야 한다.
 답 순서: ① 종목 이름 → 담당 위원이 판정표 줄 ② 위원 이름 → 원고 그 위원 칸 ③ 낱말 → 원고 그 위원 칸 ④ 룰 미정 + 장부 기록."""
 import argparse
@@ -20,8 +20,11 @@ KST = dt.timezone(dt.timedelta(hours=9))
 DESKS = ['미스 세마이', '미스터 빅스', '미스터 로보', '미스 파이낸스', '마담헤비', '일라이 존슨']
 
 
-def _latest(d, suffix, date=None):
-    fs = sorted(glob.glob(os.path.join(d, f'{date or "*"}_{suffix}')))
+def _latest(d, suffix, date=None, session='국장전'):
+    """국장전 = YYYYMMDD_이름, 미장전 = YYYYMMDD_미장전_이름(22시 회의)."""
+    pre = '미장전_' if session == '미장전' else ''
+    fs = sorted(f for f in glob.glob(os.path.join(d, f'{date or "[0-9]" * 8}_{pre}{suffix}'))
+                if pre or '_미장전_' not in os.path.basename(f))
     return fs[-1] if fs else None
 
 
@@ -63,7 +66,7 @@ def sections(txt):
         m = re.match(r'^(\S[^:：]{0,15}):\s*$', line)
         if m and not line.startswith(('■', '|')):
             cur = m.group(1).strip()
-            sec[cur] = []
+            sec.setdefault(cur, [])   # 미장전: 미스터 마켓이 '0 미장전 시황'과 '1 시장' 두 칸 — 이어 붙인다
         elif cur and line and not line.startswith('='):
             sec[cur].append(line)
         elif line.startswith('='):
@@ -113,9 +116,9 @@ def log_q(path, q, route, who):
         w.writerow([dt.datetime.now(KST).strftime('%Y-%m-%d %H:%M'), q, route, who, ''])
 
 
-def answer(q, d, R, date=None):
+def answer(q, d, R, date=None, session='국장전'):
     A = R['돌발질문']
-    fp, ft, fx = _latest(d, '판정표.csv', date), _latest(d, '회의원고.txt', date), _latest(d, '종목색인.csv', date)
+    fp, ft, fx = (_latest(d, k, date, session) for k in ('판정표.csv', '회의원고.txt', '종목색인.csv'))
     if not fp or not ft:
         return '원고 미생성: 그날 판정표·회의원고 파일이 없습니다.', '파일 없음', ''
     S = pd.read_csv(fp, encoding='utf-8-sig')
@@ -143,11 +146,12 @@ def main():
     ap.add_argument('question')
     ap.add_argument('--dir', default='.')
     ap.add_argument('--date', help='YYYYMMDD(없으면 폴더의 가장 최근 날짜)')
+    ap.add_argument('--session', default='국장전', choices=['국장전', '미장전'], help='22시 회의면 미장전')
     ap.add_argument('--log', help='장부 경로(기본: rules.yaml 돌발질문.장부)')
     ap.add_argument('--no-log', action='store_true')
     a = ap.parse_args()
     R = yaml.safe_load(open(os.path.join(HERE, 'rules.yaml'), encoding='utf-8'))
-    text, route, who = answer(a.question, a.dir, R, a.date)
+    text, route, who = answer(a.question, a.dir, R, a.date, a.session)
     print(text)
     if not a.no_log:
         base = '/mnt/project-files' if os.path.isdir('/mnt/project-files') else '.'
