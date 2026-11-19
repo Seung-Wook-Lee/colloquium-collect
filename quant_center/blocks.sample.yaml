@@ -1,0 +1,37 @@
+# 견본(11/19): 블록 이름만 있습니다. 공식·문턱·가중치·종목 목록·최종 판단은 비공개라 이 파일로는 엔진이 돌지 않습니다.
+
+시장:
+  B01: {질문: "강세장? 약세장?", 영문: "HMM regime"}
+  B02: {질문: "바닥 즈음인가?", 영문: "VIX, MOVE, VIX term structure"}
+  B03: {질문: "신용 경색 오나?", 영문: "HY spread, STLFSI, SOFR−IORB"}
+  B04: {질문: "금리가 부담인가?", 영문: "UST 10Y, 10Y−2Y curve"}
+  B05: {질문: "공포가 극단인가?", 영문: "Fear & Greed"}
+  B06: {질문: "수급", 영문: "CTA z-score, vol-control, safe-haven ETF flow"}
+  B07: {질문: "시장 붕괴? 순환매?", 영문: "average correlation"}
+  B08: {질문: "성장주 시대? 가치주 시대?", 영문: "growth vs value rotation"}
+  B09: {질문: "S&P500·코스피 밸류에이션은?", 영문: "forward P/E, 50-day disparity"}
+  B10: {질문: "세계는 평화로운가?", 영문: "GPR index, Caldara·Iacoviello"}
+종목:
+  B11: {질문: "덜 흔들리고 잘 버티나?", 영문: "low volatility, low beta (BAB), expected shortfall"}
+  B12: {질문: "주도주인가? (고점 −10% 이내 + 3·6달 수익률 모두 플러스)", 영문: "52-week high momentum"}
+  B13: {질문: "빠진 것이 이례적인가?", 영문: "sigma check (p-value), idiosyncratic move(베타 감안 잔차 수익률)"}
+  B14: {질문: "시장 빠지니까 덩달아 빠졌다?", 영문: "EPS revision + sigma check"}
+  B15: {질문: "그래서, 지금 싼가?", 영문: "P/E, P/B, FCF yield"}
+  B16: {질문: "과매도인가? (일봉 기준)", 영문: "RSI, Bollinger %B, CCI, Stochastic"}
+  B17: {질문: "돌아설 조짐? (주봉, 월봉 기준)", 영문: "weekly MACD, 60W MA"}
+  B18: {질문: "이 업종에 돈이 돌아오나?", 영문: "sector ETF 60W MA, ETF flow"}
+  B19: {질문: "외국인과 기관 수급 (韓 only)", 영문: "foreign·institutional flow"}
+  B20: {질문: "섹터 ETF로 본 수급 현황 (美 only)", 영문: "sector ETF flow"}
+  B21: {질문: "장기투자 큰 손의 선택? (美 only)", 영문: "13F holdings change"}
+  B22: {질문: "스마트 머니가 들어오나?", 영문: "Chaikin Money Flow, MFI, short interest, flow z-score"}
+  B23: {질문: "이익이 늘고 있나?", 영문: "EPS·OP YoY, margin"}
+  B24: {질문: "이익 전망이 오르나?", 영문: "EPS revision"}
+  B25: {질문: "돈은 잘 버나?", 영문: "ROE, FCF, Piotroski F-Score"}
+  B26: {질문: "빚에 안 무너지나?", 영문: "Altman Z, debt/EBITDA"}
+  B27: {질문: "제2의 젠슨 황 있나?", 영문: "FinBERT news sentiment + event-study price shock"}
+  B28: {질문: "너무 많이 올랐나?", 영문: "RSI, 3-sigma rally"}
+  B29: {질문: "고점 부근이 아닌가?", 영문: "52-week high, George·Hwang"}
+  B30: {질문: "추세가 진짜인가?", 영문: "EWMAC forecast, Carver · Frog-in-the-pan"}
+  B31: {질문: "남보다 강한가?", 영문: "relative strength, TSMOM 3·6M"}
+  B32: {질문: "시장보다 더 오르나?", 영문: "residual momentum, MAX effect"}
+  B33: {질문: "주도 업종(층)인가?", 영문: "industry momentum (AQR)"}

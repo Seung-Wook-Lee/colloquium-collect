@@ -21,6 +21,7 @@ import pandas as pd
 import yaml
 
 import engine as E
+import qc_config as QCC
 
 ORDER = ['가격', 'BLOCK20', '공시', '누적', '없음']   # 과거 계산 등급(앞이 강함)
 
@@ -50,8 +51,8 @@ def hist_class(var, HIST):
     return '없음'
 
 
-def audit(d, cfg='blocks.yaml', S=None, f=None, m=None):
-    B = yaml.safe_load(open(cfg, encoding='utf-8'))
+def audit(d, cfg=None, S=None, f=None, m=None):
+    B = QCC.load_blocks(cfg)
     A = B.get('완성도', {})
     SCOPE, HIST = A.get('칸범위', {}), A.get('칸과거', {})
     del_line, ok_line = A.get('삭제선', 0.5), A.get('완성선', 0.8)

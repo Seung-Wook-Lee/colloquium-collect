@@ -12,6 +12,7 @@ import combine as C
 import features as F
 import meta as MT
 import orders as O
+import qc_config as QCC
 
 LBL = {True: '통과', False: '불통과', None: '자료 없음'}
 
@@ -109,8 +110,8 @@ def run_stages(S, c):
     return S.drop(columns=[k for k in S.columns if k.startswith('_sc_')])
 
 
-def run(d, cfg='blocks.yaml'):
-    B = yaml.safe_load(open(cfg, encoding='utf-8'))
+def run(d, cfg=None):
+    B = QCC.load_blocks(cfg)
     f = F.stocks(d)
     f = f[f['시장'].isin(['한국', '미국'])].reset_index(drop=True)
     m = F.market(d)

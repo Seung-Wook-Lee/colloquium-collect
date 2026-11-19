@@ -24,6 +24,7 @@ import features as F  # noqa: E402
 import nyx  # noqa: E402
 import orders as O  # noqa: E402
 from engine import _ev  # noqa: E402
+import qc_config as QCC  # noqa: E402
 
 PX = {'가격2년': '종가', '시가2년': '시가', '고가2년': '고가', '저가2년': '저가', '거래량2년': '거래량'}
 KEEP = 520          # 엔진이 받는 것과 같은 2년치만 넘김
@@ -243,8 +244,8 @@ def walk(Z, SB, H, first_test_year):
     return pd.DataFrame(rows), last
 
 
-def main(d, cfg=os.path.join(HERE, 'blocks.yaml'), step='W-FRI', workers=None):
-    B = yaml.safe_load(open(cfg, encoding='utf-8'))
+def main(d, cfg=None, step='W-FRI', workers=None):
+    B = QCC.load_blocks(cfg)
     global TOPN
     BT = B.get('성적표', {}); TOPN = int(BT.get('상위', 5))
     H = {str(k): v for k, v in BT.get('기간', {4: 20, 12: 60, 26: 130, 52: 260}).items()}

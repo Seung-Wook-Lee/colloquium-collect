@@ -1,6 +1,7 @@
 """blocks.yaml → 사람이 보는 구조표(블록 = 목적 + 공식). 설정이 바뀌면 다시 돌리면 됨."""
 import yaml
-B = yaml.safe_load(open('blocks.yaml', encoding='utf-8'))
+import qc_config as QCC
+B = QCC.load_blocks()
 L = ['퀀트센터 블록 구조 (blocks.yaml에서 자동 생성)', '']
 L.append('[시장 블록] 오늘 돈을 얼마나 넣을 때인가')
 for k, b in B['시장'].items():

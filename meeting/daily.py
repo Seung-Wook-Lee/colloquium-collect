@@ -25,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 QC = os.path.join(REPO, 'quant_center')
 sys.path[:0] = [REPO, QC, HERE]
+import qc_config as QCC  # noqa: E402  비공개 설정(blocks.yaml·종목 목록·판단 코드) 위치
 import events as EVT      # noqa: E402
 import personas as PER    # noqa: E402
 
@@ -74,6 +75,16 @@ def pull_day(today, IN):
     return got
 
 
+def _seed():
+    try:
+        return os.path.join(QCC.private_dir(), 'seed')
+    except FileNotFoundError:
+        return os.path.join(HERE, 'seed')
+
+
+SEED = _seed()
+
+
 def pull_carry(IN, use_drive):
     have = []
     for name in CARRY_FILES:
@@ -86,9 +97,9 @@ def pull_carry(IN, use_drive):
                 log(f'[받기] {name} 드라이브 실패: {e}')
         if os.path.exists(f'{IN}/{name}'):
             continue
-        if data is None and os.path.exists(f'{HERE}/seed/{name}'):
-            data = open(f'{HERE}/seed/{name}', 'rb').read()
-            log(f'[받기] {name}: 저장소 초기본(meeting/seed) 사용')
+        if data is None and os.path.exists(f'{SEED}/{name}'):
+            data = open(f'{SEED}/{name}', 'rb').read()
+            log(f'[받기] {name}: 비공개 초기본(seed) 사용')
         if data is not None:
             open(f'{IN}/{name}', 'wb').write(data)
             have.append(name)
@@ -110,7 +121,7 @@ def pull_advisors(IN, use_drive):
         except Exception as e:
             log(f'[받기] 외부자문사 드라이브 실패: {e}')
     if not got:
-        for fp in glob.glob(f'{HERE}/seed/외부자문사/*_MP_*.csv'):
+        for fp in glob.glob(f'{SEED}/외부자문사/*_MP_*.csv'):
             shutil.copy(fp, f'{IN}/외부자문사/'); got += 1
     log(f'[받기] 외부자문사 MP {got}개')
 
@@ -175,6 +186,26 @@ def fetch(W, IN):
     return done
 
 
+def judge(W, S):
+    """11/19 의장: 콜로키움 판단 층. 엔진(블록33) 판정표 위에서 최종 포트폴리오를 정하는 코드는 비공개(colloquium_private/gen_port.py)."""
+    try:
+        p = os.path.join(QCC.private_dir(), 'gen_port.py')
+    except FileNotFoundError:
+        p = ''
+    if not os.path.exists(p):
+        log('[판단] 비공개 판단 코드 없음 → 건너뜀'); return {}
+    S.to_csv(f'{W}/out_판정표.csv', index=False, encoding='utf-8-sig')
+    for x in glob.glob(f'{W}/추천포트폴리오_Ver.*'):
+        os.remove(x)
+    r = subprocess.run([sys.executable, p], cwd=W, capture_output=True, text=True, timeout=600,
+                       env={**os.environ, 'PYTHONPATH': QC, 'QC_PRIVATE': QCC.private_dir()})
+    if r.returncode != 0:
+        log('[판단] 실패: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:160]); return {}
+    out = {os.path.basename(x): open(x, 'rb').read() for x in glob.glob(f'{W}/추천포트폴리오_Ver.*')}
+    log(f'[판단] 추천 포트폴리오 {len(out)}개 파일')
+    return out
+
+
 def backtest(W, IN, use_drive, tday, B):
     """11/19 의장: 블록 성적표·조합 시험(quant_center/backtest.py). 금요일(성적표.요일)만. 지난 계산(블록점수이력.csv)은 드라이브에 이어 써서 새 날짜만 계산."""
     cache = f'{W}/블록점수이력.csv'
@@ -224,7 +255,7 @@ def main():
         if os.path.abspath(lp) != target and not os.path.exists(lp):
             os.symlink(target, lp)
     R = yaml.safe_load(open(f'{HERE}/rules.yaml', encoding='utf-8'))
-    B = yaml.safe_load(open(f'{QC}/blocks.yaml', encoding='utf-8'))
+    B = QCC.load_blocks()
     carry_up = []
     if use_drive:
         if not pull_day(today, IN):
@@ -262,7 +293,7 @@ def main():
 
     # 3) 엔진
     import engine as ENG
-    S, D, M, m = ENG.run(IN, cfg=f'{QC}/blocks.yaml')
+    S, D, M, m = ENG.run(IN)
     import features as F
     f = F.stocks(IN)
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
@@ -284,6 +315,7 @@ def main():
             f'{today}_사건상태.csv': EV.to_csv(index=False).encode('utf-8-sig'),
             f'{today}_변수달력.csv': CAL.to_csv(index=False).encode('utf-8-sig')}
     outs.update({f'{today}_{k}': v for k, v in BTO.items()})
+    outs.update(judge(W, S))
     for k, v in outs.items():
         open(f'{OUT}/{k}', 'wb').write(v)
     log(f'[원고] {len(sec)}칸, 오늘의 한 종목 {c.picks.get("센터", {}).get("종목") or "해당 없음"}')
