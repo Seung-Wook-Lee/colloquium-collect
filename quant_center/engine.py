@@ -78,7 +78,7 @@ def st_meta(S, c):
     led = cfg.get('장부')
     led = None if (not led or os.environ.get('QC_NO_LEDGER')) else os.path.join(c['d'], '..', led)
     # 시장 블록(B01~B08)은 메타의 입력: 오늘 '부담'·'기회' 공식이 몇 개 켜졌나(2차 판정이 과거 신호로 그 영향을 배움)
-    mb = [(side, _ev(e, c['m'])) for bid, b in c['B']['시장'].items() if bid != 'B00' for n, e, side in b['공식']]
+    mb = [(side, _ev(e, c['m'])) for bid, b in c['B']['시장'].items() for n, e, side in b['공식'] if 'ROT_DEF' not in e]   # 국면 블록(B08)은 따로 씀
     c['m']['시장부담'] = sum(1 for sd, r in mb if sd == '부담' and r)
     c['m']['시장기회'] = sum(1 for sd, r in mb if sd == '기회' and r)
     S, info = MT.run(S, c['f'], c['P'], c['m'], cfg, led)
@@ -230,6 +230,9 @@ def run(d, cfg='blocks.yaml'):
         out['5일(%)'] = None if pd.isna(row.get('ret5')) else round(row['ret5'], 1)
         out['빠지는 이유'] = ', '.join(why_dn)
         out['변수'] = row.get('변수', '')
+        ln = row.get('lt_net')
+        out['장기펀드'] = '' if ln is None or pd.isna(ln) else (
+            f"{'늘림' if ln > 0 else '줄임' if ln < 0 else '그대로'} {ln:+.1f}% (늘린 {row.get('lt_up'):.0f}·줄인 {row.get('lt_dn'):.0f}곳, {row.get('lt_q')})")
         ny = sum(w for _, _, y, w in yes_blocks if y); nb = sum(w for *_, w in yes_blocks)
         out['국면'] = ('방어' if DEF else '평상') + (f" · 지수 {IR[row['시장']]}" if row['시장'] in IR else '')
         out['갈래'] = '주도' if _ev('dd52 >= -10', row) else '눌림'

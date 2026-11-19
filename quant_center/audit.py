@@ -109,7 +109,7 @@ def audit(d, cfg='blocks.yaml', S=None, f=None, m=None):
                     idx = list(np.where(app)[0]); n_app = len(idx)
                     fill = (sum(E._ev(expr, rows[i]) is not None for i in idx) / n_app) if n_app else np.nan
                 grow = any(v in A.get('쌓는중', []) for v in vars_)
-                st = ('칸 없음' if not exist else '해당 종목 없음' if pd.isna(fill)
+                st = (('쌓는 중' if grow else '칸 없음') if not exist else '해당 종목 없음' if pd.isna(fill)
                       else ('쌓는 중' if grow else '삭제 대상') if fill < del_line else '보완 필요' if fill < ok_line else '완성')
                 fl.append(st)
                 FR.append(dict(블록=bid, 질문=b['질문'], 공식=name, 칸=', '.join(vars_), 해당종목=n_app,
