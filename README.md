@@ -27,7 +27,7 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
 ## 따로 도는 작업
-- 유튜브 공부자료: `.github/workflows/youtube.yml` + `youtube/` (매일 08:30·21:00, 설명 `youtube/읽는법.txt`)
+- 유튜브 공부자료: `.github/workflows/youtube.yml` + `youtube/` (10분마다, 설명 `youtube/읽는법.txt`)
 
 새 블록은 브리핑(블록 10) 앞 번호로 파일을 만들고, 맨 위 설명 칸을 같은 양식으로 채웁니다.
 

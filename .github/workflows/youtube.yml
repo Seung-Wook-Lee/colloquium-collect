@@ -10,15 +10,14 @@ on:
         required: false
         default: ''
   schedule:
-    - cron: '30 23 * * *'     # 한국 08:30 (아침 방송 뒤, 10시 회의 전)
-    - cron: '0 12 * * *'      # 한국 21:00 (저녁 방송 뒤)
+    - cron: '*/10 * * * *'    # 10분마다 새 링크·새 영상 확인(11/20 의장: 스트림릿에 링크를 넣으면 곧 요약). 공개 저장소라 Actions 무료
 
 concurrency: youtube
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: write          # youtube-data 브랜치에 결과를 쌓기 위해
     steps:
@@ -45,7 +44,7 @@ jobs:
       - name: 결과를 youtube-data 브랜치에 쌓기(처리목록·txt 전부, 한 커밋으로 덮어씀)
         if: always()
         run: |
-          [ -n "$(ls -A youtube/out)" ] || exit 0
+          [ -f youtube/.changed ] || exit 0          # 새로 처리한 것이 있을 때만
           D=$(mktemp -d); mkdir -p $D/youtube && cp -r youtube/out $D/youtube/
           cd $D && git init -q -b youtube-data
           git config user.name "github-actions[bot]"
