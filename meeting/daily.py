@@ -206,9 +206,10 @@ def judge(W, S):
     return out
 
 
-def backtest(W, IN, use_drive, tday, B):
+def backtest(W, IN, use_drive, tday, B, S):
     """11/19 의장: 블록 성적표·조합 시험(quant_center/backtest.py). 금요일(성적표.요일)만. 지난 계산(블록점수이력.csv)은 드라이브에 이어 써서 새 날짜만 계산."""
     cache = f'{W}/블록점수이력.csv'
+    S.to_csv(f'{W}/out_판정표.csv', index=False, encoding='utf-8-sig')   # 오늘 후보는 엔진 '후보'만
     try:
         if use_drive:
             import drive
@@ -297,7 +298,7 @@ def main():
     import features as F
     f = F.stocks(IN)
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
-    BTO = backtest(W, IN, use_drive, tday, B) if (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
+    BTO = backtest(W, IN, use_drive, tday, B, S) if (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
 
     # 4) 위원 원고
     if os.path.exists(f'{IN}/아침보고.txt'):

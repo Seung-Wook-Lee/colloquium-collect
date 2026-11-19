@@ -5,7 +5,8 @@
    그해 매주 종합점수 상위 5종목의 실제 성적을 잰다. 고를 때 본 기간과 성적을 잰 기간이 겹치지 않는다.
 가격으로 다시 계산할 수 없는 칸(실적·수급·13F·뉴스·공매도 등)은 비워 두므로, 그런 블록은 기록이 쌓일 때까지 빠진다.
 쓰는 법: python backtest.py <입력폴더>   (먼저 python fetch_long.py <입력폴더>)
-결과: <입력폴더>/../블록점수이력.csv(다음 실행 때 새 날짜만 계산), 블록성적.csv, 조합시험.csv, 조합후보_오늘.csv"""
+결과: <입력폴더>/../블록점수이력.csv(다음 실행 때 새 날짜만 계산), 블록성적.csv, 조합시험.csv, 조합후보_오늘.csv
+오늘 후보는 엔진 판정표(<입력폴더>/../out_판정표.csv)에서 '후보'(거르기·추천 자격 통과)인 종목만."""
 import ast
 import math
 import os
@@ -279,6 +280,11 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     W, last = walk(Z, SB, H, int(BT.get('첫시험연도', pd.Timestamp(dates[0]).year + 2)))
     W.to_csv(os.path.join(d, '..', '조합시험.csv'), index=False, encoding='utf-8-sig')
     today = Z[Z['날짜'] == dates[-1].date()]
+    # 11/19 의장: 오늘 후보는 엔진과 같은 문(이익 거르기·제2의 젠슨 황 거르기·추천 자격 연매출)을 통과한 종목에서만.
+    # 엔진 판정표(out_판정표.csv)의 판정 '후보'가 그 문. 판정표가 없으면 후보를 내지 않는다.
+    jp = os.path.join(d, '..', 'out_판정표.csv')
+    gate = set(pd.read_csv(jp, encoding='utf-8-sig').query("판정 == '후보'")['번호']) if os.path.exists(jp) else set()
+    today = today[today['번호'].isin(gate)]
     T = []
     for k, bl in last.items():
         if not bl: continue
