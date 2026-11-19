@@ -1,14 +1,20 @@
 name: 회의 원고 자동 생성
 
-# 07시 '콜로키움 자료수집'이 끝나면 자동으로 돈다(2026-11-17 의장: 위원 발언·오늘의 한 종목은 코드로만).
+# 07시 '콜로키움 자료수집'이 끝나면 자동으로 돈다(국장전 원고). 21:00(한국)에는 미장전 원고(YYYYMMDD_미장전_*)(2026-11-17 의장: 위원 발언·오늘의 한 종목은 코드로만).
 # 하는 일: 드라이브 07시 파일 받기 → 사건상태·변수달력(규칙) → 야후 보조 자료 → 퀀트센터 엔진 → 위원 원고(meeting/personas.py) → 드라이브
 # 결과: 드라이브 '콜로키움 수집데이터/YYYYMMDD/YYYYMMDD_회의원고.txt'·_발표.json·_오늘의한종목.csv·_판정표.csv, '최신_회의원고.txt'
 on:
   workflow_run:
     workflows: ['콜로키움 자료수집']
     types: [completed]
+  schedule:                   # 11/19 의장: 하루 두 번 회의 — 22:00 미장전 회의용 원고(21:00 한국)
+    - cron: '0 12 * * *'      # UTC 12:00 = 한국 21:00
   workflow_dispatch:
     inputs:
+      session:
+        description: '회의: 국장전(10시) 또는 미장전(22시)'
+        required: false
+        default: '국장전'
       date:
         description: '그날 자료로 다시 만들기 YYYYMMDD (비우면 오늘, 한국 시간)'
         required: false
@@ -59,6 +65,8 @@ jobs:
           FRED_KEY: ${{ secrets.FRED_KEY }}
         run: |
           ARGS=""
+          if [ "${{ github.event_name }}" = "schedule" ]; then ARGS="--session 미장전"; fi
+          if [ -n "${{ github.event.inputs.session }}" ]; then ARGS="--session ${{ github.event.inputs.session }}"; fi
           if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi
           if [ "${{ github.event.inputs.skip_fetch }}" = "yes" ]; then ARGS="$ARGS --skip-fetch"; fi
           python meeting/daily.py $ARGS
