@@ -71,7 +71,7 @@ def audit(d, cfg='blocks.yaml', S=None, f=None, m=None):
     # 엔진이 역할을 실제로 쓰는 블록(엔진 코드가 질문으로 찾는 거르기·매도 블록)
     SB = B['종목']
     Q = {b['질문']: k for k, b in SB.items()}
-    used_filter = {Q.get('이익이 늘고 있나?'), Q.get('사건 역풍이 있나?')} | {k for q, k in Q.items() if q.startswith('추천할 만큼')}
+    used_filter = {Q.get('이익이 늘고 있나?'), Q.get('제2의 젠슨 황 있나?')} | {k for q, k in Q.items() if q.startswith('추천할 만큼')}
     used_sell = {Q.get('너무 많이 올랐나?'), Q.get('고점 부근이 아닌가?')}
     FR, BR = [], []
     for sec in ('시장', '종목'):
