@@ -599,6 +599,23 @@ def render_json(sections, today, note=''):
                       default=lambda o: None if isinstance(o, float) and math.isnan(o) else (o.item() if hasattr(o, 'item') else str(o)))
 
 
+def ask_index(c):
+    """돌발 질문용 종목 색인(meeting/ask.py가 읽음): 판정표 종목 → 별칭(원본 표기·티커·코드)·섹터·층·담당 데스크."""
+    D = c.R['데스크']
+    U = c.U.set_index('번호') if len(c.U) and '번호' in c.U.columns else pd.DataFrame()
+    rows = []
+    for _, r in c.T.iterrows():
+        u = U.loc[r['번호']] if len(U) and r['번호'] in U.index else {}
+        get = (lambda k: u.get(k, '')) if len(U) and r['번호'] in U.index else (lambda k: '')
+        alias = [str(get(k)).strip() for k in ('원본 표기', '정식 종목명', 'yfinance 티커', '코드')]
+        alias = [a.split('.')[0] if k == 2 else a for k, a in enumerate(alias)]
+        alias = sorted({a for a in alias if a and a != 'nan' and a != str(r['종목'])})
+        sec = r.get('sector', '') if str(r.get('sector', '')) not in ('', 'nan') else get('섹터/테마')
+        rows.append(dict(번호=r['번호'], 종목=r['종목'], 별칭='|'.join(alias), 섹터=sec, 층=r.get('층'),
+                         데스크=desk_of(r['종목'], sec, r.get('층'), D) or ('리오' if r.get('층') == 'S0' else '')))
+    return pd.DataFrame(rows, columns=['번호', '종목', '별칭', '섹터', '층', '데스크'])
+
+
 def picks_csv(picks):
     order = ['센터', '뚜지', '미스 차트', '클로토', '라케시스', '아트로포스', '미스 밸류', '미스 시타델', '엘피스'] + DESKS
     return pd.DataFrame([picks[k] for k in order if k in picks])

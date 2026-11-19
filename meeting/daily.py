@@ -348,7 +348,8 @@ def main():
             f'{today}_판정표.csv': S.to_csv(index=False).encode('utf-8-sig'),
             f'{today}_시장블록.csv': M.to_csv(index=False).encode('utf-8-sig'),
             f'{today}_사건상태.csv': EV.to_csv(index=False).encode('utf-8-sig'),
-            f'{today}_변수달력.csv': CAL.to_csv(index=False).encode('utf-8-sig')}
+            f'{today}_변수달력.csv': CAL.to_csv(index=False).encode('utf-8-sig'),
+            f'{today}_종목색인.csv': PER.ask_index(c).to_csv(index=False).encode('utf-8-sig')}
     outs.update({f'{today}_{k}': v for k, v in BTO.items()})
     outs.update(judge(W, S))
     for k, v in outs.items():
