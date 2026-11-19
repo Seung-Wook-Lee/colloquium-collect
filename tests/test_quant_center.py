@@ -140,7 +140,7 @@ def test_meta_learns_from_ledger(tmp_path):
     assert out['메타배수'].iloc[0] > 0 and out['메타배수'].iloc[1] == 0
 
 
-# ---- 장기 펀드 13F(B32)
+# ---- 장기 펀드 13F(B16)
 import fetch_13f  # noqa: E402
 import grade_13f  # noqa: E402
 
@@ -151,7 +151,7 @@ def test_issuer_name_normalize():
 
 
 def test_b36_is_bonus_only_when_increased():
-    b = B['종목']['B32']
+    b = B['종목']['B16']
     assert b['조건'] == 'lt_net > 0' and b.get('대상') == '개별주'
     assert engine._ev(b['조건'], {'lt_net': -3.0}) is False
     assert engine._ev(b['조건'], {'lt_net': None}) is None      # 한국 종목: 해당 없음

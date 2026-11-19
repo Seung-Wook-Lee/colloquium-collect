@@ -1,6 +1,6 @@
 """추천 포트폴리오(자문사 MP 형식: 시장 / 종목 / 비중%, 합계 100%). 엔진 판정표 + blocks.yaml '자산배분'·'포트' 규칙으로만 만든다.
 자산 배분(11/17 의장): 지수 30 + 주식·ETF 70. MMF는 의장 판단(엔진 밖). 층마다 업종 1등(시총 1위) 코어를 항상 담고,
-돈이 들어오는 주도 층(B32 + 층 ETF 자금 유입)은 코어 외 몫을 그 층 ETF로 담는다.
+돈이 들어오는 주도 층(B32 주도 업종 + 층 ETF 자금 유입)은 코어 외 몫을 그 층 ETF로 담는다.
 실행: (in/ 와 out_판정표.csv 가 있는 폴더에서) python qblocks/gen_port.py"""
 import sys
 sys.path.insert(0, 'qblocks')
@@ -32,7 +32,7 @@ def _cap(n, mk):
 
 
 def _vm(r):
-    """기존 블록 연결(국면 무관): B17 싼가 아니오 → ×밸류_승수, B19 너무 많이 올랐나 예 → ×과열_승수"""
+    """기존 블록 연결(국면 무관): B12 싼가 아니오 → ×밸류_승수, B23 너무 많이 올랐나 예 → ×과열_승수"""
     vm, why = 1.0, []
     b17, b19 = pd.to_numeric(r.get(PC['밸류블록']), errors='coerce'), pd.to_numeric(r.get(PC['과열블록']), errors='coerce')
     if not pd.isna(b17) and b17 < 0.5: vm *= PC['밸류_승수']; why.append(f"{PC['밸류블록']} 싼가 아니오({b17:.2f})")
