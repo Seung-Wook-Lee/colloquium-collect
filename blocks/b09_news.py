@@ -2,7 +2,7 @@
 # [블록 9] 간밤 뉴스·오늘 일정 — 뉴스보이가 아침 회의에서 읽는 국제 뉴스와 실적·경제지표 일정
 #   하는 일  : (가) 간밤 뉴스, 어제 저녁 6시(한국) 이후 올라온 것만. 세 곳에서 각각 최대 NEWS_MAX건
 #                   ① 연합뉴스 국제 ② 야후 파이낸스 종목별 뉴스(한국·미국·일본 보유·관심 개별주, 한 종목 최대 2건, 보유 먼저)
-#                   ③ CNBC 주요 뉴스(Top News). 2026-10-29 의장 지시("국제 뉴스를 넓히자, 꼭 넣도록")
+#                   ③ CNBC 주요 뉴스(Top News). ⑩ 블룸버그 공식 RSS 5개 면(2026-11-20, 주가 뉴스 10용). 2026-10-29 의장 지시("국제 뉴스를 넓히자, 꼭 넣도록")
 #                   ⑤ 한국·일본 종목별 뉴스: 구글 뉴스 검색 RSS로 개별주 이름을 검색(보유 먼저, 한 종목 최대 2건).
 #                      2026-10-31 추가 — SK하이닉스 10/28 실적처럼 한국 종목 큰 뉴스가 수집에서 빠지던 구멍을 막는다.
 #                   ④ 아침 정리 기사: 국내 언론사의 '뉴욕증시 마감·간밤 해외증시·모닝 브리핑' 기사를 구글 뉴스 검색 RSS로 모은다.
@@ -46,6 +46,7 @@ NEWS_KEEP = (r'증시|주가|급등|급락|금리|연준|Fed|채권|국채|유�
              r'경기|침체|물가|인플레|고용|일자리|GDP|수출|투자|조달|증자|채권 발행|IPO|상장|파산|부도|신용')
 NEWS_POOL = 40            # 거르기 전 연합뉴스에서 받는 건수
 YAHOO_RSS = 'https://feeds.finance.yahoo.com/rss/2.0/headline'
+BBG_RSS = [f'https://feeds.bloomberg.com/{x}/news.rss' for x in ('markets', 'economics', 'technology', 'politics', 'industries')]
 CNBC_RSS = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'
 GNEWS_RSS = 'https://news.google.com/rss/search'
 MORNING_QUERIES = ['뉴욕증시 마감', '간밤 해외증시', '모닝 브리핑 증시', '뉴욕마감']   # 아침 정리 기사 검색어 (고칠 곳)
@@ -195,6 +196,20 @@ try:                                    # ③ CNBC 주요 뉴스
     msgs.append(f'CNBC {len(got)}건')
 except Exception as e:
     msgs.append(f'CNBC 실패({type(e).__name__} {e})')
+try:                                    # ⑩ 블룸버그 공식 RSS(제목+요약, robots 허용) — 11/20 의장 "밤새 미국 뉴스에 집중"
+    pool, seen = [], set()
+    for url in BBG_RSS:
+        try:
+            for x in _rss(url, '블룸버그'):
+                if x['제목'] not in seen and not _re.search(NEWS_DROP, x['제목']):
+                    seen.add(x['제목']); pool.append(x)
+        except Exception:
+            continue
+    got = sorted(pool, key=lambda x: x['시각(한국)'], reverse=True)[:NEWS_MAX * 2]
+    news += got
+    msgs.append(f'블룸버그 {len(got)}건')
+except Exception as e:
+    msgs.append(f'블룸버그 실패({type(e).__name__} {e})')
 try:                                    # ④ 아침 정리 기사 — 구글 뉴스 검색(국내 언론사), 제목 끝 ' - 매체'를 출처로
     pool, seen, n_fail = [], set(), 0
     for q in MORNING_QUERIES:

@@ -1,6 +1,7 @@
 # ======================================================================
 # [블록 9-주가뉴스] 오늘의 주가 뉴스 10 — 주가와 관련된 기사 10건과 긍정·부정 판정 (2026-11-20 의장)
-#   하는 일  : 블록 9(뉴스)가 모은 기사 중 ① 승인 매체(또는 DART 공시) ② 주가 관련(유니버스 종목 기사이거나
+#   하는 일  : 블록 9(뉴스)가 모은 밤사이(어제 18시 이후) 기사 중 ① 미국 매체(CNBC·CNN·블룸버그) ② 미국 뉴스
+#              (미국 종목 기사이거나 종목 없는 시장 기사, 한국·일본 종목 기사와 DART는 뺌) ③ 주가 관련(종목 기사이거나
 #              제목에 시장 낱말)인 것만 남기고, 블록 9-감성(FinBERT)의 확률로 긍정·부정·중립을 붙여 10건을 고른다.
 #              판정: 긍정 확률 ≥ CUT 이면 긍정, 부정 확률 ≥ CUT 이면 부정, 아니면 중립. 사람·AI 판단 없음.
 #              순서: 긍정·부정 먼저(중립은 모자랄 때만) → 확률 높은 순. 같은 종목은 최대 PER_STOCK건.
@@ -9,15 +10,16 @@
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_주가뉴스.csv
 #              (순위, 시각(한국), 판정, 긍정, 부정, 종목, 등락률(%), 제목, 출처, 링크)
 #   쓰는 위원: 뉴스 국장(회의 원고 meeting/personas.py)
-#   고칠 곳  : 건수 TOP_N, 판정 기준 CUT, 승인 매체 MEDIA, 시장 낱말은 블록 9의 NEWS_KEEP
+#              11/20 01:38 의장 "국내 뉴스보다는 밤새 미국 뉴스에만 집중"
+#   고칠 곳  : 건수 TOP_N, 판정 기준 CUT, 미국 매체 MEDIA, 종목 시장 MARKETS, 시장 낱말은 블록 9의 NEWS_KEEP
 #   실패하면 : 점검 파일에 '실패'로 남기고 다음 블록은 계속 실행
 # ======================================================================
 TOP_N = 10            # 의장 11/20 "10개 정도"
 CUT = 0.6             # 긍정·부정 판정 확률 기준
 PER_STOCK = 2         # 같은 종목 최대 건수
-# 의장 11/10·11/11 승인 매체(국내 연합·매경·조선, 해외 CNBC·CNN·블룸버그, 일본 닛케이·NHK·닛칸코교) — 출처·링크·제목 끝 (매체)로 확인
-MEDIA = (r'(?i)연합|yna\.co\.kr|매일경제|매경|mk\.co\.kr|조선일보|조선비즈|chosun|cnbc|\bcnn\b|cnn\.com|블룸버그|bloomberg|'
-         r'닛케이|nikkei|nhk|닛칸코교|nikkan')
+# 의장 11/10 승인 해외 매체(CNBC·CNN·블룸버그) — 출처·링크·제목 끝 (매체)로 확인
+MEDIA = r'(?i)cnbc|\bcnn\b|cnn\.com|블룸버그|bloomberg'
+MARKETS = ['미국']    # 종목 기사는 이 시장 종목만
 
 try:
     NWS = pd.read_csv(f'{DAY}/{TODAY}_뉴스.csv', encoding='utf-8-sig').fillna('')
@@ -25,17 +27,17 @@ try:
     SEN = SEN.drop_duplicates('제목')[['제목', '긍정', '부정', '중립']]
     NT_X = NWS.drop_duplicates('제목').merge(SEN, on='제목', how='inner')
     nt_names = set(u['정식 종목명'].astype(str))
+    nt_us = set(u.loc[u['시장'].isin(MARKETS), '정식 종목명'].astype(str))
 
     def _media_ok(r):
-        if r['출처'] == 'DART 공시':
-            return True
         tail = _re.search(r'\(([^()]*)\)\s*$', str(r['제목']))
         where = ' '.join([str(r['출처']), str(r['링크']), tail.group(1) if tail else '',
                           str(r['종목']) if r['출처'] == '아침 정리' else ''])
         return bool(_re.search(MEDIA, where))
 
     NT_X = NT_X[NT_X.apply(_media_ok, axis=1)]
-    NT_X['종목'] = NT_X['종목'].where(NT_X['종목'].astype(str).isin(nt_names), '')    # '아침 정리'의 매체 이름 등은 종목이 아님
+    NT_X = NT_X[~NT_X['종목'].astype(str).isin(nt_names - nt_us)]                  # 한국·일본 종목 기사 빼기
+    NT_X['종목'] = NT_X['종목'].where(NT_X['종목'].astype(str).isin(nt_us), '')       # 매체 이름 등은 종목이 아님
     NT_X = NT_X[(NT_X['종목'] != '') | NT_X['제목'].astype(str).str.contains(NEWS_KEEP, regex=True)]
     NT_X = NT_X[~NT_X['제목'].astype(str).str.contains(NEWS_DROP, regex=True)]
     NT_X['판정'] = ['긍정' if p >= CUT and p > n_ else '부정' if n_ >= CUT else '중립' for p, n_ in zip(NT_X['긍정'], NT_X['부정'])]
