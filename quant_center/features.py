@@ -219,6 +219,34 @@ def stocks(d):
         ma200 = P.apply(lambda x: x.dropna().tail(200).mean())
         f['ma200'] = f['ticker'].map(ma200); f['ma50'] = f['ticker'].map(ma50)
         f['survive'] = ((f['ticker'].map(last) >= f['ma200'] * 0.95) & ~((f['ma50'] < f['ma200']) & (f['ret5'] >= 5))).astype(int).where(f['ma200'].notna())
+        # 11/19 의장 "금융공학 공식": Carver EWMAC 추세 예측치, Frog-in-the-pan, 잔차 모멘텀, MAX 효과
+        def ewmac(x, fa, sl, k):   # Carver(Systematic Trading): (빠른 EWMA − 느린 EWMA) ÷ 가격 변동성(36일 EW) × 예측 눈금, ±20
+            x = x.dropna()
+            if len(x) < sl: return np.nan
+            sd = x.diff().ewm(span=36).std().iloc[-1]
+            return float(np.clip((x.ewm(span=fa).mean().iloc[-1] - x.ewm(span=sl).mean().iloc[-1]) / sd * k, -20, 20)) if sd > 0 else np.nan
+        f['ewmac16'] = f['ticker'].map(P.apply(lambda x: ewmac(x, 16, 64, 3.75)))
+        f['ewmac32'] = f['ticker'].map(P.apply(lambda x: ewmac(x, 32, 128, 2.65)))
+        f['ewmac'] = (f['ewmac16'] + f['ewmac32']) / 2
+        r252 = r.tail(252)
+        f['ret252'] = f['ticker'].map(P.apply(lambda x: ret(x, 252)))
+        # Da·Gurun·Warachka(2014): ID = sign(1년 수익) × (내린 날 비율 − 오른 날 비율). 음수 = 조금씩 꾸준히 오름(추세 지속)
+        pos = (r252 > 0).sum() / r252.notna().sum(); neg = (r252 < 0).sum() / r252.notna().sum()
+        f['fip_id'] = np.sign(f['ret252']) * (f['ticker'].map(neg) - f['ticker'].map(pos))
+        # Blitz·Huij·Martens(2011): 시장 베타를 뺀 잔차의 12−1달 합 ÷ 잔차 표준편차
+        IR_ = np.log(I).diff() if len(I) else pd.DataFrame()
+        def resmom(t, ix):
+            if ix not in IR_ or t not in r: return np.nan
+            z = pd.concat([r[t], IR_[ix]], axis=1).dropna().tail(252)
+            if len(z) < 200: return np.nan
+            y, xm = z.iloc[:, 0].values, z.iloc[:, 1].values
+            b = np.polyfit(xm, y, 1); e = y - np.polyval(b, xm)
+            return float(e[:-21].sum() / (e[:-21].std() * np.sqrt(len(e) - 21)))
+        f['resmom'] = [resmom(t, ix) for t, ix in zip(f['ticker'], idx)]
+        f['resmom_mpct'] = f.groupby('시장')['resmom'].rank(pct=True)
+        # Bali·Cakici·Whitelaw(2011) MAX: 최근 21일 최대 일간 수익이 큰 종목(복권형)은 이후 수익이 낮음
+        f['max21'] = f['ticker'].map(r.tail(21).max() * 100)
+        f['max21_mpct'] = f.groupby('시장')['max21'].rank(pct=True)
     # 블룸버그 12개월 선행 EPS(톰스뉴스 표, 미국 상위 30): 1주·YTD 변화, 선행 PER
     BB = _r(d, '블룸버그EPS')
     if len(BB):
