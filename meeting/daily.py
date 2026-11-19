@@ -35,7 +35,7 @@ RENAME = {'DART실적': 'DART', 'SEC실적': 'SEC'}
 # 매일 갱신하는 보조 자료(야후): (스크립트, 만드는 파일)
 FETCH = [('fetch_px.py', '가격2년.csv'), (None, '지수2년.csv'), ('fetch_q.py', '분기원자료.csv'), ('fetch_fund.py', '분기실적.csv'),
          ('fetch_bs.py', '재무건전성.csv'), ('fetch_rev.py', '연매출.csv'), ('fetch_fz.py', 'FZ점수.csv'), ('fetch_per3.py', 'PER3년.csv'),
-         ('fetch_13f.py', '장기펀드13F.csv')]   # 11/19 장기 펀드 13F(B32 보너스), SEC 무료
+         ('fetch_13f.py', '장기펀드13F.csv')]   # 11/19 장기 펀드 13F(B16 보너스), SEC 무료
 # 전날 것을 이어 쓰는 자료(드라이브 00_퀀트입력 → 없으면 저장소 meeting/seed/)
 CARRY_FILES = ['유니버스.csv', 'ETF보유.csv', 'ETF멤버.csv', '1달조합.csv', '블룸버그EPS.csv', '지수밸류.csv',
                '퀀트자료.csv', 'forward_log.csv', '아침보고.txt'] + [x for _, x in FETCH]
