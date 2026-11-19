@@ -243,6 +243,22 @@ def stocks(d):
             b = np.polyfit(xm, y, 1); e = y - np.polyval(b, xm)
             return float(e[:-21].sum() / (e[:-21].std() * np.sqrt(len(e) - 21)))
         f['resmom'] = [resmom(t, ix) for t, ix in zip(f['ticker'], idx)]
+        # 11/19 의장 B12 '제2의 젠슨 황': 사건 연구(event study) 가격 충격. 시장 베타를 뺀 하루 잔차 ÷ 잔차 표준편차(1년)
+        def shock(t, ix, n=5):
+            if ix not in IR_ or t not in r: return [np.nan] * n
+            z = pd.concat([r[t], IR_[ix]], axis=1).dropna().tail(252)
+            if len(z) < 200: return [np.nan] * n
+            y, xm = z.iloc[:, 0].values, z.iloc[:, 1].values
+            b = np.polyfit(xm, y, 1); e = y - np.polyval(b, xm)
+            return list(e[-n:] / e[:-n].std())
+        SZ = pd.DataFrame([shock(t, ix) for t, ix in zip(f['ticker'], idx)], index=f.index)
+        f['shock_z5'] = SZ.min(axis=1)                                   # 최근 5일 중 가장 큰 잔차 하락(σ)
+        f['shock_own'] = (f['shock_z5'] <= -3).astype(int).where(f['shock_z5'].notna())
+        g = f.groupby(['시장', 'layer']).ngroup()
+        cnt = SZ.notna().groupby(g).transform('sum'); bad = (SZ <= -2).groupby(g).transform('sum')
+        share = (bad / cnt.where(cnt >= 3))                              # 같은 층에서 같은 날 −2σ 아래로 빠진 비율
+        f['shock_layer_share'] = share.max(axis=1)
+        f['shock_layer'] = (f['shock_layer_share'] >= 0.5).astype(int).where(f['shock_layer_share'].notna())
         f['resmom_mpct'] = f.groupby('시장')['resmom'].rank(pct=True)
         # Bali·Cakici·Whitelaw(2011) MAX: 최근 21일 최대 일간 수익이 큰 종목(복권형)은 이후 수익이 낮음
         f['max21'] = f['ticker'].map(r.tail(21).max() * 100)
@@ -285,7 +301,22 @@ def stocks(d):
     for no in f['번호']:
         s = sect.get(no, '')
         hits.append(','.join(sorted({w for k2, ws in EVENT.items() if k2 in s for w in ws if w.lower() in heads})))
-    # 사건 상태표(오늘 뉴스에 없어도 진행 중인 사건): 업종 → 사건
+    # 11/19 의장 B20 '제2의 젠슨 황': 뉴스 감성(FinBERT 영어·KR-FinBERT 한국어, 07시 b09_newssent.py). 업종 낱말·사건상태표는 판정에서 뺌
+    NS = _r(d, '뉴스감성')
+    f['news_neg'] = 0.0; f['news_title'] = ''
+    if len(NS):
+        NS['부정'] = _num(NS['부정']); low = NS['제목'].fillna('').astype(str).str.lower()
+        for i, nm in zip(f.index, f['종목'].astype(str)):
+            m = (NS['종목'].astype(str) == nm) | (low.str.contains(nm.lower(), regex=False) if len(nm) >= 4 else False)
+            if m.any():
+                j = NS.loc[m, '부정'].idxmax()
+                f.at[i, 'news_neg'] = NS.at[j, '부정']; f.at[i, 'news_title'] = str(NS.at[j, '제목'])[:80]
+    f['news_strong'] = (f['news_neg'] >= 0.9).astype(int)   # 강한 부정 뉴스(부정 확률 0.9 이상)
+    # 제2의 젠슨 황 = 강한 부정 뉴스 + 그 종목 −2σ 급락, 또는 업종 동반 급락(자료 없으면 '증거 없음' = 0)
+    sz = f['shock_z5'] if 'shock_z5' in f else pd.Series(np.nan, index=f.index)
+    sl = f['shock_layer'] if 'shock_layer' in f else pd.Series(np.nan, index=f.index)
+    f['jensen'] = (((f['news_strong'] == 1) & (sz <= -2)) | (sl == 1)).astype(int)
+    # 사건 상태표(손 작성): 11/19부터 판정에 안 쓰고 표시만
     ST = _r(d, '사건상태')
     if len(ST):
         for i, no in enumerate(f['번호']):
@@ -314,6 +345,11 @@ def stocks(d):
             near = [1 if (n or lay in lays) else 0 for n, lay in zip(near, f['layer'].astype(str))]
     f['event_near'] = near
     f['event_hit'] = f['event_words'] != ''
+    if 'shock_z5' in f:   # 가격 충격 설명(매도 신호 칸에 붙음)
+        lab = np.where(f['shock_layer'] == 1, '업종 동반 급락', '')
+        lab = [', '.join(x for x in (a, f'잔차 {z:.1f}σ' if z <= -3 else '') if x) for a, z in zip(lab, f['shock_z5'].fillna(0))]
+        f['event_words'] = [', '.join(x for x in (w, l) if x) for w, l in zip(f['event_words'], lab)]
+    f['event_words'] = [', '.join(x for x in (w, f'부정 뉴스 {p:.2f} "{t}"' if p >= 0.9 else '') if x) for w, p, t in zip(f['event_words'], f['news_neg'], f['news_title'])]
     f['sector'] = f['번호'].map(sect)
     return f
 
