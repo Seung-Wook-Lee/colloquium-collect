@@ -32,9 +32,11 @@ def _ev(expr, row):
 # ---- 단계(blocks.yaml '순서'대로 실행). 블록 계산(공식 → 블록 점수)은 항상 맨 앞, 그 뒤 단계는 yaml 순서를 따른다.
 def st_filter(S, c):
     """거르기: 역할 '거르기' 블록(이익·사건·크기) → 후보 / 참고만 / 걸러짐 / 자료 부족"""
-    K_EARN, K_EVENT, K_SIZE = c['K_EARN'], c['K_EVENT'], c['K_SIZE']
+    K_EARN, K_EVENT = c['K_EARN'], c['K_EVENT']
+    # 11/19 의장: '큰 회사인가'는 블록이 아니라 추천 자격 설정(추천.최소매출원). 개별주만, 자료 없으면 참고만
+    big = (S['구분'] != '개별주') | (pd.to_numeric(S['연매출(원)'], errors='coerce') >= c['B'].get('추천', {}).get('최소매출원', 1e13))
     filt = S[K_EARN].isin(['통과', '해당 없음']) & (S[K_EVENT] == '통과')   # B12 거르기 폐지 → 갈래(주도·눌림)
-    S['판정'] = np.where(filt, np.where(S[K_SIZE].isin(['통과', '해당 없음']), '후보', '참고만'),
+    S['판정'] = np.where(filt, np.where(big, '후보', '참고만'),
                         np.where(S[K_EARN] == '자료 없음', '자료 부족', '걸러짐'))
     S.loc[S['층'] == 'S0', '판정'] = '기준층(지수·현금·금, 추천 대상 아님)'
     return S
@@ -140,7 +142,7 @@ def run(d, cfg='blocks.yaml'):
                       for bid, b in B['시장'].items() for n, e, side in b['공식']])
     SB = B['종목']
     Q = {b['질문']: k for k, b in SB.items()}   # 질문으로 블록 찾기(번호가 바뀌어도 됨)
-    K_EARN, K_EVENT, K_SIZE, K_HOT = Q['이익이 늘고 있나?'], Q['사건 역풍이 있나?'], [k for q, k in Q.items() if q.startswith('추천할 만큼')][0], Q['너무 많이 올랐나?']
+    K_EARN, K_EVENT, K_HOT = Q['이익이 늘고 있나?'], Q['사건 역풍이 있나?'], Q['너무 많이 올랐나?']
     K_HIGH = Q['고점 부근이 아닌가?']; K_CHEAP = Q['싼가? (줄 세우기 뼈대)']
     last = int(list(SB)[-1][1:])
     K_SPLIT, K_CAP, K_SELL = f'B{last+1:02d}_분할', f'B{last+2:02d}_비중상한(%)', f'B{last+3:02d}_매도신호'
@@ -230,6 +232,7 @@ def run(d, cfg='blocks.yaml'):
         out['5일(%)'] = None if pd.isna(row.get('ret5')) else round(row['ret5'], 1)
         out['빠지는 이유'] = ', '.join(why_dn)
         out['변수'] = row.get('변수', '')
+        out['연매출(원)'] = row.get('rev_krw')
         ln = row.get('lt_net')
         out['장기펀드'] = '' if ln is None or pd.isna(ln) else (
             f"{'늘림' if ln > 0 else '줄임' if ln < 0 else '그대로'} {ln:+.1f}% (늘린 {row.get('lt_up'):.0f}·줄인 {row.get('lt_dn'):.0f}곳, {row.get('lt_q')})")
@@ -237,8 +240,8 @@ def run(d, cfg='blocks.yaml'):
         out['국면'] = ('방어' if DEF else '평상') + (f" · 지수 {IR[row['시장']]}" if row['시장'] in IR else '')
         out['갈래'] = '주도' if _ev('dd52 >= -10', row) else '눌림'
         out['가짜바닥아님'] = row.get('survive')
-        out['핵심관측'] = sum(1 for k in ('이익 전망이 오르나?', '회사가 튼튼한가?', '싼가? (줄 세우기 뼈대)', '퀀트 모델(BLOCK20)은 어떻게 보나?')
-                           if any(q == k for _, q, *_ in yes_blocks))
+        out['핵심관측'] = sum(1 for k in B.get('추천', {}).get('핵심블록', ['B17', 'B18', 'B19'])
+                           if any(b == k for b, *_ in yes_blocks))
         # 주문 한도(B27·B28·B29·쏠림·CTA 전환): 가장 엄격한 승수 하나
         lay = row.get('layer'); mu, al = MULT.get(lay, 1.0), [WHY[lay]] if lay in WHY else []
         if lay in CRW: mu = min(mu, OC.get('승수', 0.5)); al.append(CRW[lay])
@@ -312,7 +315,7 @@ def run(d, cfg='blocks.yaml'):
         S.at[i, '블록예비율'] = round(wt(ys) / (wt(ys) + wt(ns)), 2) if ys or ns else None
     S = S.rename(columns={K_SPLIT: '분할', K_CAP: '비중상한(%)', K_SELL: '매도신호'})
     S['싼가'] = pd.to_numeric(S[K_CHEAP], errors='coerce')
-    ctx = dict(B=B, d=d, f=f, P=P, m=m, SB=SB, K_EARN=K_EARN, K_EVENT=K_EVENT, K_SIZE=K_SIZE, info={})
+    ctx = dict(B=B, d=d, f=f, P=P, m=m, SB=SB, K_EARN=K_EARN, K_EVENT=K_EVENT, info={})
     S = run_stages(S, ctx)
     m['_단계'] = ctx['info']
     S = S.sort_values(['판정', '싼가', '점수'], ascending=[True, False, False])
