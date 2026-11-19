@@ -37,7 +37,6 @@ jobs:
           token: ${{ secrets.TEAMQ_TOKEN }}
       - name: 비공개 설정 받기(블록 문턱·종목 목록·판단 코드, team_q colloquium_private. TEAMQ_TOKEN 필요)
         uses: actions/checkout@v5
-        continue-on-error: true
         with:
           repository: Seung-Wook-Lee/team_q
           ref: main
