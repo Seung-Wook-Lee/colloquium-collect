@@ -249,7 +249,12 @@ def bottom(W, use_drive, B, S):
             one, test, _ = BOT.run(W, S, B.get('바닥'), idx)
             r = one.iloc[0]
             log(f"[바닥] {idx} 근접도 {r['원점수']} (과거 {r['과거백분위']}백분위, 경보 {r['경보']}) · 검정 AUC {test.iloc[0]['AUC']}")
-        return {os.path.basename(k): open(k, 'rb').read() for k in glob.glob(f'{W}/바닥근접도*.csv')}
+            try:   # 11/20 의장: 조정 단계표(5·10·15·20·30%, 1년 횟수, 다음 단계 확률, 처음 닿은 날 사면 수익률)
+                import correction as COR
+                COR.run(W, idx, (B.get('바닥') or {}).get('조정'))
+            except Exception as e:   # noqa: BLE001
+                log(f'[조정단계] {idx} 실패: {str(e)[:120]}')
+        return {os.path.basename(k): open(k, 'rb').read() for k in glob.glob(f'{W}/바닥근접도*.csv') + glob.glob(f'{W}/조정*.csv')}
     except Exception as e:
         log(f'[바닥] 실패 → 건너뜀: {str(e)[:160]}')
         return {}
