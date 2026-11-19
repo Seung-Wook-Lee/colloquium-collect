@@ -23,8 +23,12 @@ def rsi(p, n=14):
     return 100 - 100 / (1 + up / dn)
 
 
-def signals(p, vix=None):
+def signals(p, vix=None, kr=False):
     S = pd.DataFrame(index=p.index)
+    if kr:   # 11/20 의장: 한국 과열 기준 = 코스피 50일 이격 130 (blocks.yaml B09 125 주의·130 과열)
+        g = p / p.rolling(50).mean() * 100
+        S['50일 이격 ≥ 125'] = g >= 125
+        S['50일 이격 ≥ 130'] = g >= 130
     S['50일 이격 ≥ 108'] = p / p.rolling(50).mean() * 100 >= 108
     S['일봉 RSI ≥ 70'] = rsi(p) >= 70
     S['200일 이격 ≥ 115'] = p / p.rolling(200).mean() * 100 >= 115
@@ -66,7 +70,7 @@ def run(W, idx='^NDX'):
     vix = None
     if idx in ('^GSPC', '^NDX'):
         vix = yf.download('^VIX', start='1990-01-01', auto_adjust=True, progress=False)['Close'].squeeze().dropna()
-    S = signals(p, vix)
+    S = signals(p, vix, kr=idx in ('^KS11', '^KQ11'))
     F = fwd(p)
     ok = S.index[p.rolling(252).count() >= 252]
     S, F2 = S.loc[ok], F.loc[ok]
@@ -75,7 +79,9 @@ def run(W, idx='^NDX'):
     for c in S.columns:
         rows.append(row(c, S[c], F2))
         rows.append(row(c + ' (첫날만)', first_days(S[c]), F2))
-    for k in range(1, S.shape[1] + 1):
+    base_cols = [c for c in S.columns if not c.startswith('50일 이격 ≥ 1') or c == '50일 이격 ≥ 108']
+    n = S[base_cols].sum(axis=1)
+    for k in range(1, len(base_cols) + 1):
         m = n >= k
         if m.sum() >= 20:
             rows.append(row(f'과열 점수 ≥ {k}', m, F2))
@@ -87,7 +93,7 @@ def run(W, idx='^NDX'):
     T.insert(0, '지수', NAME.get(idx, idx))
     today = S.iloc[-1]
     ONE = pd.DataFrame([{'지수': NAME.get(idx, idx), '날짜': S.index[-1].date(), '과열 점수': int(today.sum()), '켜진 신호': ', '.join(S.columns[today]) or '없음',
-                         '50일 이격': round(float(p.iloc[-1] / p.rolling(50).mean().iloc[-1] * 100), 1), 'RSI': round(float(rsi(p).iloc[-1]), 1),
+                         '50일 이격': round(float(p.iloc[-1] / p.rolling(50).mean().iloc[-1] * 100), 1), '과열 점수 계산 신호': ', '.join(base_cols), 'RSI': round(float(rsi(p).iloc[-1]), 1),
                          '200일 이격': round(float(p.iloc[-1] / p.rolling(200).mean().iloc[-1] * 100), 1)}])
     tag = '' if idx == '^GSPC' else '_' + NAME.get(idx, idx)
     T.to_csv(f'{W}/과열_검정{tag}.csv', index=False, encoding='utf-8-sig')
