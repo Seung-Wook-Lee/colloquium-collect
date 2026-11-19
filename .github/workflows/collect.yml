@@ -15,7 +15,7 @@ concurrency: collect          # 두 번 겹쳐 돌지 않게
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120         # 11/19: 공개 저장소라 시간 제한 여유(45분이면 b09_news에서 잘려 드라이브 올리기 전에 취소됨)
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
