@@ -43,7 +43,7 @@
     - [공포탐욕 75 이상 과열(부담), FG >= 75, 부담]
   B06:
     질문: 수급
-    영문: 'CTA z-score, vol-control'
+    영문: 'CTA z-score, vol-control, safe-haven ETF flow'
     공식:
     - [CTA 포지셔닝 z점수 −4 아래(기회) — 시계열 모멘텀·변동성 타기팅 근사(Moskowitz·Ooi·Pedersen), CTA <= -4, 기회]
     - [변동성 타기팅 노출(목표변동성 10% ÷ 실현변동성) 0.6배 아래 = 이미 많이 팜(기회), VOLT < 0.6, 기회]
