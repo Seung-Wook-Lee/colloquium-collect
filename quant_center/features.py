@@ -220,7 +220,8 @@ def stocks(d):
         f['vol126_rank'] = f.groupby(['시장', 'layer'])['vol126'].rank(pct=True)
         ma200 = P.apply(lambda x: x.dropna().tail(200).mean())
         f['ma200'] = f['ticker'].map(ma200); f['ma50'] = f['ticker'].map(ma50)
-        f['survive'] = ((f['ticker'].map(last) >= f['ma200'] * 0.95) & ~((f['ma50'] < f['ma200']) & (f['ret5'] >= 5))).astype(int).where(f['ma200'].notna())
+        # 옛 가짜 바닥(제이미 B29, 11/17): 200일선 95% 위 + 데드크로스 속 5일 +5% 반등 아님. 11/19 의장: 근거 없음 → 기록만
+        f['survive_ma200'] = ((f['ticker'].map(last) >= f['ma200'] * 0.95) & ~((f['ma50'] < f['ma200']) & (f['ret5'] >= 5))).astype(int).where(f['ma200'].notna())
         # 11/19 의장 "금융공학 공식": Carver EWMAC 추세 예측치, Frog-in-the-pan, 잔차 모멘텀, MAX 효과
         def ewmac(x, fa, sl, k):   # Carver(Systematic Trading): (빠른 EWMA − 느린 EWMA) ÷ 가격 변동성(36일 EW) × 예측 눈금, ±20
             x = x.dropna()
@@ -230,6 +231,18 @@ def stocks(d):
         f['ewmac16'] = f['ticker'].map(P.apply(lambda x: ewmac(x, 16, 64, 3.75)))
         f['ewmac32'] = f['ticker'].map(P.apply(lambda x: ewmac(x, 32, 128, 2.65)))
         f['ewmac'] = (f['ewmac16'] + f['ewmac32']) / 2
+        # 11/19 의장 가짜 바닥 → 금융공학 공식 두 개(둘 중 하나면 '가짜 바닥 아님')
+        # ① Lo·MacKinlay(1988) 분산비 VR(5) = 5일 수익률 분산 ÷ (5 × 1일 수익률 분산), 최근 120일. 1 미만 = 되돌림(평균 회귀), 1 초과 = 한 방향 지속
+        def vr(x, q=5, n=120):
+            y = np.log(x.dropna()).diff().dropna().tail(n)
+            if len(y) < n: return np.nan
+            v1 = y.var(); vq = y.rolling(q).sum().dropna().var()
+            return float(vq / (q * v1)) if v1 > 0 else np.nan
+        f['vr5'] = f['ticker'].map(P.apply(vr))
+        # ② Carver EWMAC 16·64 예측치가 5일 전보다 오름(하락 힘이 약해짐)
+        f['ewmac16_5'] = f['ticker'].map(P.apply(lambda x: ewmac(x.dropna().iloc[:-5], 16, 64, 3.75)))
+        f['ewmac16_up'] = (f['ewmac16'] > f['ewmac16_5']).astype(int).where(f['ewmac16'].notna() & f['ewmac16_5'].notna())
+        f['survive'] = ((f['vr5'] < 1) | (f['ewmac16_up'] == 1)).astype(int).where(f['vr5'].notna() | f['ewmac16_up'].notna())
         r252 = r.tail(252)
         f['ret252'] = f['ticker'].map(P.apply(lambda x: ret(x, 252)))
         # Da·Gurun·Warachka(2014): ID = sign(1년 수익) × (내린 날 비율 − 오른 날 비율). 음수 = 조금씩 꾸준히 오름(추세 지속)

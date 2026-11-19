@@ -68,9 +68,7 @@ def st_judge(S, c):
     v = pd.to_numeric(S[key], errors='coerce')
     S['추천'] = np.where(S['판정'] != '후보', S['판정'], np.where(~enough, '자료 부족(블록 수 모자람)',
                 np.where(v >= cut, '추천', np.where(v >= cut2, '관찰', '대기'))))
-    # 제이미 B29: 눌림 갈래는 가짜 바닥이 아닐 때만 추천(아니면 관찰까지)
-    fake = (S['갈래'] == '눌림') & (S['가짜바닥아님'] == 0) & (S['추천'] == '추천')
-    S.loc[fake, '추천'] = '관찰'
+    # 11/19 의장: 가짜 바닥 검사 폐지(10년 성적에서 걸린 쪽이 52주 수익률 더 높음). '가짜바닥아님'(분산비·EWMAC 기울기)은 표시만
     c['info']['판정기준'] = f'{key} 추천 ≥ {cut:.2f}, 관찰 ≥ {cut2:.2f}'
     return S
 
