@@ -117,7 +117,7 @@ def audit(d, cfg='blocks.yaml', S=None, f=None, m=None):
             n = len(fl)
             done = roles_ok and all(s in ('완성', '보완 필요', '쌓는 중') for s in fl) and fl.count('완성') * 2 >= n - fl.count('쌓는 중')
             hist_ok = sum(1 for r in FR if r['블록'] == bid and r['과거계산'] in ('가격', 'BLOCK20', '공시'))
-            BR.append(dict(블록=bid, 질문=b['질문'], 역할=role, 국면=b.get('국면', ''), 공식수=n,
+            BR.append(dict(블록=bid, 질문=b['질문'], 영문=b.get('영문', ''), 역할=role, 국면=b.get('국면', ''), 공식수=n,
                            완성=fl.count('완성'), 보완필요=fl.count('보완 필요'), 삭제대상=fl.count('삭제 대상'),
                            쌓는중=fl.count('쌓는 중'), 칸없음=fl.count('칸 없음'), 과거계산가능=f'{hist_ok}/{n}', 역할일치=roles_ok,
                            메모=' / '.join(note), 판정='완성' if done else '미완성'))
