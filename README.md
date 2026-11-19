@@ -24,7 +24,6 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 | 9 | `blocks/b09_valuation.py` (+ `valuation.py`) | 스트림릿 '1. 시장' 맨 위 지수 밸류·등락: 주요국·미국 지수 이달·연초 이후 등락, 필반 200일 이격도(1995~, 100 기준), S&P500·나스닥100·필반 12개월 선행 P/E(구성종목 합산, 오늘부터 누적; 나스닥100·필반 매일, S&P500 토요일) | `_지수등락.csv`, `_필반이격도.csv`, `_지수선행PE_종목.csv`, `00_누적/00_지수선행PE.csv`·`00_지수구성종목.csv` |
 | 9 | `blocks/b09_flow.py` | ETF 자금유입: 국내 ETF 30·미국 ETF 10 + 미국 섹터 비교용(SPDR 섹터 11, SPY·QQQ·SOXX·MAGS). 상장좌수 변화 × NAV로 1·5·20일 유입 (한투 좌수·순자산, 야후 순자산, SPDR 공식 이력) | `_ETF자금.csv`, `00_누적/00_ETF좌수이력.csv` |
 | 10 | `blocks/b10_briefing.py` | 오늘 브리핑(텍스트) | `_브리핑.txt` |
-| 10 | `blocks/b10_gemini.py` | 제미나이 위원(뉴스 국장, 피터·섹터 데스크, 엘피스) 발언 원고 — 회의실은 그대로 대독. 키 없으면 건너뜀 | `_위원_뉴스국장.txt`, `_위원_피터.txt`, `_위원_엘피스.txt` |
 | 11 | `blocks/b11_summary.py` | 점검 요약, 드라이브에 올리기 | `_수집점검.txt` |
 
 ## 따로 도는 작업
@@ -51,3 +50,14 @@ GitHub Actions가 GitHub 컴퓨터에서 돌리므로 PC를 켜 둘 필요가 �
 
 ## 차트 실험실 (2026-11-13)
 보조지표만으로 하는 기술적 분석 실험은 `chart_lab/`(설명 `chart_lab/README.md`). Actions → 차트 실험실 실행 → 실험 이름. 07시 수집과 별개, 결과는 드라이브 `콜로키움 수집데이터/차트실험실/`.
+
+## 회의 원고 자동 생성 (2026-11-17)
+
+위원 발언과 '오늘의 한 종목'은 AI가 쓰지 않고 코드가 만든다. 07시 수집이 끝나면 `.github/workflows/meeting.yml`이 `meeting/daily.py`를 돌린다.
+
+- 순서: 드라이브 07시 파일 받기 → 사건상태·변수달력(`meeting/events.py`, 승인 매체 RSS·07시 일정.csv 규칙) → 야후 보조 자료(`quant_center/fetch_*.py`) → 퀀트센터 엔진 → 위원 원고(`meeting/personas.py`) → 드라이브.
+- 결과: `콜로키움 수집데이터/YYYYMMDD/YYYYMMDD_회의원고.txt`, `_발표.json`(스트림릿 회의 발표 화면), `_오늘의한종목.csv`, `_판정표.csv`, `_시장블록.csv`, `_사건상태.csv`, `_변수달력.csv`, `최신_회의원고.txt`.
+- 전날 보조 자료·사건 로그는 `콜로키움 수집데이터/00_퀀트입력/`에 이어 쓴다(처음엔 `meeting/seed/`).
+- 위원을 고칠 때: 숫자·낱말·순서·한 종목 규칙은 `meeting/rules.yaml`, 문장 틀은 `meeting/personas.py`의 그 위원 함수만 고친다.
+- 손 시험: `python meeting/daily.py --local <입력 폴더> --skip-fetch`.
+- 팀Q(비공개 저장소) 아침보고·퀀트자료를 매일 받으려면 Secrets에 `TEAMQ_TOKEN`(team_q 읽기 권한)을 넣는다. 없으면 전날 사본을 쓰고 원고 머리에 기준일을 적는다.
