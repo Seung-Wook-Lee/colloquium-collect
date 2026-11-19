@@ -1,0 +1,54 @@
+name: 회의 원고 자동 생성
+
+# 07시 '콜로키움 자료수집'이 끝나면 자동으로 돈다(2026-11-17 의장: 위원 발언·오늘의 한 종목은 코드로만).
+# 하는 일: 드라이브 07시 파일 받기 → 사건상태·변수달력(규칙) → 야후 보조 자료 → 퀀트센터 엔진 → 위원 원고(meeting/personas.py) → 드라이브
+# 결과: 드라이브 '콜로키움 수집데이터/YYYYMMDD/YYYYMMDD_회의원고.txt'·_발표.json·_오늘의한종목.csv·_판정표.csv, '최신_회의원고.txt'
+on:
+  workflow_run:
+    workflows: ['콜로키움 자료수집']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '그날 자료로 다시 만들기 YYYYMMDD (비우면 오늘, 한국 시간)'
+        required: false
+        default: ''
+      skip_fetch:
+        description: '야후 보조 자료 갱신 건너뛰기(전날 것 사용) — yes'
+        required: false
+        default: ''
+
+concurrency: meeting
+
+jobs:
+  meeting:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: 팀Q 아침보고·퀀트자료 받기(TEAMQ_TOKEN 있을 때만, 없으면 전날 사본)
+        uses: actions/checkout@v5
+        continue-on-error: true
+        with:
+          repository: Seung-Wook-Lee/team_q
+          ref: block20-V2611
+          path: team_q
+          sparse-checkout: research/daily
+          token: ${{ secrets.TEAMQ_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt pyyaml
+      - name: 회의 원고 만들기
+        env:
+          TZ: Asia/Seoul
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+          TEAMQ_DIR: ${{ github.workspace }}/team_q
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi
+          if [ "${{ github.event.inputs.skip_fetch }}" = "yes" ]; then ARGS="$ARGS --skip-fetch"; fi
+          python meeting/daily.py $ARGS

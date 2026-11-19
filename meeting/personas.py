@@ -1,0 +1,604 @@
+"""위원 발언 원고를 코드로 만든다(2026-11-17 의장: 위원 발언·오늘의 한 종목은 AI가 즉흥으로 쓰지 않는다).
+입력  : 07시 수집 파일(입력 폴더, 날짜 앞머리 없는 이름) + 퀀트센터 엔진 결과(판정표 S, 시장블록 M, 시장 값 m) + rules.yaml
+규칙  : 숫자는 파일 값 그대로, 판정은 엔진 칸 또는 rules.yaml 문턱, 문장은 이 파일의 틀(위원마다 함수 하나).
+출력  : 회의원고.txt(사람이 읽는 대본), 발표.json(스트림릿 '회의 발표' 화면), 오늘의한종목.csv
+페르소나를 고칠 때: 숫자·낱말·순서는 rules.yaml, 문장 틀은 이 파일의 해당 위원 함수만 고친다."""
+import json
+import math
+
+import numpy as np
+import pandas as pd
+
+import re as _re
+BAN = _re.compile(r'^(?:카카오|LIG|LG|LS)(?![A-Za-z])')   # 콜로키움_룰.txt 4장: 언급하지 않는다(rules.yaml 금지이름으로 바꿀 수 있음)
+
+
+def banned(name):
+    return bool(BAN.search(str(name).strip()))
+
+
+DESKS = ['미스 세마이', '미스터 빅스', '미스터 로보', '미스 파이낸스', '마담헤비', '일라이 존슨']
+
+
+# ---------------------------------------------------------------- 숫자 글씨
+def ok(v):
+    return v is not None and not (isinstance(v, float) and math.isnan(v)) and not (isinstance(v, str) and v.strip() in ('', 'nan'))
+
+
+def num(v):
+    try:
+        x = float(str(v).replace(',', ''))
+        return None if math.isnan(x) else x
+    except Exception:
+        return None
+
+
+def n(v, d=1, u=''):
+    v = num(v)
+    return '자료 없음' if v is None else f'{v:,.{d}f}{u}'
+
+
+def p(v, d=1, u='%'):
+    v = num(v)
+    return '자료 없음' if v is None else f'{v:+,.{d}f}{u}'
+
+
+class L:
+    """발언 한 줄: 제목, 사실, 이유(근거). 이유는 화면에서 작은 회색 글씨."""
+    def __init__(self, title, fact, why=''):
+        self.title, self.fact, self.why = title, fact, why
+
+
+def _read(d, name):
+    try:
+        return pd.read_csv(f'{d}/{name}.csv', encoding='utf-8-sig')
+    except FileNotFoundError:
+        return pd.DataFrame()
+
+
+# ---------------------------------------------------------------- 엔진 표 + 종목 칸
+def table(S, f):
+    keep = [c for c in f.columns if c not in S.columns or c == '번호']
+    T = S.merge(f[keep], on='번호', how='left')
+    return T[~T['종목'].map(banned)].reset_index(drop=True)
+
+
+def _env(r):
+    return {k: (None if (isinstance(v, float) and math.isnan(v)) else v) for k, v in r.items()}
+
+
+def _cond(expr, r):
+    try:
+        return bool(eval(expr, {'__builtins__': {}}, _env(r)))
+    except Exception:
+        return False
+
+
+def _sort(T, keys):
+    by, asc = [], []
+    for k in keys:
+        a = k.endswith('_asc')
+        k = k[:-4] if a else k
+        if k in T:
+            by.append(k); asc.append(a)
+    return T.sort_values(by, ascending=asc, na_position='last') if by else T
+
+
+def pick(T, rule, extra=None):
+    """rules.yaml 한종목 규칙 하나로 한 종목. 돌려주는 값: (행 또는 None, 후보 수)"""
+    X = T if extra is None else T[extra]
+    if rule.get('구분'):
+        X = X[X['구분'] == rule['구분']]
+    if rule.get('시장'):
+        X = X[X['시장'] == rule['시장']]
+    grades = rule.get('등급', ['추천'])
+    if grades != ['전체']:
+        X = X[X['판정'] == '후보']
+    for g in (grades if grades != ['전체'] else [None]):
+        G = X if g is None else X[X['추천'] == g]
+        G = G[[_cond(rule.get('조건', 'True'), r) for _, r in G.iterrows()]] if len(G) else G
+        if len(G):
+            return _sort(G, rule.get('정렬', [])).iloc[0], len(G)
+    return None, 0
+
+
+def top7(T, RC):
+    """오늘의 추천 종목 7: quant_center/gen7.py와 같은 규칙(blocks.yaml 추천 설정, 손 목록 없음)."""
+    nk, nu, vmax = RC.get('국내수', 5), RC.get('미국ETF수', 2), RC.get('변동성상한', 60)
+    A = T.copy()
+    A['미국ETF'] = (A['시장'] == '한국') & (A['구분'] != '개별주') & A['종목'].astype(str).str.contains('미국')
+    cand = A[A['추천'] == '추천'].sort_values(['블록예비율', '싼가', '점수'], ascending=False)
+    picks, drops = [], []
+    for _, r in cand.iterrows():
+        why = []
+        if r['시장'] != '한국':
+            why.append('미국 개별·해외 상장 → 국내 상장 ETF로만 편입(룰 2장)')
+        if ok(r.get('vol60')) and r['vol60'] > vmax:
+            why.append(f"60일 변동성 {r['vol60']:.0f}% > {vmax}%")
+        if (num(r.get('f5')) or 0) < 0 and (num(r.get('f20')) or 0) < 0:
+            why.append(f"외국인 5일 {n(r['f5'], 0, '억')}·20일 {n(r['f20'], 0, '억')} 동시 순매도")
+        if why:
+            drops.append((r['종목'], ' / '.join(why))); continue
+        grp = 'us' if r['미국ETF'] else 'kr'
+        if sum(1 for _, g in picks if g == grp) >= (nu if grp == 'us' else nk):
+            drops.append((r['종목'], f"추천 등급이나 순위 밖(예 비율 {r['블록예비율']}, 싼가 {r['싼가']})")); continue
+        picks.append((r, grp))
+    return [r for r, _ in picks], drops
+
+
+def ta(r):
+    """닉스 팀 지표 읽기: 지지·저항, 볼린저, RSI, CCI, 스토캐스틱 슬로우, 이격도, 일목 — 일봉·주봉(닉스.csv 칸 그대로)."""
+    out = []
+    for k, nm, ma in (('일', '일봉', '20일'), ('주', '주봉', '20주')):
+        g = lambda c: r.get(f'{k}_{c}')
+        raw = lambda c: str(g(c)) if ok(g(c)) else '자료 없음'
+        out.append(f"{nm} 지지 {raw('지지1')}({p(g('지지1_거리(%)'))}) · 저항 {raw('저항1')}({p(g('저항1_거리(%)'))}), "
+                   f"볼린저 %B {n(g('볼린저_%B'), 2)}, RSI {n(g('RSI'), 0)}, CCI {n(g('CCI'), 0)}, "
+                   f"스토캐스틱 K {n(g('STO_K'), 0)}/D {n(g('STO_D'), 0)}, {ma} 이격 {n(g(f'{ma}_이격도'), 1)}, 일목 구름 {g('일목_구름위치') if ok(g('일목_구름위치')) else '자료 없음'}")
+    return ' | '.join(out)
+
+
+# ---------------------------------------------------------------- 위원
+class Ctx:
+    def __init__(self, d, S, M, m, f, R, RC, today):
+        self.d, self.S, self.M, self.m, self.f, self.R, self.RC, self.today = d, S, M, m, f, R, RC, today
+        self.T = table(S, f)
+        self.N = _read(d, '닉스').rename(columns={'번호': '번호'})
+        self.T = self.T.merge(self.N[[c for c in self.N.columns if c.startswith(('일_', '주_')) or c == '번호']], on='번호', how='left') if len(self.N) else self.T
+        self.mac = _read(d, '매크로')
+        global BAN
+        if R.get('금지이름'):
+            BAN = _re.compile(r'^(?:' + '|'.join(map(_re.escape, R['금지이름'])) + r')(?![A-Za-z])')
+        self.px = _read(d, '시세')
+        if len(self.px):
+            self.px = self.px[~self.px['정식 종목명'].map(banned)]
+        self.news = _read(d, '뉴스')
+        self.picks = {}
+        self.top, self.drops = top7(self.T, RC)
+        self.U = _read(d, '유니버스')
+
+    def mac_row(self, item):
+        if not len(self.mac):
+            return None
+        x = self.mac[self.mac['항목'].astype(str).str.replace('\\', '') == item]
+        return x.iloc[0] if len(x) else None
+
+    def burden_opp(self):
+        M = self.M
+        if not len(M):
+            return [], []
+        b = M[(M['방향'] == '부담') & (M['결과'] == '통과')]['공식'].tolist()
+        o = M[(M['방향'] == '기회') & (M['결과'] == '통과')]['공식'].tolist()
+        return b, o
+
+    def regime(self, mk):
+        m = self.m
+        if f'DEF_{mk}' not in m:
+            return None
+        st = '방어' if m[f'DEF_{mk}'] else '평상'
+        return st, m.get(f'ROT_G_{mk}'), m.get(f'ROT_M_{mk}'), m.get(f'IDX_{mk}')
+
+    def set_pick(self, who, r, rule, mark='추천', why=''):
+        self.picks[who] = dict(위원=who, 표시=mark if r is not None else '해당 없음', 종목='' if r is None else r['종목'],
+                               번호='' if r is None else r['번호'], 시장='' if r is None else r['시장'],
+                               규칙=rule.get('설명', ''), 근거=why)
+
+    def pick_line(self, who, rule, r, cnt, why_fn, mark='추천'):
+        if r is None:
+            self.set_pick(who, None, rule)
+            return L('오늘의 한 종목', '해당 없음', f"규칙: {rule.get('설명', '')} — 오늘 맞는 종목 0개")
+        why = why_fn(r)
+        self.set_pick(who, r, rule, mark, why)
+        return L('오늘의 한 종목', f"[{mark}] {r['종목']} — {why}", f"규칙: {rule.get('설명', '')} (맞는 종목 {cnt}개 중 1위)")
+
+
+def mr_market(c):
+    R = c.R['미스터 마켓']
+    out = []
+    for mk in ('미국', '한국'):
+        g = c.regime(mk)
+        if g:
+            st, G, M_, idx = g
+            out.append(L(f'{mk} 국면', f"{st} 국면 · 지수 4국면 {idx or '자료 없음'}",
+                         f"AI(S1~S3)÷금융·방어(S5~S6) 비율 50일 이격 {p(G, 2)}, 20일 변화 {p(M_, 2)} — 진입 −2%·−3%(5일 중 3일+당일), 둘 다 0 이상이면 해제"))
+    for title, items in (('미국 지수', ['S&P500', '나스닥', '다우', '필라델피아 반도체(SOX)']),
+                         ('아시아 지수', ['코스피', '코스닥', '니케이225', '대만 가권'])):
+        parts = []
+        for it in items:
+            r = c.mac_row(it)
+            if r is None:
+                continue
+            v, pv = num(r['값']), num(r.get('전일 값'))
+            d1 = (v / pv - 1) * 100 if v and pv else None
+            parts.append(f"{it} {n(v, 2)}({p(d1, 2)})")
+        if parts:
+            hi = [f"{it} {p(c.mac_row(it)['최고 대비(%)'])}" for it in items if c.mac_row(it) is not None]
+            out.append(L(title, ', '.join(parts), '사상 최고 대비: ' + ', '.join(hi) + ' (07시 매크로.csv, 전일 값 대비)'))
+    kg = c.m.get('KS_GAP50')
+    if kg is not None:
+        st = '과열' if kg >= R['코스피이격_과열'] else ('과열 주의' if kg >= R['코스피이격_주의'] else '과열 기준 아래')
+        out.append(L('코스피 50일 이격', f"{kg:.1f} — {st}", f"의장 기준 {R['코스피이격_주의']} 과열 주의, {R['코스피이격_과열']} 과열"))
+    # 크게 움직인 종목: ① 무슨 일 ② 엔진이 본 이유 ③ 같은 층 동료 ④ 반론
+    P = c.px.copy()
+    if len(P):
+        P['등락'] = pd.to_numeric(P['등락률(%)'], errors='coerce')
+        lay = dict(zip(c.U.get('번호', []), c.U.get('층', []))) if len(c.U) else {}
+        P['층'] = P['번호'].map(lay)
+        big = P[P['등락'].abs() >= R['크게움직임_등락(%)']].reindex(P['등락'].abs().sort_values(ascending=False).index).dropna(subset=['등락'])
+        big = big[big['등락'].abs() >= R['크게움직임_등락(%)']].head(R['크게움직임_최대'])
+        if not len(big):
+            out.append(L('크게 움직인 종목', f"전일 ±{R['크게움직임_등락(%)']}% 넘은 종목 없음", '07시 시세.csv'))
+        T = c.T.set_index('번호')
+        for _, r in big.iterrows():
+            nm = r['정식 종목명']
+            hd = c.news[c.news.get('종목', pd.Series(dtype=str)).astype(str) == nm] if len(c.news) else pd.DataFrame()
+            what = f"{hd.iloc[0]['시각(한국)']} {hd.iloc[0]['출처']} \"{hd.iloc[0]['제목']}\"" if len(hd) else '07시 수집 뉴스에 이 종목 기사 없음'
+            e = T.loc[r['번호']] if r['번호'] in T.index else None
+            peer = P[(P['층'] == r['층']) & (P['번호'] != r['번호'])]['등락'].median()
+            if e is None:
+                hurt, counter = '엔진 판정 없음(유니버스 밖 또는 기준층)', '—'
+            elif r['등락'] < 0:
+                hurt = f"엔진 '빠지는 이유': {e.get('빠지는 이유') or '20일 기준 하락 아님'}"
+                counter = f"엔진 등급 {e.get('추천')}, 블록 예 비율 {n(e.get('블록예비율'), 2)}"
+            else:
+                hurt = f"엔진 블록 예: {e.get('블록 예') or '없음'}"
+                counter = f"엔진 매도 신호: {e.get('매도신호') or '없음'}"
+            out.append(L(f"{nm} {p(r['등락'], 2)}",
+                         f"① 무슨 일: {what} ② 왜: {hurt} ③ 같은 층({r['층']}) 동료 중앙값 {p(peer, 2)} ④ 반론: {counter}",
+                         '07시 시세·뉴스 + 엔진 판정표'))
+    return out, [{'type': 'change', 'tickers': big['yfinance 티커'].tolist()}] if len(P) and len(big) else []
+
+
+def miss_citadel(c):
+    R = c.R['미스 시타델']; k = R['상위']
+    out = []
+    F = _read(c.d, '국내수급')
+    F = F[~F['종목'].map(banned)] if len(F) else F
+    if len(F):
+        for col in ('외국인 5일(억원)', '외국인 20일(억원)', '기관 5일(억원)', '개인 5일(억원)'):
+            F[col] = pd.to_numeric(F[col], errors='coerce')
+        s5 = F['외국인 5일(억원)'].sum()
+        top = F.nlargest(k, '외국인 5일(억원)'); bot = F.nsmallest(k, '외국인 5일(억원)')
+        out.append(L('외국인 순매수', f"한국 개별주 {len(F)}종목 외국인 5일 합계 {p(s5, 0, '억')} — 순매수 상위 " +
+                     ', '.join(f"{r['종목']} {p(r['외국인 5일(억원)'], 0, '억')}" for _, r in top.iterrows()) +
+                     ' / 순매도 상위 ' + ', '.join(f"{r['종목']} {p(r['외국인 5일(억원)'], 0, '억')}" for _, r in bot.iterrows()),
+                     f"기준일 {F['기준일'].iloc[0]}, 07시 국내수급.csv"))
+        out.append(L('기관·개인', f"기관 5일 합계 {p(F['기관 5일(억원)'].sum(), 0, '억')}, 개인 5일 합계 {p(F['개인 5일(억원)'].sum(), 0, '억')}", '같은 표'))
+        turn = F[F['표시'].astype(str).str.contains('매수 전환')]
+        if len(turn):
+            out.append(L('외국인 매수 전환', ', '.join(turn['종목'].head(5)), "국내수급.csv '표시' 칸"))
+    A = _read(c.d, 'ETF자금')
+    A = A[~A['이름'].map(banned)] if len(A) else A
+    if len(A):
+        A['유입_5일'] = pd.to_numeric(A['유입_5일'], errors='coerce')
+        for mk, unit in (('한국', '억'), ('미국', '백만달러')):
+            X = A[A['시장'] == mk].dropna(subset=['유입_5일'])
+            if len(X):
+                out.append(L(f'{mk} ETF 자금(5일)', '유입 ' + ', '.join(f"{r['이름']} {p(r['유입_5일'], 0, unit)}" for _, r in X.nlargest(k, '유입_5일').iterrows()) +
+                             ' / 유출 ' + ', '.join(f"{r['이름']} {p(r['유입_5일'], 0, unit)}" for _, r in X.nsmallest(k, '유입_5일').iterrows()), '07시 ETF자금.csv(좌수 변화 × NAV)'))
+    Q = _read(c.d, '수급포지셔닝')
+    if len(Q):
+        g = dict(zip(Q['항목'], Q['값'])); w = dict(zip(Q['항목'], Q['1주 전']))
+        cta = num(g.get('CTA σ(근사)'))
+        if cta is not None:
+            zone = '수급 바닥 구간' if cta <= R['CTA_바닥'] else ('수급 고점 구간' if cta >= R['CTA_고점'] else '중간 구간')
+            out.append(L('CTA positioning', f"{cta:+.2f}σ(1주 전 {n(w.get('CTA σ(근사)'), 2)}σ) — {zone}", f"수급포지셔닝.csv 읽는 법: −4σ 아래 바닥, +4σ 뒤 1.5σ 꺾이면 고점"))
+        out.append(L('Vol-target exposure', f"{n(g.get('변동성타기팅 노출(배)'), 2)}배(1주 전 {n(w.get('변동성타기팅 노출(배)'), 2)}배)",
+                     f"VIX 1년 백분위 {n(g.get('VIX 1년 백분위(%)'), 0)}%, VXN 1년 백분위 {n(g.get('VXN 1년 백분위(%)'), 0)}%"))
+    MM = _read(c.d, 'MMF')
+    if len(MM):
+        r = MM.iloc[0]
+        out.append(L('미국 MMF 잔고', f"{n(r.get('잔고(조달러)'), 2)}조달러, 1주 {p(r.get('1주 변화(십억달러)'), 1, '십억달러')}", f"ICI, 기준 {r.get('기준일(수)', '')}"))
+    rule = c.R['한종목']['미스 시타델']
+    r, cnt = pick(c.T, rule)
+    out.append(c.pick_line('미스 시타델', rule, r, cnt, lambda r: f"외국인 5일 {n(r['f5'], 0, '억')}, 20일 {n(r['f20'], 0, '억')}, 엔진 {r['추천']}(블록 예 {n(r['블록예비율'], 2)})"))
+    return out, []
+
+
+def rio(c):
+    out = []
+    for it in ('근원 CPI 전년비', '근원 PCE 전년비'):
+        r = c.mac_row(it)
+        if r is not None:
+            out.append(L(it.replace(' 전년비', ''), f"전년비 {n(r['값'], 2, '%')}(직전 발표 대비 {p(r['1달'], 2, '%p')})", f"기준 {r['기준일']}, {r['출처']}"))
+    for it in ('미국 2년', '미국 10년', '미국 10년 실질'):
+        r = c.mac_row(it)
+        if r is not None:
+            out.append(L(it, f"{n(r['값'], 3, '%')}(1달 {p(r['1달'], 2, '%p')}, YTD {p(r['YTD'], 2, '%p')})",
+                         (f"[{r['신호']}] {r['표시']}" if ok(r.get('신호')) else '의장 기준 신호 없음') + ' (07시 매크로.csv)'))
+    K = _read(c.d, '리스크')
+    if len(K):
+        h = K[K['항목'] == '하이일드 스프레드']
+        if len(h):
+            h = h.iloc[0]
+            out.append(L('하이일드 스프레드', f"{n(h['값'], 2, '%')}(1주 전 {n(h['1주 전'], 2, '%')})", (f"[{h['신호']}] {h['표시']}" if ok(h.get('신호')) else '신호 없음') + ' (리스크.csv)'))
+    V = _read(c.d, '지수밸류')
+    if len(V):
+        v = V.iloc[-1]
+        out.append(L('지수 밸류', f"S&P500 선행 PER {n(v['선행PER'], 1, '배')}, 선행 EPS {n(v['선행EPS'], 1)}", f"{v['날짜']} {v['출처']}"))
+    if c.m.get('KS_GAP50') is not None:
+        out.append(L('시장 이격', f"코스피 50일 이격 {c.m['KS_GAP50']:.1f}", '지수2년.csv 계산(125 과열 주의·130 과열)'))
+    C = _read(c.d, '매크로체크리스트')
+    if len(C):
+        s = C[C['항목'] == '요약']
+        if len(s):
+            out.append(L('매크로 체크리스트', str(s.iloc[0]['값']),
+                         '좋아질 기미: ' + (', '.join(C[(C['항목'] != '요약') & (C['좋아질 기미'] == '예')]['항목']) or '없음') +
+                         ' / 나빠질 기미: ' + (', '.join(C[(C['항목'] != '요약') & (C['나빠질 기미'] == '예')]['항목']) or '없음')))
+    b, o = c.burden_opp()
+    out.append(L('시장 블록', f"부담 통과 {len(b)}개, 기회 통과 {len(o)}개", f"부담: {', '.join(b) or '없음'} / 기회: {', '.join(o) or '없음'} (엔진 out_시장블록)"))
+    dfn = any(c.m.get(f'DEF_{mk}') for mk in ('한국', '미국'))
+    go = eval(c.R['리오']['여건_규칙'], {'__builtins__': {}}, {'기회': len(o), '부담': len(b), '방어': dfn})
+    out.append(L('현금 집행 여건', '됨' if go else '아님', f"규칙: {c.R['리오']['여건_규칙']} (기회 {len(o)}, 부담 {len(b)}, 방어 국면 {'예' if dfn else '아니오'})"))
+    return out, []
+
+
+def phobos(c):
+    G = _read(c.d, '공포탐욕')
+    if not len(G):
+        return [L('공포탐욕', '자료 없음', '07시 공포탐욕.csv 없음')], [], ''
+    Z = c.R['포보스']['구간']
+    zone = lambda s: next((z for a, b, z in Z if num(s) is not None and a <= round(num(s)) <= b), '자료 없음')
+    t = G[G['구분'] == '종합'].iloc[0]
+    ind = G[G['구분'] == '지표'].reset_index(drop=True)
+    sc = num(t['점수'])
+    out = [L('종합', f"Fear & Greed Index {n(sc, 1)} {zone(sc)} — 전일 {p(sc - num(t['전일']) if num(t['전일']) is not None else None, 1, '')}, "
+                  f"1주 전 대비 {p(sc - num(t['1주 전']) if num(t['1주 전']) is not None else None, 1, '')}, 1개월 전 대비 {p(sc - num(t['1개월 전']) if num(t['1개월 전']) is not None else None, 1, '')}",
+             '구간: 0~24 Extreme Fear, 25~44 Fear, 45~55 Neutral, 56~75 Greed, 76~100 Extreme Greed')]
+    rows = [[str(r['지표']), n(r['점수'], 1), zone(r['점수']), f"{n(r['원천값'], 2)} ({r['원천값 설명']})", str(r['해석'])] for _, r in ind.iterrows()]
+    tbl = '| 지표 | 점수 | 구간 | 오늘 값 | 시장 의미 |\n|---|---|---|---|---|\n' + '\n'.join('| ' + ' | '.join(x) + ' |' for x in rows)
+    s = pd.to_numeric(ind['점수'], errors='coerce')
+    fear = [x.split('. ', 1)[-1] for x, v in zip(ind['지표'], s) if v <= 44]
+    greed = [x.split('. ', 1)[-1] for x, v in zip(ind['지표'], s) if v >= 56]
+    out.append(L('공포 쪽 지표', f"{len(fear)}개 ({', '.join(fear) or '없음'})", '점수 44 이하'))
+    out.append(L('탐욕 쪽 지표', f"{len(greed)}개 ({', '.join(greed) or '없음'})", '점수 56 이상'))
+    price3, bond2 = s.iloc[:3].mean(), s.iloc[5:7]
+    if len(s) >= 7:
+        if (bond2 <= 44).all():
+            read = '채권 둘(Safe Haven·Junk Bond)까지 공포: 돈이 위험 자산에서 빠지는 쪽'
+        elif price3 <= 44 and (bond2 >= 45).any():
+            read = '가격 셋은 공포인데 채권 쪽은 공포가 아님: 주가는 흔들렸고 돈은 아직 위험 회피로 가지 않음'
+        else:
+            read = '가격 셋과 채권 둘이 같은 공포 신호를 내지 않음'
+        out.append(L('시장 분위기', read, f"가격 셋(1~3) 평균 {price3:.1f}, Safe Haven {n(s.iloc[5], 1)}, Junk Bond {n(s.iloc[6], 1)} — 읽는 요령: 가격 셋 공포 + 채권 둘 정상 = 주가만 흔들림, 채권 둘까지 공포 = 위험 회피"))
+    return out, [{'type': 'grid', 'columns': ['지표', '점수', '구간', '오늘 값', '시장 의미'], 'rows': rows}], tbl
+
+
+def ttuji(c):
+    S = c.S
+    cnt = S['추천'].value_counts().to_dict()
+    out = [L('엔진 판정', ', '.join(f'{k} {v}' for k, v in cnt.items()), '퀀트센터 blocks.yaml 전 종목 계산(out_판정표)')]
+    rc = c.RC
+    out.append(L('선정 기준', f"블록 예 비율 {rc.get('추천선', 0.6667):.2f} 이상 추천·{rc.get('관찰선', 0.5):.2f} 이상 관찰, 국내 {rc.get('국내수', 5)} + 국내 상장 미국 ETF {rc.get('미국ETF수', 2)}, 60일 변동성 {rc.get('변동성상한', 60)}% 이하, 외국인 5·20일 동시 순매도 제외",
+                 '콜로키움_룰.txt 2장 + blocks.yaml 추천 설정'))
+    for i, r in enumerate(c.top, 1):
+        warn = f", 주문 {int(r['주문승수']*100)}%({r['경보']})" if ok(r.get('주문승수')) and r['주문승수'] < 1 else ''
+        out.append(L(f'추천 {i}', f"{r['종목']} — 블록 예 {int(r['블록예']) if ok(r.get('블록예')) else '-'}/{int(r['블록수']) if ok(r.get('블록수')) else '-'}({n(r['블록예비율'], 2)}), 싼가 {n(r['싼가'], 2)}, 갈래 {r['갈래']}{warn}",
+                     f"드문 통과 공식: {r['왜'] or '없음'} · 3년 PER 하위 {n((num(r.get('per_pct3')) or float('nan'))*100, 0, '%')}"))
+    if not c.top:
+        out.append(L('오늘의 추천 종목', '없음', '추천 등급이 거르기·안정성 조건을 통과하지 못함'))
+    for nm, why in c.drops[:3]:
+        out.append(L(f'제외 {nm}', why, '룰 2장 안정성·국내 상장 조건'))
+    rule = c.R['한종목']['뚜지']
+    why = lambda r: f"블록 예 비율 {n(r['블록예비율'], 2)}, 싼가 {n(r['싼가'], 2)}, 점수 {n(r['점수'], 2)}"
+    if c.top:
+        out.append(c.pick_line('뚜지', rule, c.top[0], len(c.top), why))
+    else:   # rules.yaml 한종목.뚜지.없을때: 추천 7이 비면 엔진 추천 등급 1위를 [주목]으로(국내 상장 조건 밖이라 편입 대상 아님)
+        A = c.T[c.T['추천'] == '추천'].sort_values(['블록예비율', '싼가', '점수'], ascending=False)
+        r = A.iloc[0] if len(A) else None
+        out.append(c.pick_line('뚜지', {**rule, '설명': rule.get('없을때', rule.get('설명', ''))}, r, len(A),
+                               lambda r: why(r) + (f" — 편입 제외 사유: {dict(c.drops).get(r['종목'], '')}" if dict(c.drops).get(r['종목']) else ''), mark='주목'))
+    c.picks['센터'] = {**c.picks['뚜지'], '위원': '오늘의 한 종목(퀀트센터)'}
+    return out, [{'type': 'line', 'tickers': [r['ticker'] for r in c.top if ok(r.get('ticker'))], 'days': 365}] if c.top else []
+
+
+def miss_chart(c):
+    out = []
+    for r in c.top:
+        out.append(L(r['종목'], f"일봉 RSI {n(r.get('일_RSI'), 0)}, 주봉 RSI {n(r.get('주_RSI'), 0)}, 일봉 %B {n(r.get('일_볼린저_%B'), 2)}, 일목 구름 {r.get('일_일목_구름위치') if ok(r.get('일_일목_구름위치')) else '자료 없음'}, "
+                     f"주봉 MACD 오실레이터 {'상승' if (num(r.get('osc_w')) or 0) > (num(r.get('osc_w1')) or 0) else '하락'}",
+                     f"50일 이격 {n(r.get('gap50'), 1)}, 52주 고점 대비 {p(r.get('dd52'))} (닉스.csv)"))
+    rule = c.R['한종목']['미스 차트']
+    r, cnt = pick(c.T, rule)
+    out.append(c.pick_line('미스 차트', rule, r, cnt, ta))
+    return out, []
+
+
+def nyx(c, who):
+    rule = c.R['한종목'][who]
+    r, cnt = pick(c.T, rule)
+    out = []
+    if who == '아트로포스':
+        X = c.T[(c.T['매도신호'].fillna('') != '') & (c.T['판정'] == '후보')]
+        X = X.sort_values('rsi_d', ascending=False).head(3)
+        if len(X):
+            out.append(L('주의 깊게 지켜볼 종목', ', '.join(f"{x['종목']}({x['매도신호']})" for _, x in X.iterrows()), '엔진 매도 신호(이익 꺾임·사건 역풍·고점 부근·너무 많이 오름·외국인 5·20일 순매도)'))
+        else:
+            out.append(L('주의 깊게 지켜볼 종목', '없음', '후보 종목 중 엔진 매도 신호 0개'))
+        out.append(c.pick_line(who, rule, r, cnt, lambda r: f"{r['매도신호']} — {ta(r)}", mark='제외'))
+    else:
+        out.append(L('조건', rule.get('설명', ''), f"오늘 맞는 종목 {cnt}개"))
+        out.append(c.pick_line(who, rule, r, cnt, ta))
+    return out, [{'type': 'rsi', 'tickers': [r['ticker']]}] if r is not None and ok(r.get('ticker')) else []
+
+
+def miss_value(c, desk_has):
+    T = c.T[(c.T['구분'] == '개별주') & (c.T['판정'] == '후보')]
+    out = []
+    X = T.dropna(subset=['per_pct3'])
+    fmt = lambda r: f"{r['종목']} PER {n(r.get('per_now'), 1, '배')}(3년 중앙값 {n(r.get('per_med3'), 1, '배')}, 3년 중 하위 {n(num(r['per_pct3'])*100, 0, '%')}), 선행 PER {n(r.get('fper'), 1, '배')}, PBR {n(r.get('pbr'), 2, '배')}"
+    if len(X):
+        out.append(L('3년 PER 가장 싼 쪽', ' / '.join(fmt(r) for _, r in X.nsmallest(3, 'per_pct3').iterrows()), '자기 3년 PER 백분위(PER3년.csv), 엔진 후보 개별주'))
+        out.append(L('3년 PER 가장 비싼 쪽', ' / '.join(fmt(r) for _, r in X.nlargest(3, 'per_pct3').iterrows()), '같은 표'))
+    semi = T[T.get('sector', pd.Series('', index=T.index)).astype(str).str.contains('반도체') & T['pbr'].notna()]
+    if len(semi):
+        out.append(L('반도체 PBR', ' / '.join(f"{r['종목']} PBR {n(r['pbr'], 2, '배')}(층 안 하위 {n(num(r.get('pbr_rank'), )*100 if ok(r.get('pbr_rank')) else None, 0, '%')})" for _, r in semi.nsmallest(3, 'pbr').iterrows()), '반도체는 PBR 우선, PER 참고(룰 4장)'))
+    out.append(L('데스크 보고', '있음' if desk_has else '없음', '담당 종목 전일 ±3% 또는 3일 안 실적 공시가 있으면 있음'))
+    rule = c.R['한종목']['미스 밸류']
+    r, cnt = pick(c.T, rule)
+    out.append(c.pick_line('미스 밸류', rule, r, cnt, fmt))
+    return out, []
+
+
+def desk_of(name, sector, layer, D):
+    if layer == 'S0':
+        return None
+    for k, v in D['종목지정'].items():
+        if k == name:
+            return v
+    import re
+    for desk, pat in D['낱말']:
+        if re.search(pat, str(sector)):
+            return desk
+    return None
+
+
+def desks(c):
+    D = c.R['데스크']
+    T = c.T.copy()
+    T['데스크'] = [desk_of(r['종목'], r.get('sector', ''), r.get('층'), D) for _, r in T.iterrows()]
+    T = T[T['구분'] == '개별주']
+    px = dict(zip(c.px.get('번호', []), pd.to_numeric(c.px.get('등락률(%)', pd.Series(dtype=float)), errors='coerce')))
+    DA, SE = _read(c.d, 'DART'), _read(c.d, 'SEC')
+    lim = pd.Timestamp(c.today) - pd.Timedelta(days=D['실적일수'])
+    recent = {}
+    if len(DA) and '잠정 공시일' in DA:
+        for _, x in DA.iterrows():
+            dd = pd.to_datetime(str(x['잠정 공시일']), errors='coerce')
+            if ok(x.get('잠정 공시일')) and not pd.isna(dd) and dd >= lim:
+                recent[x['번호']] = f"{x['잠정 분기']} 잠정 매출 {n(x['잠정 매출(억원)'], 0, '억')}, 영업이익 {n(x['잠정 영업이익(억원)'], 0, '억')}, 순이익 {n(x['잠정 순이익(억원)'], 0, '억')}(DART {str(x['잠정 공시일'])[:10]})"
+    if len(SE) and '실적 받은날' in SE:
+        for _, x in SE.iterrows():
+            dd = pd.to_datetime(str(x['실적 받은날']), errors='coerce')
+            if not pd.isna(dd) and dd >= lim and ok(x.get('기준일(최근 분기 끝)')):
+                recent.setdefault(x['번호'], f"분기 끝 {x['기준일(최근 분기 끝)']} 매출 TTM {n(x['매출 TTM(백만$)'], 0, '백만$')}, 영업이익 TTM {n(x['영업이익 TTM(백만$)'], 0, '백만$')}, PER TTM {n(x['PER TTM(주가÷EPS)'], 1, '배')}(SEC)")
+    res, has = {}, False
+    for desk in DESKS:
+        G = T[T['데스크'] == desk]
+        out = []
+        for _, r in G.iterrows():
+            mv = px.get(r['번호'])
+            if mv is not None and not math.isnan(mv) and abs(mv) >= D['보고문턱_등락(%)']:
+                out.append(L(f"{r['종목']} {p(mv, 2)}", f"엔진 {r['추천']}, 블록 예 {n(r['블록예비율'], 2)}, 20일 {p(r.get('20일(%)'))}" + (f", 빠지는 이유: {r['빠지는 이유']}" if mv < 0 and ok(r.get('빠지는 이유')) else ''),
+                             f"전일 ±{D['보고문턱_등락(%)']}% 이상(시세.csv)"))
+            if r['번호'] in recent:
+                out.append(L(f"{r['종목']} 실적", recent[r['번호']], f"{D['실적일수']}일 안 DART 잠정 공시 또는 SEC 실적 수신"))
+        has = has or bool(out)
+        if not out:
+            out.append(L('담당 종목', f"{len(G)}종목, 전일 ±{D['보고문턱_등락(%)']}%·{D['실적일수']}일 안 실적 공시 없음", '시세.csv·DART·SEC'))
+        rule = c.R['한종목']['섹터 데스크']
+        r, cnt = pick(c.T, rule, extra=c.T['번호'].isin(G['번호']))
+        out.append(c.pick_line(desk, rule, r, cnt, lambda r: f"엔진 {r['추천']}, 블록 예 {n(r['블록예비율'], 2)}, 싼가 {n(r['싼가'], 2)}"))
+        res[desk] = out
+    return res, has
+
+
+def elpis(c):
+    out = []
+    b, o = c.burden_opp()
+    out.append(L('기회 블록', ', '.join(o) or '통과 없음', '엔진 시장 블록 중 방향 = 기회, 결과 = 통과'))
+    G = _read(c.d, '공포탐욕')
+    if len(G):
+        sc = num(G[G['구분'] == '종합'].iloc[0]['점수'])
+        pull = c.T[(c.T['갈래'] == '눌림') & (c.T['추천'].isin(['추천', '관찰'])) & (c.T['가짜바닥아님'] == 1)]
+        out.append(L('공포 속 기회', f"Fear & Greed {n(sc, 1)}, 눌림 갈래 추천·관찰 중 200일선×0.95 위 {len(pull)}종목",
+                     '엔진 갈래(고점 −10% 밖 = 눌림)와 가짜 바닥 아님(제이미 B29)'))
+    for it in ('WTI', '금', '원/달러'):
+        r = c.mac_row(it)
+        if r is not None:
+            out.append(L(it, f"{n(r['값'], 2)}(1달 {p(r['1달'])}, YTD {p(r['YTD'])})", f"{r['기준일']} {r['출처']}"))
+    rule = c.R['한종목']['엘피스']
+    r, cnt = pick(c.T, rule)
+    out.append(c.pick_line('엘피스', rule, r, cnt, lambda r: f"52주 고점 대비 {p(r.get('dd52'))}, 블록 예 {n(r['블록예비율'], 2)}, 200일선 {n(r.get('ma200'), 2)} 위"))
+    return out, []
+
+
+def gukjang(c, EV, CAL):
+    R = c.R['국장']
+    out = []
+    S = _read(c.d, '일정')
+    if len(S):
+        end = pd.Timestamp(c.today) + pd.Timedelta(days=R['일정일수'] - 1)
+        X = S[(pd.to_datetime(S['날짜'], errors='coerce') >= pd.Timestamp(c.today)) & (pd.to_datetime(S['날짜'], errors='coerce') <= end)]
+        for _, s in X.iterrows():
+            out.append(L(f"{str(s['날짜'])[5:]} {s['시각(한국)']}", f"{s['구분']} {s['대상']} — {s['내용']}", f"확인: {s['확인']}, 출처 {s['출처']}"))
+    N = c.news
+    if len(N):
+        ok_src = R['승인매체']
+        X = N[N['출처'].astype(str).map(lambda x: any(m in x for m in ok_src)) & ~N['제목'].astype(str).str.contains('(?<![A-Za-z])' + BAN.pattern.replace('^', ''))].head(R['기사수'])
+        for _, x in X.iterrows():
+            out.append(L(f"{x['시각(한국)']} {x['출처']}", str(x['제목']), '승인 매체 원제목 그대로(07시 뉴스.csv)'))
+    for _, e in EV.iterrows():
+        out.append(L(f"사건 {e['업종']}", f"{e['사건']} {e['상태']}", e['출처']))
+    for _, e in CAL[CAL['확정'] == '예'].iterrows() if len(CAL) else []:
+        out.append(L(f"변수 {e['날짜']}", e['사건'], f"영향 층 {e['영향 층'] or '기록만'} · {e['출처']}"))
+    if not out:
+        out.append(L('오늘 자료', '일정·승인 매체 기사 없음', '07시 일정.csv·뉴스.csv'))
+    return out, []
+
+
+# ---------------------------------------------------------------- 묶기
+def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None):
+    c = Ctx(d, S, M, m, f, R, RC, today)
+    EV = EV if EV is not None else _read(d, '사건상태')
+    CAL = CAL if CAL is not None else _read(d, '변수달력')
+    sections = []   # (번호 제목, 위원, 역할, 줄, 그래프, 덧붙일 글)
+    a, g = mr_market(c); sections.append(('1 시장', '미스터 마켓', '시장', a, g, ''))
+    a, g = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, ''))
+    a, g = rio(c); sections.append(('3 리스크', '리오', '리스크', a, g, ''))
+    a, g, tbl = phobos(c)
+    sections.append(('4 공포와 탐욕', '포보스', '공포와 탐욕', a, g, tbl))
+    a, g = ttuji(c); sections.append(('5 기술·퀀트', '뚜지', '퀀트센터 블록 결과·오늘의 추천 종목', a, g, ''))
+    a, g = miss_chart(c); sections.append(('5 기술·퀀트', '미스 차트', '추천 종목 기술 지표', a, g, ''))
+    for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
+        a, g = nyx(c, who); sections.append(('5 기술·퀀트 — 닉스 팀', who, role, a, g, ''))
+    dk, has = desks(c)
+    a, g = miss_value(c, has); sections.append(('5-1 밸류에이션', '미스 밸류', '밸류에이션', a, g, ''))
+    for desk in DESKS:
+        sections.append(('5-2 섹터 데스크', desk, '섹터 데스크', dk[desk], [], ''))
+    a, g = elpis(c); sections.append(('6 긍정 요인', '엘피스', '긍정 요인', a, g, ''))
+    a, g = gukjang(c, EV, CAL); sections.append(('7 기타', '국장', '일정·승인 매체 기사·사건', a, g, ''))
+    return c, sections
+
+
+def render_txt(sections, today, picks, note=''):
+    day = f'{today:%Y-%m-%d}'
+    out = [f'콜로키움 회의 원고 {day}',
+           '만든 방식: 코드 자동 생성(colloquium-collect meeting/personas.py + meeting/rules.yaml, 엔진 quant_center/blocks.yaml). AI가 쓰거나 고르지 않음.',
+           '숫자는 07시 수집 파일·엔진 결과 그대로. ( ) 안 "근거"는 그 줄의 출처·규칙.']
+    if note:
+        out.append(note)
+    c0 = picks.get('센터')
+    out += ['', f"■ 오늘의 한 종목(퀀트센터): {c0['종목'] if c0 and c0['종목'] else '해당 없음'}" + (f" — {c0['근거']}" if c0 and c0['근거'] else '')]
+    cur = None
+    for sec, who, role, lines, _, extra in sections:
+        if sec != cur:
+            out += ['', '=' * 50, sec, '=' * 50]
+            cur = sec
+        out.append(f'{who}:')
+        for i, l in enumerate(lines, 1):
+            out.append(f'{i}. {l.title}: {l.fact}' + (f'  (근거: {l.why})' if l.why else ''))
+        if extra:
+            out.append(extra)
+    return '\n'.join(out) + '\n'
+
+
+def render_json(sections, today, note=''):
+    mem, sub = [], None
+    for sec, who, role, lines, charts, extra in sections:
+        ls = [f'{i}. **{l.title}**: {l.fact}' + (f'  \n:small[:gray[{l.why}]]' if l.why else '') for i, l in enumerate(lines, 1)]
+        item = {'name': who, 'role': role, 'lines': ls, 'charts': charts}
+        if sec.startswith('5-2'):
+            if sub is None:
+                sub = {'name': '섹터 데스크', 'role': '담당 종목', 'lines': [], 'sub': []}
+                mem.append(sub)
+            sub['sub'].append(item)
+        else:
+            mem.append(item)
+    return json.dumps({'date': f'{today:%Y%m%d}', 'note': note or '코드 자동 생성(meeting/personas.py). AI가 쓰지 않음.', 'members': mem}, ensure_ascii=False, indent=1,
+                      default=lambda o: None if isinstance(o, float) and math.isnan(o) else (o.item() if hasattr(o, 'item') else str(o)))
+
+
+def picks_csv(picks):
+    order = ['센터', '뚜지', '미스 차트', '클로토', '라케시스', '아트로포스', '미스 밸류', '미스 시타델', '엘피스'] + DESKS
+    return pd.DataFrame([picks[k] for k in order if k in picks])
