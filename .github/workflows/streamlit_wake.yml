@@ -1,0 +1,22 @@
+name: 스트림릿 깨우기
+
+# 회의 전 링크를 넣을 수 있게 스트림릿을 미리 깨워 둔다 (2026-11-20 의장: 완성 안 되어도 9시부터 열어 둘 것)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '40 23 * * *'     # 한국 08:40 (국장전 회의 10:00 준비)
+    - cron: '0 12 * * *'      # 한국 21:00 (미장전 회의 22:00 준비)
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install playwright && python -m playwright install --with-deps chromium
+      - run: python tools/wake_streamlit.py
