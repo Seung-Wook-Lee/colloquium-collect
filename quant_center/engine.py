@@ -261,7 +261,7 @@ def run(d, cfg='blocks.yaml'):
         H = pd.read_csv(f'{d}/ETF보유.csv', encoding='utf-8-sig'); MI = pd.read_csv(f'{d}/ETF멤버.csv', encoding='utf-8-sig').set_index('멤버')
     except FileNotFoundError:
         H, MI = pd.DataFrame(columns=['번호', '멤버', '이름', '비중']), pd.DataFrame()
-    K15 = Q['이익 전망이 오르나?']; K16 = Q['돈을 잘 버나?']; K16B = Q['빚에 안 무너지나?']   # 11/19 튼튼 → 수익성·재무 안전
+    K15 = Q['이익 전망이 오르나?']; K16 = Q['돈은 잘 버나?']; K16B = Q['빚에 안 무너지나?']   # 11/19 튼튼 → 수익성·재무 안전
     t2i = dict(zip(f['ticker'], S.index[S['번호'].isin(f['번호'])])) if False else {}
     num2row = {n: i for i, n in zip(S.index, S['번호'])}
     tk2num = dict(zip(f['ticker'], f['번호']))
