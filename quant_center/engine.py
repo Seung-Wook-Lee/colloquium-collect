@@ -143,7 +143,7 @@ def run(d, cfg='blocks.yaml'):
     SB = B['종목']
     Q = {b['질문']: k for k, b in SB.items()}   # 질문으로 블록 찾기(번호가 바뀌어도 됨)
     K_EARN, K_EVENT, K_HOT = Q['이익이 늘고 있나?'], Q['제2의 젠슨 황 있나?'], Q['너무 많이 올랐나?']
-    K_HIGH = Q['고점 부근이 아닌가?']; K_CHEAP = Q['싼가? (줄 세우기 뼈대)']
+    K_HIGH = Q['고점 부근이 아닌가?']; K_CHEAP = Q['그래서 싼가?']
     last = int(list(SB)[-1][1:])
     K_SPLIT, K_CAP, K_SELL = f'B{last+1:02d}_분할', f'B{last+2:02d}_비중상한(%)', f'B{last+3:02d}_매도신호'
     # 1) 공식별 결과
