@@ -123,7 +123,8 @@ def today_rows(S, blocks):
     return T
 
 
-def run(W, S=None, cfg=None):
+def run(W, S=None, cfg=None, idx='^GSPC'):
+    """idx: 정답·낙폭을 잴 지수(^GSPC S&P500, ^NDX 나스닥100). 11/19 의장: 이번 조정은 나스닥이 −10% 넘어 조정장"""
     from scipy.stats import mannwhitneyu
     from sklearn.isotonic import IsotonicRegression
     from sklearn.linear_model import LogisticRegression
@@ -134,6 +135,11 @@ def run(W, S=None, cfg=None):
     if S is None and os.path.exists(f'{W}/out_판정표.csv'):
         S = pd.read_csv(f'{W}/out_판정표.csv', encoding='utf-8-sig')
     MK, sp = market()
+    tag = '' if idx == '^GSPC' else '_나스닥100'
+    if idx != '^GSPC':
+        import yfinance as yf
+        sp = yf.download(idx, start='2007-01-01', auto_adjust=True, progress=False)['Close'].squeeze().dropna()
+        MK['S&P 고점 대비'] = (sp / sp.rolling(252, min_periods=60).max() - 1) * 100
     today = sp.index[-1]
     FPH = fingerprint(H, C['블록'])
     if S is not None:
@@ -195,7 +201,7 @@ def run(W, S=None, cfg=None):
                        '뒤13주(%)': f13.reindex(keep).round(1).values, '뒤26주(%)': f26.reindex(keep).round(1).values})
     sc = StandardScaler().fit(Xa[known]); lr = LogisticRegression(C=0.3, class_weight='balanced', max_iter=3000).fit(sc.transform(Xa[known]), Y.reindex(X.index[known]))
     contrib = pd.Series(lr.coef_[0] * sc.transform(Xa.iloc[[-1]])[0], index=X.columns).sort_values()
-    ONE = pd.DataFrame([dict(날짜=lastw.date(), 원점수=round(r0, 3), 보정확률=round(float(cal.iloc[-1]), 3),
+    ONE = pd.DataFrame([dict(기준지수=idx, 날짜=lastw.date(), 원점수=round(r0, 3), 보정확률=round(float(cal.iloc[-1]), 3),
                              과거백분위=round(float((hist <= r0).mean() * 100), 1), 경보=int(r0 >= C['경보']),
                              비슷한점수_주수=len(near), 비슷한점수_뒤13주_평균=round(f13.reindex(near).mean(), 1),
                              비슷한점수_뒤13주_승률=round((f13.reindex(near).dropna() > 0).mean() * 100, 1),
@@ -204,9 +210,9 @@ def run(W, S=None, cfg=None):
                              바닥쪽_블록=' / '.join(contrib.index[::-1][:3]), 반대쪽_블록=' / '.join(contrib.index[:3]),
                              닮은주=', '.join(str(k.date()) for k in keep[:3]))])
     HIST = pd.DataFrame({'원점수': raw.round(3), '보정확률': cal.round(3), '바닥구간': Y.reindex(X.index)})
-    for k, v in (('바닥근접도.csv', ONE), ('바닥근접도_검정.csv', TEST), ('바닥근접도_닮은주.csv', AN)):
-        v.to_csv(f'{W}/{k}', index=False, encoding='utf-8-sig')
-    HIST.to_csv(f'{W}/바닥근접도_이력.csv', encoding='utf-8-sig')
+    for k, v in (('바닥근접도', ONE), ('바닥근접도_검정', TEST), ('바닥근접도_닮은주', AN)):
+        v.to_csv(f'{W}/{k}{tag}.csv', index=False, encoding='utf-8-sig')
+    HIST.to_csv(f'{W}/바닥근접도_이력{tag}.csv', encoding='utf-8-sig')
     print(ONE.T.to_string()); print(TEST.T.to_string())
     return ONE, TEST, AN
 
