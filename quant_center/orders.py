@@ -1,4 +1,4 @@
-"""국면(B00)과 주문 한도(B27·B28·B29)·분할(B30)·층별 바구니. 모든 수치는 blocks.yaml '국면'·'주문' 칸에서 읽는다.
+"""국면(B08, 구 B00)과 주문 한도(대장 이탈·확정 이벤트·수급 이동, 챗지 구 B27~B29)·분할·층별 바구니. 모든 수치는 blocks.yaml '국면'·'주문' 칸에서 읽는다.
 11/17 의장 지시: 외부 AI 검토(챗지 B00·B27~B30, 제이미 C_rate·C_techvol·C_breadth 기록) 반영. 클로드 판단 없이 식으로만."""
 import numpy as np, pandas as pd
 
@@ -62,8 +62,8 @@ def limits(d, P, f, O):
         if not len(last):
             continue
         z = _z(last, last.iloc[-1])
-        if pm.iloc[-1] > 0 and last.iloc[-1] <= O['B27_격차'] and z is not None and z <= O['B27_z']:
-            hit(lay, O['승수'], f"B27 대장 이탈({U.at[ld, '정식 종목명']} 5일 격차 {last.iloc[-1]:.1f}%p, z {z:.1f})")
+        if pm.iloc[-1] > 0 and last.iloc[-1] <= O['대장이탈_격차'] and z is not None and z <= O['대장이탈_z']:
+            hit(lay, O['승수'], f"대장 이탈({U.at[ld, '정식 종목명']} 5일 격차 {last.iloc[-1]:.1f}%p, z {z:.1f})")
     # B28 확정 대형 이벤트: 이벤트 뒤 첫 세션까지 남은 매수 세션 ≤ 3
     try:
         CAL = pd.read_csv(f'{d}/변수달력.csv', encoding='utf-8-sig')
@@ -79,29 +79,29 @@ def limits(d, P, f, O):
                 continue
             ev = np.datetime64(dt.date())
             left = np.busday_count(today, ev + np.timedelta64(1, 'D')) + 1
-            if today <= np.busday_offset(ev, 1, roll='forward') and left <= O['B28_세션']:
+            if today <= np.busday_offset(ev, 1, roll='forward') and left <= O['이벤트_세션']:
                 for lay in str(e['영향 층']).split('|'):
-                    hit(lay, O['승수'], f"B28 확정 이벤트({e['사건']}, {str(dt.date())})")
+                    hit(lay, O['승수'], f"확정 이벤트({e['사건']}, {str(dt.date())})")
     # B29 업종 수급 이동(이력이 쌓이기 전에는 방향·비율·규모로, z는 이력 26개 이상부터)
     flow = {}
     k = f[(f['시장'] == '한국') & (f['구분'] == '개별주') & f['f5'].notna()] if 'f5' in f else pd.DataFrame()
     for lay, g in k.groupby('layer'):
         if len(g) < 2: continue
         neg = (g['f5'] < 0).mean(); pos = (g['f5'] > 0).mean()
-        flow[('한국', lay)] = -1 if neg >= O['B29_비율'] and g['f5'].sum() < 0 else (1 if pos >= O['B29_비율'] and g['f5'].sum() > 0 else 0)
+        flow[('한국', lay)] = -1 if neg >= O['수급이동_비율'] and g['f5'].sum() < 0 else (1 if pos >= O['수급이동_비율'] and g['f5'].sum() > 0 else 0)
     try:
         E = pd.read_csv(f'{d}/ETF자금.csv', encoding='utf-8-sig').set_index('코드')
         for lay, tk in (O.get('미국_업종ETF') or {}).items():
             if tk in E.index:
                 v = pd.to_numeric(E.at[tk, '유입_5일'], errors='coerce') / pd.to_numeric(E.at[tk, '순자산'], errors='coerce') * 100
-                flow[('미국', lay)] = -1 if v <= -O['B29_미국_%'] else (1 if v >= O['B29_미국_%'] else 0)
+                flow[('미국', lay)] = -1 if v <= -O['수급이동_미국_%'] else (1 if v >= O['수급이동_미국_%'] else 0)
     except (FileNotFoundError, KeyError):
         pass
     for mk in ('한국', '미국'):
         out_ai = [l for l in AI if flow.get((mk, l)) == -1]; in_df = [l for l in DEFL if flow.get((mk, l)) == 1]
         if out_ai and in_df:
             for l in out_ai:
-                hit(l, O['승수'], f"B29 수급 이동({mk} {l} 유출·{'/'.join(in_df)} 유입)")
+                hit(l, O['승수'], f"수급 이동({mk} {l} 유출·{'/'.join(in_df)} 유입)")
     return mult, {k: ' / '.join(v) for k, v in why.items()}, flow
 
 

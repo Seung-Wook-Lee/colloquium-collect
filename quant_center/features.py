@@ -123,6 +123,11 @@ def stocks(d):
             rows.append(r)
         RQ = pd.DataFrame(rows)
         f = f.drop(columns=[c for c in ['kind', 'op_yoy', 'opm_yoy', 'opm2', 'rev_yoy', 'last_q', 'opm'] if c in f]).merge(RQ, on='번호', how='left')
+    # 장기 펀드 13F(fetch_13f.py): 지난 분기 늘렸나·줄였나(미국 상장 주식만)
+    LT = _r(d, '장기펀드13F')
+    if len(LT):
+        f = f.merge(LT[['ticker', 'lt_funds', 'lt_up', 'lt_dn', 'lt_net', 'lt_net_prev', '분기']].rename(columns={'분기': 'lt_q'}),
+                    on='ticker', how='left')
     # 퀀트센터 자료(BLOCK20 quant_live)
     K = _r(d, '퀀트자료')
     if len(K):
@@ -345,4 +350,8 @@ def market(d):
         m['KS_GAP50'] = float(ix.iloc[-1] / ix.iloc[-50:].mean() * 100)
     except Exception:
         pass
+    # B10 세계는 평화로운가: 지정학 위험 지수(GPR, Caldara·Iacoviello) 7일 평균의 10년 백분위(07시 수집 b09_gpr.py)
+    GP = _r(d, '지정학위험')
+    if len(GP) and 'GPR_PCT' in GP:
+        m['GPR_PCT'] = _num(GP['GPR_PCT']).dropna().iloc[-1] if _num(GP['GPR_PCT']).notna().any() else None
     return m

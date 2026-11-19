@@ -138,3 +138,30 @@ def test_meta_learns_from_ledger(tmp_path):
     assert info['학습']
     assert out['메타확률'].iloc[0] > 0.5 > out['메타확률'].iloc[1]
     assert out['메타배수'].iloc[0] > 0 and out['메타배수'].iloc[1] == 0
+
+
+# ---- 장기 펀드 13F(B32)
+import fetch_13f  # noqa: E402
+import grade_13f  # noqa: E402
+
+
+def test_issuer_name_normalize():
+    assert fetch_13f.norm('NVIDIA CORPORATION') == fetch_13f.norm('NVIDIA Corp') == 'NVIDIA'
+    assert fetch_13f.norm('Johnson & Johnson') == fetch_13f.norm('JOHNSON AND JOHNSON')
+
+
+def test_b36_is_bonus_only_when_increased():
+    b = B['종목']['B32']
+    assert b['조건'] == 'lt_net > 0' and b.get('대상') == '개별주'
+    assert engine._ev(b['조건'], {'lt_net': -3.0}) is False
+    assert engine._ev(b['조건'], {'lt_net': None}) is None      # 한국 종목: 해당 없음
+
+
+def test_grade_13f_uses_day_after_filing():
+    idx = pd.bdate_range('2020-01-01', periods=400)
+    P = pd.DataFrame({'X': np.linspace(100, 200, 400)}, index=idx)
+    R = pd.DataFrame({'ticker': ['X'], '분기': ['2019-12-31'], '공시일': [idx[10].strftime('%Y-%m-%d')],
+                      'lt_net': [5.0], 'lt_up': [3], 'lt_dn': [1], 'lt_net_prev': [2.0]})
+    G, E = grade_13f.grade(R, P)
+    assert str(E['출발'].iloc[0]) == str(idx[11].date())
+    assert G[(G['구분'] == '늘림') & (G['기간'] == '4주')]['승률'].iloc[0] == 100.0
