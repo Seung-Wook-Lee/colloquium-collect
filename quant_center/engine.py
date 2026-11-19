@@ -68,6 +68,28 @@ def st_judge(S, c):
     v = pd.to_numeric(S[key], errors='coerce')
     S['추천'] = np.where(S['판정'] != '후보', S['판정'], np.where(~enough, '자료 부족(블록 수 모자람)',
                 np.where(v >= cut, '추천', np.where(v >= cut2, '관찰', '대기'))))
+    # 11/19 의장 원칙 "많이 떨어진 것 중에 좋은 회사": ① 떨어졌나(관문) → ② 우량인가(관문) → ③ 순위 블록 평균으로 추천·관찰
+    P = c['B'].get('원칙')
+    if P:
+        val = lambda k: S[k] if k in S else pd.Series(None, index=S.index)
+        sc = lambda k: pd.to_numeric(S[f'_sc_{k}'] if f'_sc_{k}' in S else val(k), errors='coerce')
+        ok_pass = lambda k: val(k).isin(['통과', '해당 없음'])
+        fell = pd.Series(True, index=S.index)
+        for k in P.get('떨어짐', []): fell &= ok_pass(k)
+        good = pd.Series(True, index=S.index)
+        for k in P.get('우량_통과', []): good &= ok_pass(k)
+        for k in P.get('우량_예', []): good &= (sc(k) >= 0.5)
+        RK = pd.concat([sc(k) for k in P.get('순위', [])], axis=1)
+        S['순위점수'] = RK.mean(axis=1).round(3)
+        seen = RK.notna().sum(axis=1) >= P.get('순위_최소관측', 2)
+        cut_r = P.get('추천선', 0.5)
+        cand = S['판정'] == '후보'
+        S['원칙'] = np.where(~fell, '고점 부근(안 떨어짐)', np.where(~good, '우량 아님', '떨어진 우량주'))
+        S['추천'] = np.where(~cand, S['판정'], np.where(~fell, '대기(고점 부근)', np.where(~good, '대기(우량 아님)',
+                    np.where(~seen, '자료 부족(블록 수 모자람)', np.where(S['순위점수'] >= cut_r, '추천', '관찰')))))
+        c['info']['판정기준'] = (f"원칙: 떨어짐 {P.get('떨어짐')} 통과 → 우량 {P.get('우량_통과')} 통과·{P.get('우량_예')} 예 → "
+                              f"순위 {P.get('순위')} 평균 ≥ {cut_r} 추천, 아래는 관찰")
+        return S
     # 11/19 의장: 가짜 바닥 검사 폐지(10년 성적에서 걸린 쪽이 52주 수익률 더 높음). '가짜바닥아님'(분산비·EWMAC 기울기)은 표시만
     c['info']['판정기준'] = f'{key} 추천 ≥ {cut:.2f}, 관찰 ≥ {cut2:.2f}'
     return S
@@ -317,7 +339,7 @@ def run(d, cfg=None):
     ctx = dict(B=B, d=d, f=f, P=P, m=m, SB=SB, K_EARN=K_EARN, K_EVENT=K_EVENT, info={})
     S = run_stages(S, ctx)
     m['_단계'] = ctx['info']
-    S = S.sort_values(['판정', '싼가', '점수'], ascending=[True, False, False])
+    S = S.sort_values(['판정', '순위점수' if '순위점수' in S else '싼가', '점수'], ascending=[True, False, False])
     run.last_f = f
     return S, pd.DataFrame(detail), M, m
 
