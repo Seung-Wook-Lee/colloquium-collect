@@ -24,7 +24,7 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
-DEF = dict(정답_주=13, 정답_여유=0.03, 정답_낙폭=-0.05, 경보=0.5, 검정_시작해=2020, 닮은주=6, 블록=['B13', 'B16', 'B28', 'B29', 'B30', 'B31', 'B33'])
+DEF = dict(B08_지수=['^NDX'], 정답_주=13, 정답_여유=0.03, 정답_낙폭=-0.05, 경보=0.5, 검정_시작해=2020, 닮은주=6, 블록=['B13', 'B16', 'B28', 'B29', 'B30', 'B31', 'B33'])
 YF = ['^GSPC', '^NDX', '^RUT', '^VIX', '^VIX3M', '^MOVE', 'HYG', 'IEF']
 FRED = {'STLFSI4': 'STLFSI', 'DGS10': 'US10Y', 'DGS2': 'US2Y', 'T10Y2Y': 'T10Y2Y'}
 GPR_URL = 'https://www.matteoiacoviello.com/gpr_files/data_gpr_daily_recent.xls'
@@ -56,6 +56,23 @@ def _hmm(p):
         if mdl is not None:
             out.iloc[i] = mdl.predict_proba(X.values[max(0, i - 250):i + 1])[-1, bear]
     return out
+
+
+def rotation(start='2007-01-01'):
+    """B08 성장주? 가치주?: 미국 AI 묶음(S1~S3) ÷ 금융·방어(S5~S6) 동일가중 비율의 50일 이격·20일 변화(엔진 B08과 같은 식).
+    유니버스(비공개 seed/유니버스.csv)가 없으면 섹터 ETF 근사(SMH·XLK·IGV ÷ XLF·XLP·XLV·XLU, 11/20 상관 0.88)"""
+    import yfinance as yf
+    try:
+        import qc_config as QCC
+        U = pd.read_csv(os.path.join(QCC.private_dir(), 'seed', '유니버스.csv'), encoding='utf-8-sig').drop_duplicates('yfinance 티커')
+        U = U[(U['시장'] == '미국') & (U['구분'] == '개별주')]
+        ai = U[U['층'].isin(['S1', 'S2', 'S3'])]['yfinance 티커'].tolist(); df = U[U['층'].isin(['S5', 'S6'])]['yfinance 티커'].tolist()
+    except Exception:   # noqa: BLE001
+        ai, df = ['SMH', 'XLK', 'IGV'], ['XLF', 'XLP', 'XLV', 'XLU']
+    P = yf.download(ai + df, start=start, auto_adjust=True, progress=False)['Close']
+    eq = lambda c: (P[[x for x in c if x in P]].pct_change().mean(axis=1).fillna(0) + 1).cumprod()
+    rt = eq(ai) / eq(df)
+    return pd.DataFrame({'B08 AI÷방어 50일 이격': (rt / rt.rolling(50).mean() - 1) * 100, 'B08 AI÷방어 20일 변화': rt.pct_change(20) * 100})
 
 
 def market(start='2007-01-01'):
@@ -136,6 +153,8 @@ def run(W, S=None, cfg=None, idx='^GSPC'):
         S = pd.read_csv(f'{W}/out_판정표.csv', encoding='utf-8-sig')
     MK, sp = market()
     tag = '' if idx == '^GSPC' else '_나스닥100'
+    if idx in C.get('B08_지수', ['^NDX']):   # 11/20 의장: B08은 나스닥 모형에만(검정: 나스닥 AUC 0.82→0.86, S&P는 0.9 경보에서 나빠짐)
+        MK = MK.join(rotation().reindex(MK.index).ffill(limit=5))
     if idx != '^GSPC':
         import yfinance as yf
         sp = yf.download(idx, start='2007-01-01', auto_adjust=True, progress=False)['Close'].squeeze().dropna()
