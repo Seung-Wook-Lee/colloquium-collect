@@ -23,7 +23,7 @@ concurrency: meeting
 jobs:
   meeting:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
       - name: 팀Q 아침보고·퀀트자료 받기(TEAMQ_TOKEN 있을 때만, 없으면 전날 사본)

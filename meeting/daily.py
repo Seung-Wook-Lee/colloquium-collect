@@ -175,6 +175,32 @@ def fetch(W, IN):
     return done
 
 
+def backtest(W, IN, use_drive, tday, B):
+    """11/19 의장: 블록 성적표·조합 시험(quant_center/backtest.py). 금요일(성적표.요일)만. 지난 계산(블록점수이력.csv)은 드라이브에 이어 써서 새 날짜만 계산."""
+    cache = f'{W}/블록점수이력.csv'
+    try:
+        if use_drive:
+            import drive
+            raw = drive.get(f'{CARRY}/블록점수이력.csv')
+            if raw:
+                open(cache, 'wb').write(raw)
+        r = subprocess.run([sys.executable, f'{QC}/fetch_long.py', IN], cwd=W, capture_output=True, text=True, timeout=900)
+        if r.returncode != 0:
+            raise RuntimeError('긴 가격 실패: ' + (r.stderr.strip().splitlines() or ['?'])[-1])
+        r = subprocess.run([sys.executable, '-W', 'ignore', f'{QC}/backtest.py', IN], cwd=W, capture_output=True, text=True, timeout=5400)
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr.strip().splitlines() or ['?'])[-1])
+        log('[성적표] ' + ' | '.join(r.stdout.strip().splitlines()[:2]))
+        out = {k: open(f'{W}/{k}', 'rb').read() for k in ('블록성적.csv', '조합시험.csv', '조합후보_오늘.csv') if os.path.exists(f'{W}/{k}')}
+        if use_drive and os.path.exists(cache):
+            import drive
+            drive.put(f'{CARRY}/블록점수이력.csv', open(cache, 'rb').read())
+        return out
+    except Exception as e:
+        log(f'[성적표] 실패 → 건너뜀: {str(e)[:160]}')
+        return {}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--date'); ap.add_argument('--local'); ap.add_argument('--skip-fetch', action='store_true')
@@ -240,6 +266,7 @@ def main():
     import features as F
     f = F.stocks(IN)
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
+    BTO = backtest(W, IN, use_drive, tday, B) if (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
 
     # 4) 위원 원고
     if os.path.exists(f'{IN}/아침보고.txt'):
@@ -256,6 +283,7 @@ def main():
             f'{today}_시장블록.csv': M.to_csv(index=False).encode('utf-8-sig'),
             f'{today}_사건상태.csv': EV.to_csv(index=False).encode('utf-8-sig'),
             f'{today}_변수달력.csv': CAL.to_csv(index=False).encode('utf-8-sig')}
+    outs.update({f'{today}_{k}': v for k, v in BTO.items()})
     for k, v in outs.items():
         open(f'{OUT}/{k}', 'wb').write(v)
     log(f'[원고] {len(sec)}칸, 오늘의 한 종목 {c.picks.get("센터", {}).get("종목") or "해당 없음"}')
