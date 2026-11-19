@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 
 DEF = dict(단계=[5, 10, 15, 20, 30], 배수=[0.3, 0.6, 0.9, 1.2, 1.8], 최근해=10)
-START = {'^GSPC': '1927-12-01', '^NDX': '1985-10-01'}
-NAME = {'^GSPC': 'S&P500', '^NDX': '나스닥100'}
+START = {'^GSPC': '1927-12-01', '^NDX': '1985-10-01', '^KS11': '1996-07-01', '^KQ11': '1996-07-01'}
+NAME = {'^GSPC': 'S&P500', '^NDX': '나스닥100', '^KS11': '코스피', '^KQ11': '코스닥'}
 
 
 def prices(idx):
@@ -104,7 +104,7 @@ def run(W, idx='^GSPC', cfg=None, p=None):
     for c in ('고점일', '저점일', '회복일'):
         L[c] = pd.to_datetime(L[c]).dt.date
     L[['깊이', '고점변동성', '배수']] = L[['깊이', '고점변동성', '배수']].round(2)
-    tag = '' if idx == '^GSPC' else '_나스닥100'
+    tag = '' if idx == '^GSPC' else '_' + NAME.get(idx, idx.strip('^'))
     for k, v in (('조정단계_오늘', ONE), ('조정단계표', T), ('조정단계표_변동성배수', TV), ('조정목록', L)):
         v.to_csv(f'{W}/{k}{tag}.csv', index=False, encoding='utf-8-sig')
     print(msg)
@@ -113,5 +113,5 @@ def run(W, idx='^GSPC', cfg=None, p=None):
 
 if __name__ == '__main__':
     W = sys.argv[1] if len(sys.argv) > 1 else '.'
-    for i in (sys.argv[2:] or ['^GSPC', '^NDX']):
+    for i in (sys.argv[2:] or ['^GSPC', '^NDX', '^KS11', '^KQ11']):
         run(W, i)
