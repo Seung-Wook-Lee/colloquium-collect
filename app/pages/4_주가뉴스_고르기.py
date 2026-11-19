@@ -54,6 +54,9 @@ if not ds:
 day = st.selectbox('날짜', ds, format_func=lambda d: f'{d[:4]}-{d[4:6]}-{d[6:]}')
 
 cand = read(f'{DATA}/{day}/{day}_주가뉴스후보.csv')
+if '발생대상' not in cand:
+    cand['발생대상'], cand['발생신호'] = '', 0
+cand['발생대상'] = cand['발생대상'].fillna('')
 cand['의장선택'] = False
 cand['의장이유'] = ''
 acc = read(news_pick.LABEL_PATH)
@@ -63,7 +66,7 @@ if acc is not None and len(acc) and (acc['날짜'].astype(str) == day).any():
     cand['의장이유'] = [str(m.loc[t, '의장이유']) if t in m.index and pd.notna(m.loc[t, '의장이유']) else '' for t in cand['제목']]
     st.success('이 날짜는 이미 저장하셨습니다. 고치고 다시 저장할 수 있습니다.')
 
-show = ['의장선택', '의장이유', '순위', '구분', '판정', '제목', '출처', '종목', '등락률(%)', '긍정', '부정', '프로그램추천', '링크']
+show = ['의장선택', '의장이유', '순위', '구분', '발생대상', '판정', '제목', '출처', '종목', '등락률(%)', '긍정', '부정', '프로그램추천', '링크']
 edited = st.data_editor(
     cand[show], hide_index=True, use_container_width=True, height=min(80 + 36 * len(cand), 900),
     disabled=[c for c in show if c not in ('의장선택', '의장이유')],
@@ -71,6 +74,7 @@ edited = st.data_editor(
         '의장선택': st.column_config.CheckboxColumn('고름', width='small'),
         '의장이유': st.column_config.TextColumn('이유(한 줄)', width='medium'),
         '순위': st.column_config.NumberColumn(width='small'),
+        '발생대상': st.column_config.TextColumn('전쟁 발생', width='small'),
         '제목': st.column_config.TextColumn(width='large'),
         '프로그램추천': st.column_config.CheckboxColumn('프로그램', width='small'),
         '링크': st.column_config.LinkColumn('원문', display_text='열기', width='small'),
@@ -85,7 +89,7 @@ if st.button('저장', type='primary'):
     out['의장선택'] = edited['의장선택'].astype(int).values
     out['의장이유'] = edited['의장이유'].values
     out['날짜'] = day
-    keep = ['날짜', '구분', '출처', '종목', '등락률(%)', '긍정', '부정', '제목', '요약', '의장선택', '의장이유', '프로그램추천', '링크']
+    keep = ['날짜', '구분', '출처', '종목', '등락률(%)', '긍정', '부정', '발생신호', '제목', '요약', '의장선택', '의장이유', '프로그램추천', '링크']
     out = out.reindex(columns=keep)
     acc = out if acc is None else pd.concat([acc[acc['날짜'].astype(str) != day].reindex(columns=keep), out])
     drive.put(news_pick.LABEL_PATH, acc.sort_values('날짜').to_csv(index=False).encode('utf-8-sig'))
