@@ -59,6 +59,8 @@ def stocks(d):
         q = pd.DataFrame({'번호': F['번호'], 'f5': _num(F['외국인 5일(억원)']), 'f20': _num(F['외국인 20일(억원)']),
                           'inst5': _num(F['기관 5일(억원)']), 'ind5': _num(F['개인 5일(억원)']), 'fstreak': F['외국인 연속'].map(_streak),
                           'dip_buy': F['표시'].astype(str).str.contains('주가↓·외국인↑').astype(int)})
+        for c, k in (('외국인 5일 z', 'fz5'), ('기관 5일 z', 'iz5')):   # 11/19 B20 수급 z점수(b09_kflow, 자기 30일 대비)
+            q[k] = _num(F[c]) if c in F else np.nan
         f = f.merge(q, on='번호', how='left')
     V = _r(d, '밸류에이션')
     if len(V) and '시가총액(억원)' in V:
@@ -260,6 +262,21 @@ def stocks(d):
         f['shock_layer_share'] = share.max(axis=1)
         f['shock_layer'] = (f['shock_layer_share'] >= 0.5).astype(int).where(f['shock_layer_share'].notna())
         f['resmom_mpct'] = f.groupby('시장')['resmom'].rank(pct=True)
+        # 11/19 의장 B20 큰돈이 모으나: Chaikin Money Flow(20일)·Money Flow Index(14일), 고가·저가·거래량(fetch_px.py)
+        try:
+            Hh = pd.read_csv(f'{d}/고가2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
+            Ll = pd.read_csv(f'{d}/저가2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
+            Vv = pd.read_csv(f'{d}/거래량2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
+            C_ = P.reindex(index=Hh.index, columns=Hh.columns)
+            mfm = ((C_ - Ll) - (Hh - C_)) / (Hh - Ll).replace(0, np.nan)          # 종가가 그날 고가 쪽이면 +1, 저가 쪽이면 −1
+            f['cmf20'] = f['ticker'].map((mfm * Vv).tail(20).sum() / Vv.tail(20).sum().replace(0, np.nan))
+            tp = (Hh + Ll + C_) / 3; rmf = tp * Vv; up = tp.diff() > 0; dn = tp.diff() < 0
+            def mfi(k):
+                pos = rmf.where(up).iloc[-14 - k:len(rmf) - k].sum(); neg = rmf.where(dn).iloc[-14 - k:len(rmf) - k].sum()
+                return 100 - 100 / (1 + pos / neg.replace(0, np.nan))
+            f['mfi14'] = f['ticker'].map(mfi(0)); f['mfi14_5'] = f['ticker'].map(mfi(5))
+        except FileNotFoundError:
+            f['cmf20'] = np.nan; f['mfi14'] = np.nan; f['mfi14_5'] = np.nan
         # Bali·Cakici·Whitelaw(2011) MAX: 최근 21일 최대 일간 수익이 큰 종목(복권형)은 이후 수익이 낮음
         f['max21'] = f['ticker'].map(r.tail(21).max() * 100)
         f['max21_mpct'] = f.groupby('시장')['max21'].rank(pct=True)
@@ -270,6 +287,15 @@ def stocks(d):
         k2 = f['ticker'].astype(str).str.upper()
         for c in ['bb_ret1w', 'bb_ytd', 'bb_eps1w', 'bb_epsytd', 'bb_fper']:
             f[c] = k2.map(dict(zip(bb['ticker'], bb[c])))
+    # 11/19 B20: 공매도 잔고(미국, fetch_short.py) — Boehmer·Jones·Zhang(2008) 공매도 많은 종목은 이후 수익 낮음
+    SH = _r(d, '공매도')
+    if len(SH):
+        k2 = f['ticker'].astype(str)
+        f['short_pf'] = k2.map(dict(zip(SH['ticker'], _num(SH['유통대비(%)']))))
+        f['short_chg'] = k2.map(dict(zip(SH['ticker'], _num(SH['전월대비(%)']))))
+        f['short_dtc'] = k2.map(dict(zip(SH['ticker'], _num(SH['커버일수']))))
+    else:
+        f['short_pf'] = np.nan; f['short_chg'] = np.nan; f['short_dtc'] = np.nan
     # 이익률 조건: 금융인데 최신 분기 이익률을 비교할 수 없으면 해당 없음(통과)
     f['opm_ok'] = ((f['opm_yoy'] >= 0) | ((f['kind'] == '순이익') & f['opm_yoy'].isna())).astype(int).where(f['opm_yoy'].notna() | (f['kind'] == '순이익'))
     # 추천 조건용: 돈이 들어온다 / 돌아섰다 (자료 있는 것만으로 판단, 하나도 없으면 NaN)

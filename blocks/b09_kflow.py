@@ -55,6 +55,10 @@ try:
                 flag.append('주가↑·외국인↓')
         if len(d) >= 20 and f5 * f15 < 0:
             flag.append('외국인 방향 바뀜(' + ('매수 전환' if f5 > 0 else '매도 전환') + ')')
+        # 11/19 의장 B20 수급 z점수: 최근 5일 순매수가 자기 30일 동안의 5일 합 분포에서 몇 σ인가
+        for k in ('외국인', '기관'):
+            s5 = v[k][::-1].rolling(5).sum().dropna()
+            row[f'{k} 5일 z'] = round(float((s5.iloc[-1] - s5.mean()) / s5.std()), 2) if len(s5) >= 15 and s5.std() > 0 else None
         row['표시'] = ', '.join(flag)
         rows.append(row)
     if not rows:
