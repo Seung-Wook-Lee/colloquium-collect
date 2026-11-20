@@ -397,7 +397,57 @@ def stocks(d):
         f['event_words'] = [', '.join(x for x in (w, l) if x) for w, l in zip(f['event_words'], lab)]
     f['event_words'] = [', '.join(x for x in (w, f'부정 뉴스 {p:.2f} "{t}"' if p >= 0.9 else '') if x) for w, p, t in zip(f['event_words'], f['news_neg'], f['news_title'])]
     f['sector'] = f['번호'].map(sect)
+    _bottom_cols(d, f)
     return f
+
+
+def _bottom_cols(d, f):
+    """11/20 의장 B11·B12 = 바닥 블록. 문턱·검정 수치는 비공개 blocks.yaml.
+    시장 칸(같은 시장 종목에 같은 값): 지수 50일 이격·RSI, 과매도 종목 비율(B16 앞 네 공식 중 둘), 200일선 아래 비율, VIX·VIX−VIX3M.
+    종목 칸: rs_mkt63 = 63일 수익 − 지수 63일 수익. mk_bottom_n = B11 공식 중 켜진 수."""
+    def rsi(x):
+        dd = x.diff(); up = dd.clip(lower=0).ewm(alpha=1 / 14).mean(); dn = (-dd.clip(upper=0)).ewm(alpha=1 / 14).mean()
+        return 100 - 100 / (1 + up / dn)
+    try:
+        import qc_config as QCC
+        SB = QCC.load_blocks().get('종목', {})
+    except Exception:   # noqa: BLE001
+        SB = {}
+    env = lambda r: {k: (None if isinstance(v, float) and np.isnan(v) else v) for k, v in r.items()}
+    def ev(e, r):
+        try:
+            return bool(eval(e, {'__builtins__': {}}, r))
+        except Exception:   # noqa: BLE001
+            return None
+    rows = [env(r) for r in f.to_dict('records')]
+    ose = [x[1] for x in SB.get('B16', {}).get('공식', [])[:4]]   # 과매도 = B16(일봉 과매도) 앞 네 공식 중 둘 이상
+    os4 = pd.Series([float(sum(bool(ev(e, r)) for e in ose) >= 2) if r.get('rsi_d') is not None and ose else np.nan for r in rows], index=f.index, dtype=float)
+    below = (f['close'] < f['ma200']).astype(float).where(f['ma200'].notna() & f['close'].notna()) if 'ma200' in f else pd.Series(np.nan, index=f.index)
+    stock = f['구분'] == '개별주'
+    try:
+        I = pd.read_csv(f'{d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
+    except FileNotFoundError:
+        I = pd.DataFrame()
+    R = _r(d, '리스크')
+    g = dict(zip(R['항목'], _num(R['값']))) if len(R) else {}
+    f['vix'] = g.get('VIX'); f['vix_vix3m'] = g.get('VIX − VIX3M')
+    for mk, ix in (('미국', '^GSPC'), ('한국', '^KS11')):
+        m = f['시장'] == mk
+        f.loc[m, 'mk_os_share'] = float(os4[m & stock].mean() * 100) if (m & stock).any() else np.nan
+        f.loc[m, 'mk_below200'] = float(below[m & stock].mean() * 100) if (m & stock).any() else np.nan
+        if ix in I:
+            x = I[ix].dropna()
+            f.loc[m, 'mk_gap50'] = float(x.iloc[-1] / x.tail(50).mean() * 100)
+            f.loc[m, 'mk_rsi'] = float(rsi(x).iloc[-1])
+            if 'ret63' in f and len(x) > 63:
+                f.loc[m, 'rs_mkt63'] = f.loc[m, 'ret63'] - (x.iloc[-1] / x.iloc[-64] - 1) * 100
+    be = [x[1] for x in SB.get('B11', {}).get('공식', [])]   # mk_bottom_n = B11 공식 중 켜진 수(자료 있는 공식이 과반일 때만)
+    rows = [env(r) for r in f.to_dict('records')]
+    def cnt(r):
+        v = [ev(e, r) for e in be]
+        v = [x for x in v if x is not None]
+        return float(sum(v)) if be and len(v) * 2 > len(be) else np.nan
+    f['mk_bottom_n'] = [cnt(r) for r in rows]
 
 
 def market(d):
