@@ -23,6 +23,7 @@ import yaml
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), 'collect'))   # drive.py·ko_translate.py
 KST = dt.timezone(dt.timedelta(hours=9))
 LOCAL = os.environ.get('STUDY_ROOT', '/mnt/project-files/위원공부')
 DRIVE = '콜로키움 수집데이터/위원공부'

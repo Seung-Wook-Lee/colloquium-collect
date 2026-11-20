@@ -46,4 +46,4 @@ jobs:
         run: |
           ARGS=""
           if [ -n "${{ github.event.inputs.only }}" ]; then ARGS="--only ${{ github.event.inputs.only }}"; fi
-          python -m data.run $ARGS
+          cd collect && python -m data.run $ARGS

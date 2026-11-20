@@ -22,12 +22,13 @@ import pandas as pd
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
-DATA = os.path.join(REPO, 'data')      # 블록 1 데이터 수집
+REPO = os.path.dirname(HERE)            # 11/21 의장: 저장소는 두 폴더 — collect(매일 아침 수집)·app(나머지 전부)
+COLLECT = os.path.join(os.path.dirname(REPO), 'collect')
+DATA = os.path.join(COLLECT, 'data')   # 데이터 수집
 MKT = os.path.join(REPO, 'market')     # 블록 2 마켓 센터
 QC = os.path.join(REPO, 'block33')     # 블록 3 블록33
-PYPATH = os.pathsep.join([REPO, QC, MKT])
-sys.path[:0] = [REPO, MKT, QC, HERE]
+PYPATH = os.pathsep.join([REPO, COLLECT, QC, MKT])
+sys.path[:0] = [REPO, COLLECT, MKT, QC, HERE]
 import qc_config as QCC  # noqa: E402  비공개 설정(blocks.yaml·종목 목록·판단 코드) 위치
 import events as EVT      # noqa: E402
 import personas as PER    # noqa: E402

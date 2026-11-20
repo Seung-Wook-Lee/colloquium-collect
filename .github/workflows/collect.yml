@@ -47,4 +47,4 @@ jobs:
           FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
           TAVILY_KEY: ${{ secrets.TAVILY_KEY }}
           BLOCKS: ${{ github.event.inputs.blocks }}
-        run: python run.py $BLOCKS
+        run: python collect/run.py $BLOCKS

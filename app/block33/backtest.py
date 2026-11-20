@@ -20,7 +20,8 @@ import pandas as pd
 import yaml
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-sys.path.insert(0, os.path.dirname(HERE))   # nyx.py(닉스 지표), blocks/b09_exc.py(예외 검정)
+COLLECT = os.path.join(os.path.dirname(os.path.dirname(HERE)), 'collect')   # 11/21 두 폴더: 수집(collect)·스튜디오(app)
+sys.path.insert(0, COLLECT)   # nyx.py(닉스 지표), blocks/b09_exc.py(예외 검정)
 import features as F  # noqa: E402
 import nyx  # noqa: E402
 import orders as O  # noqa: E402
@@ -36,7 +37,7 @@ PRICE_ALWAYS = {'shock_layer', 'shock_own', 'sup_touch_d'}   # 가격으로 계�
 
 def _exc_fn():
     """blocks/b09_exc.py의 exc_row(10년 p값·베타 잔차 p값)를 그대로 가져온다(같은 식 한 벌)."""
-    src = open(os.path.join(os.path.dirname(HERE), 'blocks', 'b09_exc.py'), encoding='utf-8').read()
+    src = open(os.path.join(COLLECT, 'blocks', 'b09_exc.py'), encoding='utf-8').read()
     keep = [n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name in ('_exc_norm_cdf', 'exc_row')]
     ns = {'math': math, 'np': np, 'pd': pd}
     exec(compile(ast.Module(body=keep, type_ignores=[]), 'b09_exc', 'exec'), ns)

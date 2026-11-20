@@ -13,7 +13,7 @@ import pandas as pd
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path[:0] = [str(ROOT / 'collect'), str(ROOT / 'app')]   # 11/21 두 폴더: collect(수집)·app(스튜디오)
 try:
     for k in ('DRIVE_URL', 'DRIVE_TOKEN', 'COLLOQ_DATA'):
         if k in st.secrets and not os.environ.get(k):
@@ -569,7 +569,7 @@ def read_csv(day, fname):
 @st.cache_data(ttl=3 * 3600, show_spinner='바닥 확률 계산 중…')
 def bottom_prob():
     """11/21 의장: 연구된 모형으로. Lunde & Timmermann(2004) 위험률 모형(market/lt_bottom.py, 하락 구간은 R bbdetection 필터 그대로)"""
-    sys.path.insert(0, str(ROOT / 'market'))
+    sys.path.insert(0, str(ROOT / 'app' / 'market'))
     import lt_bottom as LB
     return LB.hazard_today()
 

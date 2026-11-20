@@ -1,7 +1,7 @@
 name: 팀Q 과거데이터 (일회성)
 
 # 기존 '스튜디오 톰앤수 자료수집'(07시)과 완전히 별개. 예약 실행 없음.
-# 실행: Actions 화면 'Run workflow' 또는 teamq/trigger.txt 를 고쳐 push (안에 단계 이름, all 이면 전부)
+# 실행: Actions 화면 'Run workflow' 또는 collect/teamq/trigger.txt 를 고쳐 push (안에 단계 이름, all 이면 전부)
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +15,7 @@ on:
         default: ''
   push:
     paths:
-      - 'teamq/trigger.txt'
+      - 'collect/teamq/trigger.txt'
 
 concurrency: teamq
 
@@ -35,7 +35,7 @@ jobs:
         id: prev
         run: |
           RUN="${{ github.event.inputs.from_run }}"
-          if [ -z "$RUN" ] && [ "${{ github.event_name }}" = "push" ]; then RUN=$(sed -n 2p teamq/trigger.txt | tr -d ' '); fi
+          if [ -z "$RUN" ] && [ "${{ github.event_name }}" = "push" ]; then RUN=$(sed -n 2p collect/teamq/trigger.txt | tr -d ' '); fi
           echo "run=$RUN" >> "$GITHUB_OUTPUT"
       - if: steps.prev.outputs.run != ''
         uses: actions/download-artifact@v4
@@ -45,7 +45,7 @@ jobs:
           run-id: ${{ steps.prev.outputs.run }}
           github-token: ${{ github.token }}
       - name: 라이브러리 설치
-        run: pip install -r teamq/requirements.txt
+        run: pip install -r collect/teamq/requirements.txt
       - name: 과거 데이터 수집
         env:
           TZ: Asia/Seoul
@@ -64,9 +64,9 @@ jobs:
           KRX_PW: ${{ secrets.KRX_PW }}
           PARTS: ${{ github.event.inputs.parts }}
         run: |
-          if [ -z "$PARTS" ] && [ "${{ github.event_name }}" = "push" ]; then PARTS=$(sed -n 1p teamq/trigger.txt); fi
+          if [ -z "$PARTS" ] && [ "${{ github.event_name }}" = "push" ]; then PARTS=$(sed -n 1p collect/teamq/trigger.txt); fi
           [ "$PARTS" = "all" ] && PARTS=""
-          python teamq/run.py $PARTS
+          python collect/teamq/run.py $PARTS
       - name: 결과 보관(드라이브 창구가 없을 때 대비, 7일)
         if: always()
         uses: actions/upload-artifact@v4

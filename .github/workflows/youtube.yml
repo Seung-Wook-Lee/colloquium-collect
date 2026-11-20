@@ -24,9 +24,9 @@ jobs:
       - uses: actions/checkout@v5
       - name: 지난 결과(youtube-data 브랜치) 가져오기
         run: |
-          mkdir -p youtube/out
+          mkdir -p collect/youtube/out
           if git fetch --depth 1 origin youtube-data 2>/dev/null; then
-            git archive FETCH_HEAD youtube/out | tar -x
+            git archive FETCH_HEAD youtube/out | tar -x -C collect   # 브랜치 안은 youtube/out 그대로
           fi
       - uses: actions/setup-python@v6
         with:
@@ -40,12 +40,12 @@ jobs:
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
           YT_URLS: ${{ github.event.inputs.urls }}
-        run: python youtube/run.py
+        run: python collect/youtube/run.py
       - name: 결과를 youtube-data 브랜치에 쌓기(처리목록·txt 전부, 한 커밋으로 덮어씀)
         if: always()
         run: |
-          [ -f youtube/.changed ] || exit 0          # 새로 처리한 것이 있을 때만
-          D=$(mktemp -d); mkdir -p $D/youtube && cp -r youtube/out $D/youtube/
+          [ -f collect/youtube/.changed ] || exit 0          # 새로 처리한 것이 있을 때만
+          D=$(mktemp -d); mkdir -p $D/youtube && cp -r collect/youtube/out $D/youtube/
           cd $D && git init -q -b youtube-data
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

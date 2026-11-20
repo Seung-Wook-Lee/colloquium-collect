@@ -165,7 +165,7 @@ def main():
     ap.add_argument('--today', action='store_true')
     a = ap.parse_args()
     if a.today:
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'collect'))
         os.makedirs(a.out, exist_ok=True)
         T = today(pd.read_csv(a.universe, dtype=str, encoding='utf-8-sig'))
         T.to_csv(os.path.join(a.out, '바닥신호집계.csv'), index=False, encoding='utf-8-sig')

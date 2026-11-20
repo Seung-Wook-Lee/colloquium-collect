@@ -19,7 +19,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'block33'))   # qc_config(블록33 설정 읽기)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'app', 'block33'))   # qc_config(블록33 설정 읽기)
 from qc_config import load_blocks
 
 KINDS = ['미국 기업', '한국 기업', '미국ETF', '한국ETF']

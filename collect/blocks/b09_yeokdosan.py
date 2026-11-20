@@ -15,7 +15,7 @@
 #   실패하면 : 점검 파일에 '실패'로 남기고 다음 블록은 계속 실행
 # ======================================================================
 import sys as _sys
-_sys.path.insert(0, 'yeokdosan')                 # run.py는 저장소 맨 위에서 돈다
+_sys.path.insert(0, 'yeokdosan')                 # run.py는 collect/ 에서 돈다
 import yeokdosan as ydo
 
 
