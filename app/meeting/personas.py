@@ -89,6 +89,9 @@ def _read(d, name):
         return pd.read_csv(f'{d}/{name}.csv', encoding='utf-8-sig')
     except FileNotFoundError:
         return pd.DataFrame()
+    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 빈 파일·깨진 파일이면 그 칸만 비움
+        print(f'[빠진 자료] {name} → 그 칸만 비우고 계속: {type(e).__name__}')
+        return pd.DataFrame()
 
 
 # ---------------------------------------------------------------- 엔진 표 + 종목 칸
@@ -953,6 +956,19 @@ def objections(c):
 
 
 # ---------------------------------------------------------------- 묶기
+def _safe(fn, n, *args):
+    """11/21 의장 '병렬식': 위원 한 칸이 실패해도 다른 칸은 그대로 나온다. 실패한 칸엔 한 줄만 남김.
+    n = 돌려받는 개수(0이면 글 하나)."""
+    try:
+        return fn(*args)
+    except Exception as e:   # noqa: BLE001
+        print(f'[칸 실패] {fn.__name__}: {type(e).__name__}: {str(e)[:120]}')
+        if n == 0:
+            return ''
+        line = [L('이 칸 자료', '오늘 계산 못 함(다른 칸은 정상)', f'{type(e).__name__}: {str(e)[:100]}')]
+        return (line, []) if n == 2 else (line, [], '')
+
+
 def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     c = Ctx(d, S, M, m, f, R, RC, today)
     c.session = session
@@ -965,24 +981,28 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
             mood, picks_ = conclusion(c)
         except Exception as e:   # noqa: BLE001
             mood = [L('시장', '계산 실패', str(e)[:120])]
-    a, g, tbl = mr_market(c); sections.append(('1 시장', '마켓 센터', '간밤 미국 시장' if session == '국장전' else '한국 시장', mood + a, g, tbl))
-    a, g, tbl = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, tbl))
+    a, g, tbl = _safe(mr_market, 3, c); sections.append(('1 시장', '마켓 센터', '간밤 미국 시장' if session == '국장전' else '한국 시장', mood + a, g, tbl))
+    a, g, tbl = _safe(miss_citadel, 3, c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, tbl))
     # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)는 겹치니 '미스 리스크' 한 위원으로 합친다
-    a1, g1 = rio(c)
-    a2, g2, tbl = phobos(c)
-    sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, (tbl + '\n\n' + macro_table(c)).strip()))   # 체크리스트는 맨 아래
-    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
-    a, g = miss_chart(c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
+    a1, g1 = _safe(rio, 2, c)
+    a2, g2, tbl = _safe(phobos, 3, c)
+    sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, (tbl + '\n\n' + _safe(macro_table, 0, c)).strip()))   # 체크리스트는 맨 아래
+    a, g = _safe(ttuji, 2, c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
+    a, g = _safe(miss_chart, 2, c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
-        a, g = nyx(c, who); sections.append(('4 퀀트센터 — 닉스 팀', who, role, a, g, ''))
-    dk, has = desks(c)
-    a, g = miss_value(c, has); sections.append(('4-1 밸류에이션', '미스 밸류', '밸류에이션', a, g, ''))
+        a, g = _safe(nyx, 2, c, who); sections.append(('4 퀀트센터 — 닉스 팀', who, role, a, g, ''))
+    try:
+        dk, has = desks(c)
+    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식'
+        print(f'[칸 실패] 섹터 데스크: {e}')
+        dk, has = {k: [] for k in DESKS}, False
+    a, g = _safe(miss_value, 2, c, has); sections.append(('4-1 밸류에이션', '미스 밸류', '밸류에이션', a, g, ''))
     for desk in DESKS:
         sections.append(('4-2 섹터 데스크', desk, '섹터 데스크', dk[desk], [], ''))
-    a, g = elpis(c); sections.append(('5 긍정 요인', '엘피스', '긍정 요인', a, g, ''))
-    a, g = gukjang(c, EV, CAL); sections.append(('6 기타', '국장', '일정·승인 매체 기사·사건', a, g, ''))
+    a, g = _safe(elpis, 2, c); sections.append(('5 긍정 요인', '엘피스', '긍정 요인', a, g, ''))
+    a, g = _safe(gukjang, 2, c, EV, CAL); sections.append(('6 기타', '국장', '일정·승인 매체 기사·사건', a, g, ''))
     if c.R.get('반대'):   # 11/20 의장: 회의니까 다른 위원이 반대한다
-        a, g = objections(c); sections.append(('7 반대 의견', c.R['반대'].get('위원', '미스 리스크'), '오늘의 한 종목 반대', a, g, ''))
+        a, g = _safe(objections, 2, c); sections.append(('7 반대 의견', c.R['반대'].get('위원', '미스 리스크'), '오늘의 한 종목 반대', a, g, ''))
     # 11/20 의장 "종목 추천은 마지막에 해. 중간에 쓸데없는 추천하지 말고": 위원별 '오늘의 한 종목' 줄은 원고에서 뺀다(csv는 그대로),
     # 뚜지의 추천 목록·제외 줄은 맨 끝 칸으로 옮기고, 종목 추천은 그 칸 하나에서만 한다.
     REC = _re.compile(r'^(추천 \d+|제외 |오늘의 추천 종목)')

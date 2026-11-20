@@ -360,6 +360,8 @@ def main():
     S, D, M, m = ENG.run(IN)
     import features as F
     f = F.stocks(IN)
+    if F.MISSING:   # 11/21 의장 '병렬식': 빠진 자료는 그 칸만 비우고 원고는 만든다
+        log('[빠진 자료] ' + ' / '.join(f'{k}({v})' for k, v in F.MISSING.items()))
     BAND = pd.DataFrame()
     try:   # 11/20 의장 '어느 가격이 적당한가, 블록 조합으로' → 가격대.csv(결론 칸이 읽음)
         if '3-28' in B.get('_꺼짐', []):

@@ -20,6 +20,9 @@ def _read(d, name):
         return pd.read_csv(f'{d}/{name}.csv', encoding='utf-8-sig')
     except FileNotFoundError:
         return pd.DataFrame()
+    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 빈 파일·깨진 파일이면 그 칸만 비움
+        print(f'[빠진 자료] {name} → 그 칸만 비우고 계속: {type(e).__name__}')
+        return pd.DataFrame()
 
 
 def _date(s):
