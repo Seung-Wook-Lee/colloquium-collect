@@ -871,7 +871,7 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     a1, g1 = rio(c)
     a2, g2, tbl = phobos(c)
     sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, tbl))
-    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·눈에 띄는 저평가 종목', picks_ + a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
+    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
     a, g = miss_chart(c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
         a, g = nyx(c, who); sections.append(('4 퀀트센터 — 닉스 팀', who, role, a, g, ''))
@@ -883,7 +883,21 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     a, g = gukjang(c, EV, CAL); sections.append(('6 기타', '국장', '일정·승인 매체 기사·사건', a, g, ''))
     if c.R.get('반대'):   # 11/20 의장: 회의니까 다른 위원이 반대한다
         a, g = objections(c); sections.append(('7 반대 의견', c.R['반대'].get('위원', '미스 리스크'), '오늘의 한 종목 반대', a, g, ''))
-    return c, sections
+    # 11/20 의장 "종목 추천은 마지막에 해. 중간에 쓸데없는 추천하지 말고": 위원별 '오늘의 한 종목' 줄은 원고에서 뺀다(csv는 그대로),
+    # 뚜지의 추천 목록·제외 줄은 맨 끝 칸으로 옮기고, 종목 추천은 그 칸 하나에서만 한다.
+    REC = _re.compile(r'^(추천 \d+|제외 |오늘의 추천 종목)')
+    moved, out = [], []
+    for sec, who, role, lines, g, extra in sections:
+        keep = []
+        for l in lines:
+            if l.title == '오늘의 한 종목':
+                continue
+            (moved if who.startswith('뚜지') and REC.match(str(l.title)) else keep).append(l)
+        out.append((sec, who, role, keep, g, extra))
+    last = picks_ + moved
+    if last:
+        out.append(('8 종목 추천', '뚜지(센터장)', '눈에 띄는 저평가 종목·엔진 추천', last, [], ''))
+    return c, out
 
 
 def render_txt(sections, today, picks, note=''):
@@ -893,8 +907,6 @@ def render_txt(sections, today, picks, note=''):
            '숫자는 07시 수집 파일·엔진 결과 그대로. "└ 근거"는 그 줄의 출처·규칙.']
     if note:
         out.append(note)
-    c0 = picks.get('센터')
-    out += ['', f"■ 오늘의 한 종목(뚜지): {c0['종목'] if c0 and c0['종목'] else '해당 없음'}" + (f" — {c0['근거']}" if c0 and c0['근거'] else '')]
     cur = None
     for sec, who, role, lines, _, extra in sections:
         if sec != cur:
@@ -924,9 +936,6 @@ def render_md(sections, today, picks, note=''):
     out = [f'# 콜로키움 회의 원고 {day}']
     if note:
         out.append(_it(note))
-    c0 = picks.get('센터')
-    if c0 and c0['종목']:
-        out += ['', f"**오늘의 한 종목(뚜지)**: [{c0.get('표시') or '추천'}] {c0['종목']}" + (f" — {c0['근거']}" if c0['근거'] else '')]
     for sec, who, role, lines, _, extra in sections:
         out += ['', f'## {sec} | {who}', '', f'{who}:', '']
         for i, l in enumerate(lines, 1):
