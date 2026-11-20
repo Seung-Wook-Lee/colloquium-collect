@@ -36,7 +36,7 @@ h1, h2, h3, h4, h5 {font-weight: 500 !important; letter-spacing: -0.2px;}
 .why {font-size: 13px; color: #888; line-height: 1.6;}
 .sec-t {font-size: 22px; font-weight: 500; line-height: 1.4; margin: 2px 0 10px; font-family: inherit; font-variant-numeric: lining-nums;}
 .big-t td, .big-t th {font-size: 18px !important; padding: 8px 14px !important;}
-.who {font-size: 13px; font-weight: 400; color: #8a8a8a; margin-left: 10px; letter-spacing: 0.2px;}
+.who {font-size: 14px; font-weight: 500; color: #4a4a4a; margin-left: 10px; letter-spacing: 0.2px;}
 .box-t {font-size: 17px; font-weight: 500; color: #333; margin-bottom: 4px;}
 .note {font-size: 12.5px; color: #8a8a8a; line-height: 1.6; margin-top: 6px;}
 </style>''', unsafe_allow_html=True)
@@ -331,6 +331,16 @@ def hy_chart():
     return True
 
 
+FULL = [('HY spread', 'High Yield Spread'), ('UST 10Y yield', 'US Treasury 10-Year Yield'),
+        ('HMM bear-regime probability', 'Hidden Markov Model bear-regime probability')]
+
+
+def full_name(t):   # 11/20 의장: 약자로 쓰지 말고 다 쓴다
+    for k, v in FULL:
+        t = t.replace(k, v)
+    return t
+
+
 def why_box(why):
     short = re.sub(r'\s*—\s*퀀트센터/\S+', '', why)
     short = re.sub(r'\(\S+\.csv[^)]*\)|07시 |\S+\.csv', '', short)
@@ -350,9 +360,16 @@ def render(body):
         bl = [b for b in bl if b not in quotes]
     rows, whys = [], []
 
+    cnt = [0]
+    CIRC = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚'
+
+    def circ(t):   # 11/20 의장: 칸 안 항목은 동그라미 번호를 위에서부터
+        cnt[0] += 1
+        return f"{CIRC[cnt[0] - 1] if cnt[0] <= len(CIRC) else cnt[0]} {t}"
+
     def flush():
         if rows:
-            t = '| 항목 | 내용 |\n|---|---|\n' + '\n'.join(f'| {r[0]} | {r[1].replace("|", "·")} |' for r in rows)
+            t = '| 항목 | 내용 |\n|---|---|\n' + '\n'.join(f'| {circ(r[0])} | {r[1].replace("|", "·")} |' for r in rows)
             st.markdown(t)
             rows.clear()
 
@@ -366,7 +383,7 @@ def render(body):
     for b in bl:
         if b[0] == 'item':
             _, n, title, val, why = b
-            title = title.replace('근원 CPI', 'Core CPI').replace('근원 PCE', 'Core PCE')   # 11/20 의장: 연준 용어 그대로
+            title = full_name(title.replace('근원 CPI', 'Core CPI').replace('근원 PCE', 'Core PCE'))   # 11/20 의장: 연준 용어 그대로
             if '10년 실질' in title:   # 11/20 의장: 10년 실질금리 삭제
                 continue
             val = val.replace('직전 발표 대비', '전월 대비')

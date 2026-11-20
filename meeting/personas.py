@@ -384,6 +384,50 @@ def miss_citadel(c):
     return out, G, '\n\n'.join(_gmd(g) for g in G)
 
 
+def macro_table(c):
+    """11/20 의장: 매크로 체크리스트는 칸 맨 아래로, 이유·근거를 표로 자세히, 몇 번째 항목(빨강·주황 박스)인지도."""
+    out = []
+    C = _read(c.d, '매크로체크리스트')
+    if len(C):
+        sm = C[C['항목'] == '요약']
+        X = C[C['항목'] != '요약'].reset_index(drop=True)
+        head = str(sm.iloc[0]['값']).split('|')[0].strip() if len(sm) else ''
+        good, bad = (X['좋아질 기미'] == '예').sum(), (X['나빠질 기미'] == '예').sum()
+        rows = ['| 번호 | 항목 | 값 | 1주 전 | 1달 전 | 20일 고점 | 20일 저점 | 판정 | 판정 기준 | 출처 |', '|---|---|---|---|---|---|---|---|---|---|']
+        for i, r in X.iterrows():
+            j = '좋아질 기미' if r.get('좋아질 기미') == '예' else ('나빠질 기미' if r.get('나빠질 기미') == '예' else '변화 없음')
+            rows.append(f"| {i + 1} | {r['항목']} | {r['값']} | {r.get('1주 전', '')} | {r.get('1달 전', '')} | {r.get('최근 고점', '')} | {r.get('최근 저점', '')} | "
+                        f"{j} | {r.get('나쁜 쪽', '')} 나쁨, {r.get('문턱(가정치)', '')} | {r.get('출처', '')} |")
+        out += [f"**매크로 체크리스트 · {head} · 좋아질 기미 {good}/{len(X)}, 나빠질 기미 {bad}/{len(X)}**", '', '\n'.join(rows).replace('nan', ''), '']
+    M = c.M
+    if len(M):
+        X = M.copy()
+        X['_on'] = X['결과'] == '통과'
+        X = X.sort_values(['방향', '_on', '블록'], ascending=[True, False, True]).reset_index(drop=True)
+        nb, no = (X['방향'] == '부담'), (X['방향'] == '기회')
+        rows = ['| 번호 | 블록 | 질문 | 공식 | 쪽 | 오늘 |', '|---|---|---|---|---|---|']
+        for i, r in X.iterrows():
+            nm = _re.sub(r'\((기회|부담)\)', '', str(r['공식'])).strip()
+            en_ = str(r['영문']) if ok(r.get('영문')) else ''
+            for k, v in (('HY spread', 'High Yield Spread'), ('UST 10Y yield', 'US Treasury 10-Year Yield'), ('HY ', 'High Yield Spread '),
+                         ('HMM bear-regime probability', 'Hidden Markov Model bear-regime probability'), ('HMM', 'Hidden Markov Model')):
+                en_, nm = en_.replace(k, v), nm.replace(k, v)   # 11/20 의장: 약자 금지
+            rows.append(f"| {i + 1} | {r['블록']} | {r['질문']} | {(en_ + ' — ') if en_ else ''}{nm} | "
+                        f"{'나쁜 신호(부담)' if r['방향'] == '부담' else '좋은 신호(기회)'} | {'켜짐' if r['_on'] else '꺼짐'} |")
+        out += [f"**시장 블록 · 나쁜 신호(부담) {nb.sum()}개 중 {(nb & X['_on']).sum()}개 켜짐, 좋은 신호(기회) {no.sum()}개 중 {(no & X['_on']).sum()}개 켜짐**",
+                '', '\n'.join(rows), '']
+    K = _read(c.d, '리스크')
+    if len(K) and '신호' in K:
+        Z = K[K['신호'].astype(str).str.contains('빨강|주황')].reset_index(drop=True)
+        if len(Z):
+            rows = ['| 번호 | 구분 | 항목 | 값 | 신호 | 이유 | 의장 기준 |', '|---|---|---|---|---|---|---|']
+            for i, r in Z.iterrows():
+                rows.append(f"| {i + 1} | {r.get('구분', '')} | {r['항목']} | {r['값']}{'' if str(r.get('단위', 'nan')) == 'nan' else r.get('단위')} | "
+                            f"{r['신호']} | {r.get('표시', '')} | {r.get('의장 기준(참고)', '')} |")
+            out += [f"**리스크 표 빨강·주황 박스 {len(Z)}개**", '', '\n'.join(rows).replace('nan', ''), '']
+    return '\n'.join(out)
+
+
 def rio(c):
     out = []
     for it in ('CPI 전년비', '근원 CPI 전년비', '근원 PCE 전년비'):   # 11/20 의장: CPI·Core CPI 둘 다, 연준 용어, 전월 대비
@@ -412,16 +456,7 @@ def rio(c):
         out.append(L('시장 이격', f"코스피 50일 이격 {g:.1f}", '지수2년.csv 계산', val=f"코스피 50일 이격 {g:.1f}",
                      crit=f"{warn} 과열 주의 · {hot} 과열" + (' → 과열' if g >= hot else (' → 과열 주의' if g >= warn else '')),
                      sig='red' if g >= hot else ('orange' if g >= warn else '')))
-    C = _read(c.d, '매크로체크리스트')
-    if len(C):
-        s = C[C['항목'] == '요약']
-        if len(s):
-            out.append(L('매크로 체크리스트', str(s.iloc[0]['값']),
-                         '좋아질 기미: ' + (', '.join(C[(C['항목'] != '요약') & (C['좋아질 기미'] == '예')]['항목']) or '없음') +
-                         ' / 나빠질 기미: ' + (', '.join(C[(C['항목'] != '요약') & (C['나빠질 기미'] == '예')]['항목']) or '없음')))
-    b, o = c.burden_opp()
-    out.append(L('시장 블록', f"부담 통과 {len(b)}개, 기회 통과 {len(o)}개", '엔진 out_시장블록'))
-    out += c.block_lines('부담') + c.block_lines('기회')
+    b, o = c.burden_opp()   # 11/20 의장: 시장 블록은 칸 맨 아래 표로 자세히(macro_table)
     dfn = any(c.m.get(f'DEF_{mk}') for mk in ('한국', '미국'))
     go = eval(c.R['미스 리스크']['여건_규칙'], {'__builtins__': {}}, {'기회': len(o), '부담': len(b), '방어': dfn})
     out.append(L('현금 집행 여건', '됨' if go else '아님', f"기회 {len(o)}, 부담 {len(b)}, 방어 국면 {'예' if dfn else '아니오'}",
@@ -871,7 +906,7 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)는 겹치니 '미스 리스크' 한 위원으로 합친다
     a1, g1 = rio(c)
     a2, g2, tbl = phobos(c)
-    sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, tbl))
+    sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, (tbl + '\n\n' + macro_table(c)).strip()))   # 체크리스트는 맨 아래
     a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
     a, g = miss_chart(c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
