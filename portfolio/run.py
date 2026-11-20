@@ -80,6 +80,13 @@ def buy_state(path):
     return out
 
 
+def split_frac(text):
+    """'산다 — 3번 나눠 1번째' → 1/3. 나눔이 없으면 1."""
+    import re
+    m = re.search(r'(\d+)번 나눠 (\d+)번째', text or '')
+    return min(1.0, int(m.group(2)) / int(m.group(1))) if m else 1.0
+
+
 def load_last(path):
     if not os.path.exists(path):
         return pd.DataFrame(columns=['포트폴리오', '티커', '비중(%)'])
@@ -132,6 +139,10 @@ def pick(T, spec, book):
         x = x.query(spec['거르기'])
     x = x.sort_values('점수', ascending=False).head(spec.get('최대종목', 15))
     add = T[T['티커'].isin(spec.get('더하기', []))]
+    ref = book.get('_기준가', {})
+    held = book.get('_지난주', set())
+    x = pd.concat([x, add]).drop_duplicates('티커')
+    return x[[not (t in ref and t not in held and ref[t][1] > ref[t][0]) for t in x['티커']]]   # 의장 장기 후보: 기준가 위면 새로 담지 않음
     return pd.concat([x, add]).drop_duplicates('티커')
 
 
@@ -170,7 +181,11 @@ def build(name, book, T, P, common, state, last):
     sat = book['위성']
     mk_buy = [state.get(m, (True, '결론 없음')) for m in book['시장']]
     if all(b for b, _ in mk_buy):
-        C = pick(T, sat, book)
+        held = set(last[last['포트폴리오'] == name]['티커']) if len(last) else set()
+        C = pick(T, sat, {**book, '_기준가': common.get('_기준가', {}), '_지난주': held})
+        for t, r in common.get('_기준가', {}).items():
+            if t in T[T['시장'].isin(book['시장'])]['티커'].values and t not in C['티커'].values and t not in held and r[1] > r[0]:
+                notes.append(f"{t} 현재 {r[1]:.1f} > 의장 기준가 {r[0]:g} → 새로 담지 않음")
         bl = book.get('블랙리터만') if METHODS.get(sat.get('방식')) == 'bl' else None
         w, c = sleeve(C['티커'].tolist(), sat_share, METHODS.get(sat.get('방식'), 'iv'), P, yrs, score, sat.get('종목상한'), bl)
         cash += c
@@ -216,7 +231,10 @@ def label_of(T, t):
     r = T[T['티커'] == t]
     if t == '현금(MMF)' or not len(r):
         return t
-    return UL.label(r.iloc[0].rename({'티커': 'yfinance 티커'}))
+    r = r.iloc[0]
+    if r['구분'] == 'ETF':   # 11/20 의장: ETF는 티커. 미국은 티커만, 한국은 '이름 (종목코드)'
+        return t if r['시장'] == '미국' else f"{r['정식 종목명']} ({r['코드'] or t.split('.')[0]})"
+    return UL.label(r.rename({'티커': 'yfinance 티커'}))
 
 
 def main():
@@ -246,9 +264,13 @@ def main():
     P = UL.prices(tick, max(ucfg['변동성_년'], common.get('공분산_년', 3)))
     U = UL.classify(U, ucfg, UL.vol_from(P[P.index >= P.index.max() - pd.DateOffset(years=ucfg['변동성_년'])], tick, ucfg.get('제외_구간', [])))
 
+    cand = QCC.load_blocks().get('의장 장기 후보') or {}
+    num2t = U.set_index('번호')['yfinance 티커'].to_dict()
+    common['_기준가'] = {num2t[k]: (v['기준가'], float(P[num2t[k]].dropna().iloc[-1])) for k, v in cand.items()
+                        if k in num2t and num2t[k] in P and v.get('기준가')}
     sc = common.get('점수칸', '순위점수')
     S = S.drop(columns=['층'], errors='ignore').rename(columns={sc if sc in S else '점수': '_점수'})
-    T = U[['번호', '정식 종목명', '시장', '구분', 'yfinance 티커', '층', '연변동성']].rename(columns={'yfinance 티커': '티커'}).merge(
+    T = U[['번호', '정식 종목명', '시장', '구분', '코드', 'yfinance 티커', '층', '연변동성']].rename(columns={'yfinance 티커': '티커'}).merge(
         S[['번호', '_점수', '추천', '원칙'] + [c for c in S.columns if c.startswith('B') and c[1:].isdigit()]], on='번호', how='left')
     T = T.rename(columns={'_점수': '점수'})
     T['점수'] = pd.to_numeric(T['점수'], errors='coerce')
@@ -273,18 +295,38 @@ def main():
         g['비중(%)'] = 0.0
         A = pd.concat([A, g], ignore_index=True)
     A['차이(%p)'] = (A['비중(%)'] - A['지난주(%)']).round(1)
+    A['이번주 집행(%)'] = A['비중(%)']
+    for name, book in books.items():   # 결론 '산다 — N번 나눠 K번째': 늘리는 몫은 K/N만 이번 주에, 나머지 현금(MMF). 정기 적립 포트폴리오는 제외
+        if book.get('나눠사기', True) is False:
+            continue
+        fr = [split_frac(state.get(m, (None, ''))[1]) for m in book['시장']]
+        f = min(fr) if fr else 1.0
+        if f >= 1:
+            continue
+        m = (A['포트폴리오'] == name) & (A['몫'] != '현금')
+        A.loc[m, '이번주 집행(%)'] = (A.loc[m, '지난주(%)'] + (A.loc[m, '비중(%)'] - A.loc[m, '지난주(%)']).clip(lower=0) * f
+                                   + (A.loc[m, '비중(%)'] - A.loc[m, '지난주(%)']).clip(upper=0)).round(1)
+        c = (A['포트폴리오'] == name) & (A['몫'] == '현금')
+        rest = round(100 - A.loc[m, '이번주 집행(%)'].sum(), 1)
+        if c.any():
+            A.loc[c, '이번주 집행(%)'] = rest
+        else:
+            A = pd.concat([A, pd.DataFrame([{'포트폴리오': name, '몫': '현금', '티커': '현금(MMF)', '종목': '현금(MMF)', '층': '', '비중(%)': 0.0,
+                                             '지난주(%)': prev.get((name, '현금(MMF)'), 0.0), '이번주 집행(%)': rest}])], ignore_index=True)
+            A['차이(%p)'] = (A['비중(%)'] - A['지난주(%)']).round(1)
+        next(h for h in head if h[0] == name)[4].append(f'결론이 나눠 사기 → 늘리는 몫의 {f:.0%}만 이번 주 집행, 나머지 현금(MMF)')
     order = {'코어': 0, '해외ETF': 1, '위성': 2, '현금': 3}
     A = A.sort_values(['포트폴리오', '몫', '비중(%)'], key=lambda s: s.map(order) if s.name == '몫' else (s.map(list(books).index) if s.name == '포트폴리오' else -s))
-    A = A[['포트폴리오', '몫', '종목', '티커', '층', '비중(%)', '지난주(%)', '차이(%p)']]
+    A = A[['포트폴리오', '몫', '종목', '티커', '층', '비중(%)', '지난주(%)', '차이(%p)', '이번주 집행(%)']]
 
     md = [f'# 포트폴리오 회의 {today[:4]}-{today[4:6]}-{today[6:]}', '',
           '비중(%)만 표시. 지난주 대비 차이. 규칙: portfolio.yaml, 계산법: 표준 이론(계층적 위험 균형·위험 균형·블랙-리터만·점수 × 역변동성·변동성 목표·공분산 축소).', '']
     for name, desc, mk, vol, notes in head:
         g = A[A['포트폴리오'] == name]
         md += [f'## {name}', '', f'- {desc}', f'- 결론: {mk}', f"- 예상 연 변동성: {vol * 100:.1f}%" if pd.notna(vol) else '- 예상 연 변동성: 계산 못함']
-        md += [f'- {n}' for n in notes] + ['', '| 몫 | 종목 | 층 | 비중(%) | 지난주(%) | 차이(%p) |', '|---|---|---|---|---|---|']
-        md += [f"| {r['몫']} | {r['종목']} | {r['층']} | {r['비중(%)']:.1f} | {r['지난주(%)']:.1f} | {r['차이(%p)']:+.1f} |" for _, r in g.iterrows()]
-        md += [f"| 합계 | | | {g['비중(%)'].sum():.1f} | {g['지난주(%)'].sum():.1f} | |", '']
+        md += [f'- {n}' for n in notes] + ['', '| 몫 | 종목 | 층 | 목표 비중(%) | 지난주(%) | 차이(%p) | 이번 주 집행(%) |', '|---|---|---|---|---|---|---|']
+        md += [f"| {r['몫']} | {r['종목']} | {r['층']} | {r['비중(%)']:.1f} | {r['지난주(%)']:.1f} | {r['차이(%p)']:+.1f} | {r['이번주 집행(%)']:.1f} |" for _, r in g.iterrows()]
+        md += [f"| 합계 | | | {g['비중(%)'].sum():.1f} | {g['지난주(%)'].sum():.1f} | | {g['이번주 집행(%)'].sum():.1f} |", '']
     txt = '\n'.join(md)
     outs = {f'{today}_포트폴리오.csv': A.to_csv(index=False).encode('utf-8-sig'), f'{today}_포트폴리오.md': txt.encode('utf-8')}
     for k, v in outs.items():
