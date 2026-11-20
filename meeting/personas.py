@@ -653,6 +653,11 @@ def conclusion(c):
     WB = _read2(c.d, '바닥근접도_무엇을살까_나스닥100')
     kr = c.mac_row('코스피')
     kdd = num(kr.get('최고 대비(%)')) if kr is not None else None
+    KC = _read2(c.d, '조정단계_오늘_코스피')   # 11/20 의장: 한국 '산다' 문턱 = 미국 correction(−10%) × 코스피 변동성 비율(매일)
+    kmul = num(KC.iloc[0].get('단계배수')) if len(KC) and '단계배수' in KC else None
+    kthr = -R['한국_산다_미국단계'] * kmul if (kmul is not None and R.get('한국_산다_미국단계')) else None
+    kdesc = (f"미국 −{R['한국_산다_미국단계']:g}% correction × 코스피 배수 {kmul:.2f}(최근 {n(KC.iloc[0].get('배수_년'), 0)}년 주간 변동성 ÷ S&P500) = {kthr:.1f}%"
+             if kthr is not None else '한국 문턱 자료 없음(조정단계_오늘_코스피.csv 단계배수)')
     T = c.T
     cand_all = T[(T.get('원칙', pd.Series(index=T.index, dtype=str)) == '떨어진 우량주') & T['추천'].isin(['추천', '관찰'])]
     beta = _betas(c, pd.concat([cand_all, T[T['종목'].isin([r['종목'] for r in c.top])]]).drop_duplicates('번호'))
@@ -664,11 +669,11 @@ def conclusion(c):
             act, why = '산다(바닥 경보)', f"나스닥100 바닥 근접도 {nd:.3f} ≥ 경보 {R['바닥_경보']}"
         elif mk == '미국' and nd is not None and nd >= R['바닥_준비']:
             act, why = f"산다 — {R['나눔']}번 나눠 1번째(바닥 준비)", f"나스닥100 바닥 근접도 {nd:.3f} ≥ 준비 {R['바닥_준비']}(경보 {R['바닥_경보']})"
-        elif mk == '한국' and kdd is not None and kdd <= R['한국_조정']:
-            act, why = f"산다 — {R['나눔']}번 나눠 1번째(많이 빠짐)", f"코스피 사상 최고 대비 {kdd:+.1f}% ≤ {R['한국_조정']}%(후보값)"
+        elif mk == '한국' and kdd is not None and kthr is not None and kdd <= kthr:
+            act, why = f"산다 — {R['나눔']}번 나눠 1번째(많이 빠짐)", f"코스피 사상 최고 대비 {kdd:+.1f}% ≤ {kdesc}"
         elif dfn:
             why = (f"방어 국면, 나스닥100 바닥 근접도 {n(nd, 3)} < 준비 {R['바닥_준비']}" if mk == '미국'
-                   else f"방어 국면, 코스피 사상 최고 대비 {p(kdd)} > {R['한국_조정']}%(후보값)")
+                   else f"방어 국면, 코스피 사상 최고 대비 {p(kdd)} > {kdesc}")
             act = '아직 사지 않는다(약세장, 바닥 신호 없음)'
         else:
             act, why = '엔진 포트폴리오대로', '평상 국면'

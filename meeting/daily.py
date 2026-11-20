@@ -274,8 +274,8 @@ def bottom(W, use_drive, B, S):
                 log(f'[조정단계] {idx} 실패: {str(e)[:120]}')
         for idx in ('^KS11', '^KQ11'):   # 11/20 의장: 국내도 — 조정 단계표는 코스피·코스닥도
             try:
-                import correction as COR
-                COR.run(W, idx, (B.get('바닥') or {}).get('조정'))
+                import correction as COR   # 11/20 의장: 한국 단계 = 미국 단계 × 변동성 비율(창 길이는 비공개 결론 '한국_배수_년')
+                COR.run(W, idx, {**((B.get('바닥') or {}).get('조정') or {}), '한국_배수_년': (B.get('결론') or {}).get('한국_배수_년')})
             except Exception as e:   # noqa: BLE001
                 log(f'[조정단계] {idx} 실패: {str(e)[:120]}')
         return {os.path.basename(k): open(k, 'rb').read() for k in glob.glob(f'{W}/바닥근접도*.csv') + glob.glob(f'{W}/조정*.csv')}
