@@ -45,6 +45,9 @@ def p(v, d=1, u='%'):
     return '자료 없음' if v is None else f'{v:+,.{d}f}{u}'
 
 
+GAL = {'눌림': '52주 고점에서 10% 넘게 떨어짐(눌림)', '주도': '52주 고점 10% 안(주도)'}
+
+
 class L:
     """발언 한 줄: 제목, 사실, 이유(근거). 이유는 화면에서 작은 회색 글씨."""
     def __init__(self, title, fact, why=''):
@@ -157,6 +160,12 @@ class Ctx:
         self.news = _read(d, '뉴스')
         self.picks = {}
         self.top, self.drops = top7(self.T, RC)
+        bd = R.get('엘피스_200일선') or {}   # 11/20 의장: 현재가 ÷ 200일선이 하단~상단 = '안', 하단 아래 = '추세 무너짐', 상단 위 = '위'
+        x = pd.to_numeric(self.T['px_ma200'], errors='coerce') if 'px_ma200' in self.T else pd.Series(np.nan, index=self.T.index)
+        lo, hi = num(bd.get('하단')), num(bd.get('상단'))
+        self.T['구간200'] = (np.where(x < lo, '추세 무너짐', np.where(x > hi, '위', '안')) if lo is not None and hi is not None else None)
+        self.T.loc[x.isna(), '구간200'] = None
+        self.band200 = dict(하단=lo, 상단=hi)
         self.U = _read(d, '유니버스')
 
     def mac_row(self, item):
@@ -172,6 +181,15 @@ class Ctx:
         b = M[(M['방향'] == '부담') & (M['결과'] == '통과')]['공식'].tolist()
         o = M[(M['방향'] == '기회') & (M['결과'] == '통과')]['공식'].tolist()
         return b, o
+
+    def block_lines(self, side):
+        """11/20 의장: 통과한 시장 블록 공식을 영어 공식 이름(굵은 제목) + 한글 설명(아랫줄)으로."""
+        M = self.M
+        if not len(M):
+            return []
+        X = M[(M['방향'] == side) & (M['결과'] == '통과')]
+        return [L(str(r['영문']) if ok(r.get('영문')) else r['공식'], _re.sub(r'\((기회|부담)\)', '', str(r['공식'])).strip(), f"{r['블록']} {r['질문']} · {side}")
+                for _, r in X.iterrows()]
 
     def regime(self, mk):
         m = self.m
@@ -315,7 +333,8 @@ def rio(c):
                          '좋아질 기미: ' + (', '.join(C[(C['항목'] != '요약') & (C['좋아질 기미'] == '예')]['항목']) or '없음') +
                          ' / 나빠질 기미: ' + (', '.join(C[(C['항목'] != '요약') & (C['나빠질 기미'] == '예')]['항목']) or '없음')))
     b, o = c.burden_opp()
-    out.append(L('시장 블록', f"부담 통과 {len(b)}개, 기회 통과 {len(o)}개", f"부담: {', '.join(b) or '없음'} / 기회: {', '.join(o) or '없음'} (엔진 out_시장블록)"))
+    out.append(L('시장 블록', f"부담 통과 {len(b)}개, 기회 통과 {len(o)}개", '엔진 out_시장블록'))
+    out += c.block_lines('부담') + c.block_lines('기회')
     dfn = any(c.m.get(f'DEF_{mk}') for mk in ('한국', '미국'))
     go = eval(c.R['리오']['여건_규칙'], {'__builtins__': {}}, {'기회': len(o), '부담': len(b), '방어': dfn})
     out.append(L('현금 집행 여건', '됨' if go else '아님', f"규칙: {c.R['리오']['여건_규칙']} (기회 {len(o)}, 부담 {len(b)}, 방어 국면 {'예' if dfn else '아니오'})"))
@@ -362,7 +381,7 @@ def ttuji(c):
                  '콜로키움_룰.txt 2장 + blocks.yaml 추천 설정'))
     for i, r in enumerate(c.top, 1):
         warn = f", 주문 {int(r['주문승수']*100)}%({r['경보']})" if ok(r.get('주문승수')) and r['주문승수'] < 1 else ''
-        out.append(L(f'추천 {i}', f"{r['종목']} — 블록 예 {int(r['블록예']) if ok(r.get('블록예')) else '-'}/{int(r['블록수']) if ok(r.get('블록수')) else '-'}({n(r['블록예비율'], 2)}), 싼가 {n(r['싼가'], 2)}, 갈래 {r['갈래']}{warn}",
+        out.append(L(f'추천 {i}', f"{r['종목']} — 블록 예 {int(r['블록예']) if ok(r.get('블록예')) else '-'}/{int(r['블록수']) if ok(r.get('블록수')) else '-'}({n(r['블록예비율'], 2)}), 싼가 {n(r['싼가'], 2)}, {GAL.get(r['갈래'], r['갈래'])}{warn}",
                      f"드문 통과 공식: {r['왜'] or '없음'} · 3년 PER 하위 {n((num(r.get('per_pct3')) or float('nan'))*100, 0, '%')}"))
     if not c.top:
         out.append(L('오늘의 추천 종목', '없음', '추천 등급이 거르기·안정성 조건을 통과하지 못함'))
@@ -486,20 +505,25 @@ def desks(c):
 def elpis(c):
     out = []
     b, o = c.burden_opp()
-    out.append(L('기회 블록', ', '.join(o) or '통과 없음', '엔진 시장 블록 중 방향 = 기회, 결과 = 통과'))
+    out.append(L('기회 블록', f"통과 {len(o)}개" if o else '통과 없음', '엔진 시장 블록 중 방향 = 기회, 결과 = 통과'))
+    out += c.block_lines('기회')
     G = _read(c.d, '공포탐욕')
     if len(G):
         sc = num(G[G['구분'] == '종합'].iloc[0]['점수'])
         pull = c.T[(c.T['갈래'] == '눌림') & (c.T['추천'].isin(['추천', '관찰']))]   # 11/19 가짜 바닥 검사 폐지
-        out.append(L('공포 속 기회', f"Fear & Greed {n(sc, 1)}, 눌림 갈래 추천·관찰 중 200일선×0.95 위 {len(pull)}종목",
-                     '엔진 갈래(고점 −10% 밖 = 눌림)와 가짜 바닥 아님(제이미 B29)'))
+        bd = c.band200; rng = f"200일선의 {n(bd['하단'], 2)}~{n(bd['상단'], 2)}배"
+        inn, broke = pull[pull['구간200'] == '안'], pull[pull['구간200'] == '추세 무너짐']
+        out.append(L('공포 속 기회', f"Fear & Greed {n(sc, 1)}, 52주 고점에서 10% 넘게 떨어진 추천·관찰 종목 중 {rng} 사이 {len(inn)}종목"
+                     + (f" (추세 무너짐으로 뺌 {len(broke)}종목: {', '.join(broke['종목'].head(5))})" if len(broke) else ''),
+                     f"52주 고점에서 10% 넘게 떨어진 종목(눌림) 중 현재가가 {rng} 사이. {n(bd['하단'], 2)}배 아래 = 추세 무너짐"))
     for it in ('WTI', '금', '원/달러'):
         r = c.mac_row(it)
         if r is not None:
             out.append(L(it, f"{n(r['값'], 2)}(1달 {p(r['1달'])}, YTD {p(r['YTD'])})", f"{r['기준일']} {r['출처']}"))
-    rule = c.R['한종목']['엘피스']
+    rule = dict(c.R['한종목']['엘피스'])
+    rule['설명'] = rule.get('설명', '').replace('{하단}', n(c.band200['하단'], 2)).replace('{상단}', n(c.band200['상단'], 2))
     r, cnt = pick(c.T, rule)
-    out.append(c.pick_line('엘피스', rule, r, cnt, lambda r: f"52주 고점 대비 {p(r.get('dd52'))}, 블록 예 {n(r['블록예비율'], 2)}, 200일선 {n(r.get('ma200'), 2)} 위"))
+    out.append(c.pick_line('엘피스', rule, r, cnt, lambda r: f"52주 고점 대비 {p(r.get('dd52'))}, 블록 예 {n(r['블록예비율'], 2)}, 현재가 ÷ 200일선 {n(r.get('px_ma200'), 2)}(200일선 {n(r.get('ma200'), 2)})"))
     return out, []
 
 

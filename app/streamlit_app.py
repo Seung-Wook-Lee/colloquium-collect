@@ -884,7 +884,7 @@ with t1:
                                  width='stretch')
             g3_, g4_ = st.columns(2)
             if '변동성타기팅 노출(배)' in fp:
-                g3_.altair_chart(fp_line('변동성타기팅 노출(배)', '변동성 타기팅 노출(10% ÷ 실현변동성, 상한 1.5)', fmt_='.2f'),
+                g3_.altair_chart(fp_line('변동성타기팅 노출(배)', 'Vol-target exposure (목표변동성 10% ÷ 실현변동성, 상한 1.5)', fmt_='.2f'),
                                  width='stretch')
             if 'VIX−실현변동성(%p)' in fp:
                 g4_.altair_chart(fp_line('VIX−실현변동성(%p)', 'VIX − S&P 실현변동성(%p): 사건 보험료', rules=((0, '#999'),)),
