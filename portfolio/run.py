@@ -71,7 +71,12 @@ def buy_state(path):
         return {}
     J = json.load(open(path, encoding='utf-8'))
     out = {}
+    import re
     for m in J.get('members', []):
+        for ln in m.get('lines', []) or []:   # 옛 형식: '2. **미국: 지금 살 때인가**: 산다 — ...'
+            g = re.match(r'^\d+\. \*\*(.+?): 지금 살 때인가\*\*: (.*?)(\s+\n|$)', ln)
+            if g:
+                out[g.group(1).strip()] = (g.group(2).startswith('산다'), g.group(2).strip())
         for r in m.get('rows', []) or []:
             t = r.get('항목', '')
             if t.endswith(': 지금 살 때인가'):
@@ -187,6 +192,14 @@ def build(name, book, T, P, common, state, last):
             if t in T[T['시장'].isin(book['시장'])]['티커'].values and t not in C['티커'].values and t not in held and r[1] > r[0]:
                 notes.append(f"{t} 현재 {r[1]:.1f} > 의장 기준가 {r[0]:g} → 새로 담지 않음")
         bl = book.get('블랙리터만') if METHODS.get(sat.get('방식')) == 'bl' else None
+        if len(C) < sat.get('최대종목', 15):   # 후보가 모자라면 어디서 걸렸는지(엔진 판정표 그대로) 설명
+            Z = T[T['시장'].isin(book['시장']) & T['층'].isin(book['층']) & ((T['구분'] == sat['구분']) if sat.get('구분') else True)]
+            wait = Z['원칙'].astype(str).str.contains('추세 확인 대기')
+            vc = Z.loc[~wait, '추천'].value_counts()
+            top = ', '.join(f'{k} {v}' for k, v in vc.items() if k not in sat.get('추천', []))
+            notes.append(f"위성 후보 {len(C)}개(최대 {sat.get('최대종목', 15)}). {'/'.join(book['시장'])} {'·'.join(book['층'])} {sat.get('구분', '')}: "
+                         f"관찰(추세 확인 대기: 층별 기준, 추세 블록 아니오) {int(wait.sum())}"
+                         + (f" [{', '.join(Z.loc[wait, '정식 종목명'].head(6))}]" if wait.any() else '') + (f", {top}" if top else ''))
         w, c = sleeve(C['티커'].tolist(), sat_share, METHODS.get(sat.get('방식'), 'iv'), P, yrs, score, sat.get('종목상한'), bl)
         cash += c
     else:   # 결론 '사지 않는다': 새로 사지 않고, 지난주 위성은 그대로 둔다. 나머지는 현금(MMF)
