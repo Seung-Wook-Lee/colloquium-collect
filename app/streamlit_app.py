@@ -498,6 +498,21 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
             if head:
                 st.markdown(clean(head))
             bottom(day, name)
+        merged = []   # 11/20 의장: 같은 이름 칸(퀀트센터 미스 차트·닉스 팀, 섹터 데스크 등)은 상자 하나로
+        for title, body in secs:
+            nm, _, who = title.partition(' | ')
+            base = nm.split(' — ')[0].strip()
+            sub = (nm.split(' — ', 1)[1] + ' · ' if ' — ' in nm else '') + who
+            if merged and merged[-1][0] == base:
+                merged[-1][2].append((sub, body))
+            else:
+                merged.append([base, title, [(sub, body)], who])
+        secs = []
+        for base, title, parts, who0 in merged:
+            if len(parts) == 1:
+                secs.append((title, parts[0][1]))
+            else:   # 발표자는 첫 칸 사람 한 명(퀀트센터 = 미스 차트)
+                secs.append((f'{base} | {who0}', '\n\n'.join((f"**{en(sub)}**\n\n{b}" if i else b) for i, (sub, b) in enumerate(parts))))
         for title, body in secs:
             with st.container(border=True):
                 title = title.replace('수급·포지셔닝', 'Flows & Positioning')   # 11/20 의장: 수급·포지셔닝은 영어로
