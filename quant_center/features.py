@@ -292,8 +292,19 @@ def stocks(d):
                 pos = rmf.where(up).iloc[-14 - k:len(rmf) - k].sum(); neg = rmf.where(dn).iloc[-14 - k:len(rmf) - k].sum()
                 return 100 - 100 / (1 + pos / neg.replace(0, np.nan))
             f['mfi14'] = f['ticker'].map(mfi(0)); f['mfi14_5'] = f['ticker'].map(mfi(5))
+            # 11/20 의장 3-11 거래량: OBV(Granville 1963) 20일 기울기, 상대 거래량(20일 평균 대비) 하락일 투매, 고거래량 프리미엄(Gervais·Kaniel·Mingelgrin 2001)
+            ret_ = C_.pct_change(fill_method=None)
+            obv = (np.sign(ret_).fillna(0) * Vv.fillna(0)).cumsum()
+            x = np.arange(20) - 9.5
+            f['obv_slope20'] = f['ticker'].map((obv.tail(20).mul(x, axis=0).sum() / (x ** 2).sum()) / Vv.tail(20).mean().replace(0, np.nan))
+            rv = Vv / Vv.rolling(20, min_periods=15).mean().shift(1)
+            f['relvol'] = f['ticker'].map(rv.iloc[-1])
+            f['capit5'] = f['ticker'].map(((rv >= 2) & (ret_ < 0)).tail(5).any().astype(int).where(rv.tail(5).notna().any()))
+            f['hvp'] = f['ticker'].map(Vv.tail(5).mean() / Vv.tail(55).head(50).mean().replace(0, np.nan))
+            f['hvp_mpct'] = f.groupby('시장')['hvp'].rank(pct=True)
         except FileNotFoundError:
             f['cmf20'] = np.nan; f['mfi14'] = np.nan; f['mfi14_5'] = np.nan
+            f['obv_slope20'] = np.nan; f['relvol'] = np.nan; f['capit5'] = np.nan; f['hvp'] = np.nan; f['hvp_mpct'] = np.nan
         # Bali·Cakici·Whitelaw(2011) MAX: 최근 21일 최대 일간 수익이 큰 종목(복권형)은 이후 수익이 낮음
         f['max21'] = f['ticker'].map(r.tail(21).max() * 100)
         f['max21_mpct'] = f.groupby('시장')['max21'].rank(pct=True)
