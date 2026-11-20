@@ -28,8 +28,11 @@ st.markdown('''<style>
 .stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th {font-size: 16px; line-height: 1.9;}
 .stMarkdown table {width: 100%; border-collapse: collapse;}
 .stMarkdown td, .stMarkdown th {padding: 8px 12px;}
-.item-t {font-size: 15px; font-weight: 700; color: #555; padding-top: 6px;}
-.item-v {font-size: 18px; font-weight: 600; line-height: 1.6;}
+.item-t {font-size: 15px; font-weight: 400; color: #555; padding-top: 6px;}
+.item-v {font-size: 17px; font-weight: 400; line-height: 1.6;}
+h1, h2, h3, h4, h5 {font-weight: 500 !important; letter-spacing: -0.2px;}
+.stMarkdown strong, .stMarkdown b, [data-testid="stMetricValue"] {font-weight: 500 !important;}
+.stMarkdown th {font-weight: 500;}
 .why {font-size: 13px; color: #888; line-height: 1.6;}
 </style>''', unsafe_allow_html=True)
 
@@ -151,8 +154,8 @@ def hbar(df, label, val, fmt='+,.1f', unit='', height=None):
         color=alt.condition(f'datum["{val}"] >= 0', alt.value(BLUE), alt.value(RED)))
     df['_z'] = 0.0
     base = alt.Chart(df).encode(y=alt.Y(f'{label}:N', sort=None, title=None, axis=alt.Axis(labelFontSize=14, labelLimit=260)))
-    txt = base.mark_text(align='left', dx=4, fontSize=13, fontWeight='bold').encode(x=alt.X(f'{val}:Q'), text='_t:N')
-    neg = base.mark_text(align='left', dx=4, fontSize=13, fontWeight='bold', color=RED).encode(x=alt.X('_z:Q'), text='_t:N')
+    txt = base.mark_text(align='left', dx=4, fontSize=13).encode(x=alt.X(f'{val}:Q'), text='_t:N')
+    neg = base.mark_text(align='left', dx=4, fontSize=13, color=RED).encode(x=alt.X('_z:Q'), text='_t:N')
     layer = bars + txt.transform_filter(f'datum["{val}"] >= 0') + neg.transform_filter(f'datum["{val}"] < 0')
     st.altair_chart(layer.properties(height=height or 32 * len(df) + 20), use_container_width=True)
 
@@ -178,7 +181,9 @@ def table_chart(md):
         v = df[c].astype(str).str.strip()
         units = set(v.str.replace(r'^[+-−]?[\d,.]+', '', regex=True))
         return df[c].map(num).notna().mean() > 0.6 and v.str.match(r'^[+-−]').mean() > 0.6 and len(units) == 1
-    numc = [c for c in df.columns if c not in lab and signed(c)]
+    numc = [c for c in df.columns if c not in lab and signed(c) and re.search(r'%|억|달러', c + ''.join(df[c].astype(str)))]
+    if '종가' in df.columns:   # 11/20 의장: 지수 종가 막대는 쓰지 않는다(위 시세 칸과 겹침)
+        numc = []
     if lab and numc and len(df) >= 2:
         d = df.copy()
         key = lab[1] if len(lab) > 1 and df[lab[0]].nunique() < len(df) else lab[0]
@@ -208,6 +213,38 @@ def flow_chart(val):
     return True
 
 
+def kospi_gap():
+    """11/20 의장: 코스피 50일 이격을 그래프로(지수2년.csv ^KS11, 종가 ÷ 50일 평균 × 100, 의장 기준 125 과열 주의·130 과열)."""
+    import io
+    rel = '00_퀀트입력/지수2년.csv'
+    try:
+        if LOCAL:
+            I = pd.read_csv(Path(LOCAL) / rel, encoding='utf-8-sig', index_col=0, parse_dates=True)
+        else:
+            b = drive.get(f'{D_DATA}/{rel}')
+            I = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', index_col=0, parse_dates=True) if b else None
+    except Exception:
+        I = None
+    if I is None or '^KS11' not in I:
+        return False
+    s = pd.to_numeric(I['^KS11'], errors='coerce').dropna()
+    g = (s / s.rolling(50).mean() * 100).dropna().tail(260)
+    if g.empty:
+        return False
+    df = pd.DataFrame({'날짜': g.index, '50일 이격': g.round(1).values})
+    line = alt.Chart(df).mark_line(color=BLUE, strokeWidth=2).encode(
+        x=alt.X('날짜:T', title=None), y=alt.Y('50일 이격:Q', title=None, scale=alt.Scale(zero=False)),
+        tooltip=['날짜:T', '50일 이격:Q'])
+    ref = pd.DataFrame({'y': [100, 125, 130], '이름': ['50일 평균', '과열 주의 125', '과열 130']})
+    rules = alt.Chart(ref).mark_rule(strokeDash=[4, 4], color='#999').encode(y='y:Q')
+    lab = alt.Chart(ref).mark_text(align='left', dx=4, dy=-6, color='#777', fontSize=12).encode(
+        y='y:Q', x=alt.value(0), text='이름:N')
+    st.markdown(f'#### 코스피 50일 이격  {g.iloc[-1]:.1f}')
+    st.altair_chart((line + rules + lab).properties(height=260), use_container_width=True)
+    st.caption('종가를 50일 평균으로 나눈 값(×100). 최근 1년')
+    return True
+
+
 def why_box(why):
     short = re.sub(r'\s*—\s*퀀트센터/\S+', '', why)
     short = re.sub(r'\(\S+\.csv[^)]*\)|07시 |\S+\.csv', '', short)
@@ -229,7 +266,7 @@ def render(body):
 
     def flush():
         if rows:
-            t = '| 항목 | 내용 |\n|---|---|\n' + '\n'.join(f'| **{r[0]}** | {r[1].replace("|", "·")} |' for r in rows)
+            t = '| 항목 | 내용 |\n|---|---|\n' + '\n'.join(f'| {r[0]} | {r[1].replace("|", "·")} |' for r in rows)
             st.markdown(t)
             rows.clear()
 
@@ -238,6 +275,10 @@ def render(body):
             _, n, title, val, why = b
             if why:
                 whys.append(f'**{title}** — {why}')
+            if '50일 이격' in title:   # 11/20 의장: 코스피 50일 이격은 그래프로
+                flush()
+                if kospi_gap():
+                    continue
             stocks = STOCK.findall(val)
             if len(stocks) >= 2 or FLOW.search(val) and len(FLOW.findall(val)) >= 2 or (why and len(STAT.findall(why)) + bool(GROUP.search(why)) >= 2):
                 flush()
