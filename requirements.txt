@@ -7,3 +7,4 @@ xlrd>=2.0
 scipy>=1.11
 scikit-learn>=1.4
 hmmlearn>=0.3
+TA-Lib>=0.6
