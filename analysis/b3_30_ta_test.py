@@ -1,4 +1,4 @@
-"""3-12 기법 시험: 미국·한국 따로, 10년 1_data 정제 가격으로 '바닥즈음' 맞힘을 잰다.
+"""3-30 기법 시험: 미국·한국 따로, 10년 1_data 정제 가격으로 '바닥즈음' 맞힘을 잰다.
 
 표준: Sullivan·Timmermann·White(1999) 데이터 뒤지기 검사, Aronson(2006) 증거 기반 기술적 분석.
 - 바닥즈음(정답) = 종가가 앞뒤 13주(65거래일) 최저 종가의 허용폭(3%, 1%) 안 + 52주 최고 종가보다 5% 이상 아래
@@ -9,7 +9,7 @@
 - 운인지: 종목마다 신호 날짜를 통째로 무작위로 밀어(간격 유지) 다시 센다. 개별 p → Benjamini·Hochberg,
   여러 기법 중 최고가 우연인지 = 최댓값 검사(White 리얼리티 체크와 같은 생각, Romano·Wolf 한 단계).
 - 최근 맞춤: 앞 7년과 뒤 3년 따로(나눔날은 Team_Q), 최근 해에 무게(반감기는 Team_Q).
-  python -m analysis.b3_12_ta_test --data <1_data 폴더> --universe <유니버스.csv> --out <결과 폴더>
+  python -m analysis.b3_30_ta_test --data <1_data 폴더> --universe <유니버스.csv> --out <결과 폴더>
 """
 import argparse
 import json
@@ -21,10 +21,10 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from . import b3_12_ta_library as LIB
+from . import b3_30_ta_library as LIB
 
 HZ = {'4주': 20, '12주': 60, '26주': 126, '52주': 252}
-# 시험 설정·통과 문턱은 비공개 Team_Q blocks.yaml '3-12' → '시험'에만 둔다.
+# 시험 설정·통과 문턱은 비공개 Team_Q blocks.yaml '3-30' → '시험'에만 둔다.
 
 
 def private_cfg():
@@ -32,7 +32,7 @@ def private_cfg():
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'quant_center'))
         import qc_config as QCC
         y = yaml.safe_load(open(QCC.blocks_path(), encoding='utf-8')) or {}
-        return y.get('3-12', {}) or {}
+        return y.get('3-30', {}) or {}
     except Exception:   # noqa: BLE001
         return {}
 
@@ -290,7 +290,7 @@ def main():
     a = ap.parse_args()
     pc = private_cfg()
     if not pc.get('시험'):
-        raise SystemExit("비공개 설정 blocks.yaml '3-12' → '시험'이 없습니다(QC_PRIVATE).")
+        raise SystemExit("비공개 설정 blocks.yaml '3-30' → '시험'이 없습니다(QC_PRIVATE).")
     cfg = {**pc['시험'], '보고_개수': pc.get('보고_개수', 10)}
     R = a.reps or cfg['반복']
     os.makedirs(a.out, exist_ok=True)
