@@ -293,6 +293,44 @@ def kospi_gap():
     return True
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fred(sid, start):
+    import io, urllib.request
+    u = f'https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}&cosd={start}'
+    raw = urllib.request.urlopen(urllib.request.Request(u, headers={'User-Agent': 'Mozilla/5.0'}), timeout=20).read()
+    d = pd.read_csv(io.BytesIO(raw))
+    d.columns = ['날짜', '값']
+    d['날짜'] = pd.to_datetime(d['날짜'])
+    d['값'] = pd.to_numeric(d['값'], errors='coerce')
+    return d.dropna()
+
+
+def hy_chart():
+    """11/20 의장: 하이일드 스프레드 그래프(FRED BAMLH0A0HYM2, 최근 1년). 3% 위 주의, 5% 위 위기(리스크 규칙)."""
+    try:
+        df = _fred('BAMLH0A0HYM2', (dt.date.today() - dt.timedelta(days=372)).isoformat())
+    except Exception:
+        return False
+    if df.empty:
+        return False
+    lo, hi = min(df['값'].min(), 2.5) - 0.2, max(df['값'].max(), 5.0) + 0.3
+    x = alt.X('날짜:T', title=None, axis=alt.Axis(format='%y.%m', grid=False, domain=False, ticks=False, labelColor='#888', labelFontSize=11))
+    y = alt.Y('값:Q', title=None, scale=alt.Scale(domain=[lo, hi]),
+              axis=alt.Axis(grid=True, gridColor='#eee', domain=False, ticks=False, labelColor='#888', labelFontSize=11, format='.1f'))
+    zones = pd.DataFrame({'a': [3.0, 5.0], 'b': [5.0, hi], 'c': ['#fbe9d2', '#f3d6d3']})
+    band = alt.Chart(zones).mark_rect(opacity=0.55).encode(y='a:Q', y2='b:Q', color=alt.Color('c:N', scale=None))
+    line = alt.Chart(df).mark_line(color=BLUE, strokeWidth=1.6, interpolate='monotone').encode(x=x, y=y, tooltip=['날짜:T', '값:Q'])
+    last = df.tail(1)
+    dot = alt.Chart(last).mark_circle(size=60, color=BLUE).encode(x='날짜:T', y='값:Q')
+    txt = alt.Chart(last).mark_text(align='right', dx=-8, dy=-10, fontSize=13, color='#333').encode(
+        x='날짜:T', y='값:Q', text=alt.Text('값:Q', format='.2f'))
+    tags = alt.Chart(pd.DataFrame({'y': [3.0, 5.0], 't': ['주의 3%', '위기 5%']})).mark_text(
+        align='left', dx=4, dy=-6, fontSize=11, color='#999').encode(y='y:Q', x=alt.value(0), text='t:N')
+    st.markdown('<div class="item-t">하이일드 스프레드 (%)</div>', unsafe_allow_html=True)
+    st.altair_chart((band + line + dot + txt + tags).properties(height=220).configure_view(strokeWidth=0), use_container_width=True)
+    return True
+
+
 def why_box(why):
     short = re.sub(r'\s*—\s*퀀트센터/\S+', '', why)
     short = re.sub(r'\(\S+\.csv[^)]*\)|07시 |\S+\.csv', '', short)
@@ -329,6 +367,13 @@ def render(body):
         if b[0] == 'item':
             _, n, title, val, why = b
             title = title.replace('근원 CPI', 'Core CPI').replace('근원 PCE', 'Core PCE')   # 11/20 의장: 연준 용어 그대로
+            if '10년 실질' in title:   # 11/20 의장: 10년 실질금리 삭제
+                continue
+            val = val.replace('직전 발표 대비', '전월 대비')
+            if title == '하이일드 스프레드':   # 11/20 의장: 하이일드 스프레드는 그래프로
+                flush()
+                if hy_chart():
+                    continue
             if why:
                 whys.append(f'**{title}** — {why}')
             if '지수(오늘)' in title or (title == '시장 이격' and '50일 이격' in val):   # 11/20 의장: 지수 종가는 위 시세 그래프와 겹침
