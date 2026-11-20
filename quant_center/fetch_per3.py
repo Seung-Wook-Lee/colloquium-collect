@@ -1,5 +1,5 @@
 """자기역사 PER 3년 밴드(11/16 의장: 3년치만). 일별 주가 ÷ 그 시점에 알려진 EPS(연간 EPS, 결산 90일 뒤 반영 + 최근 TTM).
-출력 in/PER3년.csv: 번호, per_now, per_med3, per_pct3(오늘 PER의 3년 백분위, 0=가장 쌈)"""
+출력 in/PER3년.csv: 번호, per_now, per_med3, per_pct3(오늘 PER의 3년 백분위, 0=가장 쌈), per_med1·per_pct1(52주, 11/20 의장 '52주 중앙값보다 비싸면 추천 안 함')"""
 import sys, pandas as pd, numpy as np, yfinance as yf, concurrent.futures as cf
 sys.path.insert(0,'qblocks'); import features as F
 f=F.stocks('in'); f=f[(f['구분']=='개별주')&f['시장'].isin(['한국','미국'])]
@@ -23,7 +23,9 @@ def one(a):
         per=(px/eps).where(eps>0).dropna()
         if len(per)<250: return dict(번호=n)
         now=per.iloc[-1]
-        return dict(번호=n,per_now=round(now,2),per_med3=round(per.median(),2),per_pct3=round((per<now).mean(),3))
+        p1=per[per.index>=per.index[-1]-pd.Timedelta(days=365)]
+        return dict(번호=n,per_now=round(now,2),per_med3=round(per.median(),2),per_pct3=round((per<now).mean(),3),
+                    per_med1=round(p1.median(),2),per_pct1=round((p1<now).mean(),3))
     except Exception as e:
         return dict(번호=n)
 with cf.ThreadPoolExecutor(10) as ex: R=list(ex.map(one,zip(f['번호'],f['ticker'])))

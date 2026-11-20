@@ -647,6 +647,12 @@ def conclusion(c):
                 c.drops += [(h['종목'], f"방어 국면·바닥 아님, 베타 {beta[h['번호']]:.2f} ≥ {R['방어_베타상한']} → 관찰") for h in hi]
                 out.append(L(f'{mk}: 추천에서 관찰로 내림', ', '.join(f"{h['종목']}(베타 {beta[h['번호']]:.2f})" for h in hi),
                              f"규칙: 방어 국면·바닥 아님이면 베타 {R['방어_베타상한']} 이상 추천은 관찰"))
+    for b in R.get('장기후보') or []:   # 11/20 의장 "아주 좋은 주식, 많이 떨어지면 왕창 사서 오래" — 문턱 미정, 표시만
+        x = T[T['번호'] == b]
+        if len(x):
+            r = x.iloc[0]
+            out.append(L(f"의장 장기 후보: {r['종목']}", f"52주 고점 대비 {p(r.get('dd52'))}, PER {n(r.get('per_now'), 1, '배')}(52주 중앙 {n(r.get('per_med1'), 1, '배')}, 3년 중앙 {n(r.get('per_med3'), 1, '배')}), 엔진 {r.get('추천')}",
+                         "표시만: '많이 떨어지면 왕창 사서 오래 가져간다'의 문턱은 아직 정하지 않음(비공개 blocks.yaml '의장 장기 후보')"))
     return out, []
 
 
