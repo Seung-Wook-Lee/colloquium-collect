@@ -909,7 +909,7 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
             mood, picks_ = conclusion(c)
         except Exception as e:   # noqa: BLE001
             mood = [L('시장', '계산 실패', str(e)[:120])]
-    a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', mood + a, g, tbl))
+    a, g, tbl = mr_market(c); sections.append(('1 시장', '마켓 센터', '간밤 미국 시장' if session == '국장전' else '한국 시장', mood + a, g, tbl))
     a, g, tbl = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, tbl))
     # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)는 겹치니 '미스 리스크' 한 위원으로 합친다
     a1, g1 = rio(c)
