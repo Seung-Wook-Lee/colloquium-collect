@@ -168,7 +168,9 @@ def run(d, cfg=None):
     CRW = O.crowding(d, P, f, m, OC) if len(P) else {}
     FLIP = O.cta_flip(d)
     for mk, v in FLIP.items(): m[f'CTA_FLIP_{mk}'] = v
-    M = pd.DataFrame([dict(블록=bid, 질문=b['질문'], 공식=n, 결과=LBL[_ev(e, m)], 방향=side)
+    EN = B.get('시장_공식영문') or {}   # 11/20 의장: 원고 제목은 영어 공식 이름, 한글 설명은 아랫줄
+    en = lambda e, b: next((EN[v] for v in compile(e, '<f>', 'eval').co_names if v in EN), b.get('영문', ''))
+    M = pd.DataFrame([dict(블록=bid, 질문=b['질문'], 공식=n, 영문=en(e, b), 결과=LBL[_ev(e, m)], 방향=side)
                       for bid, b in B['시장'].items() for n, e, side in b['공식']])
     SB = B['종목']
     Q = {b['질문']: k for k, b in SB.items()}   # 질문으로 블록 찾기(번호가 바뀌어도 됨)

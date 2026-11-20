@@ -223,6 +223,7 @@ def stocks(d):
         f['vol126_rank'] = f.groupby(['시장', 'layer'])['vol126'].rank(pct=True)
         ma200 = P.apply(lambda x: x.dropna().tail(200).mean())
         f['ma200'] = f['ticker'].map(ma200); f['ma50'] = f['ticker'].map(ma50)
+        f['px_ma200'] = f['ticker'].map(last) / f['ma200']   # 11/20: 엘피스 '200일선×0.95 위' 조건(현재가 ÷ 200일선)
         # 옛 가짜 바닥(제이미 B29, 11/17): 200일선 95% 위 + 데드크로스 속 5일 +5% 반등 아님. 11/19 의장: 근거 없음 → 기록만
         f['survive_ma200'] = ((f['ticker'].map(last) >= f['ma200'] * 0.95) & ~((f['ma50'] < f['ma200']) & (f['ret5'] >= 5))).astype(int).where(f['ma200'].notna())
         # 11/19 의장 "금융공학 공식": Carver EWMAC 추세 예측치, Frog-in-the-pan, 잔차 모멘텀, MAX 효과
