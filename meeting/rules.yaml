@@ -169,3 +169,19 @@ RSS:   # 승인 매체(콜로키움_룰.txt 4장)만. 실패한 주소는 건너
   크게움직임_선물(%): 1        # 미국 지수 선물이 ±1% 이상이면 '선물 큰 움직임' 표시
   밤일정_시작: "18:00"          # 오늘 18:00 이후 ~ 내일 08:00 전 미국 일정(일정.csv)
   밤일정_끝: "08:00"
+
+# ---------------------------------------------------------------- 위원 공부(11/20 의장: "니 스스로 자료를 모으고, 나에게 허락을 받고, 자료를 쌓아서 똑똑해지는 걸")
+# 고리: ① 모으기(study.py gather: 승인 매체 RSS + arXiv 논문, 위원별 낱말) → ② 후보 csv → ③ 의장 승인(스트림릿 '공부자료 승인' 또는 채팅 번호)
+#       → ④ 서재(위원공부/서재/<위원>/ 카드 .md, rag/build.py가 그 위원 서랍으로 색인) → ⑤ 회의에서 rag/ask.py로 인용(출처·날짜 붙임)
+# 승인 안 된 자료는 서재에 들어가지 않는다. 목표는 '정확한 바닥'이 아니라 '바닥 즈음'(의장 11/20) — 바닥 앞뒤 구간을 알아보는 자료.
+# 미스 차트(퀀트센터)는 '바닥 찾는 기술적 분석' 승인 목록을 같은 승인누적.csv에 위원=미스차트로 넣는다.
+공부:
+  후보수: 3                  # 위원마다 하루 최대 후보 수
+  지난일: 14                 # 이보다 오래된 기사는 후보에서 뺀다(논문은 예외)
+  논문: "http://export.arxiv.org/api/query?search_query={q}&sortBy=submittedDate&max_results=20"
+  위원:
+    리오:       {분야: 신용·경기·지수 밸류, 낱말: "credit spread|high yield|junk bond|excess bond premium|recession|하이일드|회사채|신용 스프레드", 논문: "all:%22credit spread%22 AND all:recession", 쓰일칸: 3 리스크·결론 신용 점검}
+    포보스:     {분야: 공포 극단·투매, 낱말: "VIX|put/call|capitulation|panic|fear gauge|공포지수|투매", 논문: "all:capitulation AND all:market", 쓰일칸: 4 공포와 탐욕}
+    미스시타델: {분야: 시스템 자금·수급, 낱말: "CTA|systematic|vol-control|volatility-target|trend-follow|fund flows|외국인 순매수", 논문: "all:%22volatility targeting%22", 쓰일칸: 2 수급}
+    엘피스:     {분야: 바닥 확인 신호, 낱말: "breadth thrust|bottoming|rebound|oversold|bear market bottom|바닥", 논문: "all:%22market trough%22", 쓰일칸: 6 긍정 요인}
+    뚜지:       {분야: 블록 공식 근거(요인 연구), 낱말: "quality factor|momentum crash|value factor|factor investing", 논문: "all:%22momentum crash%22 OR all:%22quality minus junk%22", 쓰일칸: 엔진 블록 근거}
