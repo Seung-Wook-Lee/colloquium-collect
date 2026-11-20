@@ -202,7 +202,7 @@ def layers_l(d, f, B, P):
             L = UL.classify(U, cfg)
         except Exception as e:   # noqa: BLE001
             print(f'[층L] 5년 가격 실패 → 2년 가격: {e}')
-            L = UL.classify(U, cfg, UL.vol_from(P, U['yfinance 티커'].dropna().tolist(), cfg.get('제외_구간', [])) if len(P) else {})
+            L = UL.classify(U, cfg, UL.vol_from(P, U['yfinance 티커'].dropna().tolist(), cfg.get('제외_구간', []), cfg) if len(P) else {})
         L = L[['번호', '층', '연변동성']]
         L.to_csv(cache, index=False, encoding='utf-8-sig')
     L = L.drop_duplicates('번호').set_index('번호')

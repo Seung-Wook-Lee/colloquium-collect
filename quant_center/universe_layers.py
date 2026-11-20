@@ -6,6 +6,9 @@
      '제외 구간'(코로나 2020년 3월 등)의 날은 뺀다).
   3) 종류(미국 기업·한국 기업·미국ETF·한국ETF)마다 다른 문턱으로 L1(가장 덜 흔들림)~L5를 정한다.
   4) 의장 지정(종목 → 층)은 규칙보다 우선한다.
+  5) 11/20 의장 "완충 없이 일단 구분한 뒤에 이동, 한 달에 한 번 조정": 완충 구간 없이 문턱으로 나누고,
+     층은 '재분류: 월'이면 지난달 마지막 거래일까지의 가격으로만 계산한다. 그래서 한 달 동안 층이 바뀌지 않고
+     매월 첫 거래일에 한 번만 이동한다(지수 정기 변경과 같은 기준일 방식). 새로 들어온 종목도 같은 기준일로 나눈다.
 출력: 층 표(csv)와 층별 표(마크다운: 미국 | 한국 | 미국ETF | 한국ETF, 괄호에 연 변동성).
 실행: python quant_center/universe_layers.py <유니버스.csv> <출력폴더>
 """
@@ -35,7 +38,22 @@ def prices(tickers, years, end=None):
     return yf.download(sorted(set(tickers)), start=start, end=end + pd.Timedelta(days=1), auto_adjust=True, progress=False)['Close']
 
 
-def vol_from(P, tickers, excl):
+def asof(P, cfg):
+    """'재분류: 월'이면 지난달 마지막 거래일까지 자른 가격(층 기준일). 아니면 그대로."""
+    if (cfg or {}).get('재분류') != '월' or not len(P):
+        return P
+    cut = P.index.max().to_period('M').start_time
+    Q = P[P.index < cut]
+    return Q if len(Q) else P
+
+
+def base_day(P, cfg):
+    Q = asof(P, cfg)
+    return Q.index.max().strftime('%Y-%m-%d') if len(Q) else ''
+
+
+def vol_from(P, tickers, excl, cfg=None):
+    P = asof(P, cfg)
     out = {}
     for t in tickers:
         if t not in P:
@@ -49,7 +67,9 @@ def vol_from(P, tickers, excl):
     return out
 
 
-def vols(tickers, years, excl, end=None):
+def vols(tickers, years, excl, end=None, cfg=None):
+    if (cfg or {}).get('재분류') == '월':   # 기준일(지난달 말)에서 years년
+        end = pd.Timestamp(end or pd.Timestamp.today().normalize()).to_period('M').start_time - pd.Timedelta(days=1)
     return vol_from(prices(tickers, years, end), tickers, excl)
 
 
@@ -66,7 +86,7 @@ def classify(U, cfg, vol=None):
     U = U[~U['정식 종목명'].isin(cfg.get('삭제', [])) & ~U['yfinance 티커'].isin(cfg.get('삭제', []))].copy()
     U = U[~U['시장'].isin(cfg.get('제외_시장', []))]
     if vol is None:
-        vol = vols(U['yfinance 티커'].dropna().tolist(), cfg['변동성_년'], cfg.get('제외_구간', []))
+        vol = vols(U['yfinance 티커'].dropna().tolist(), cfg['변동성_년'], cfg.get('제외_구간', []), cfg=cfg)
     U['연변동성'] = U['yfinance 티커'].map(vol)
     U['종류'] = U.apply(kind, axis=1)
     U['층'] = [layer_of(v, cfg['문턱'][k]) for v, k in zip(U['연변동성'], U['종류'])]
