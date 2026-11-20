@@ -1,6 +1,6 @@
 # ======================================================================
 # [블록 0] 준비 — 모든 블록이 쓰는 공통 바탕 (항상 맨 먼저 실행)
-#   하는 일  : 오늘 날짜(한국 시각) 정하기, 키 읽기, 드라이브 파일 준비, 콜로키움 100 종목 목록 읽기
+#   하는 일  : 오늘 날짜(한국 시각) 정하기, 키 읽기, 드라이브 파일 준비, 스튜디오 톰앤수 100 종목 목록 읽기
 #              GitHub에서 돌 때: 드라이브 창구(drive.py)로 필요한 파일을 내려받아 work/ 폴더에 두고,
 #                                마지막 블록 11이 결과를 드라이브에 올린다.
 #              코랩에서 돌 때  : 드라이브를 연결해 그대로 읽고 쓴다.
@@ -91,7 +91,7 @@ pulled = 0
 if not IN_COLAB:
     if not gdrive.ready():
         raise RuntimeError('DRIVE_URL·DRIVE_TOKEN 없음 (GitHub Secrets 확인)')
-    # 1) 콜로키움 100 종목표: 가장 최신 것 하나만
+    # 1) 스튜디오 톰앤수 100 종목표: 가장 최신 것 하나만
     names = sorted((f['name'] for f in gdrive.ls(f'{D_ROOT}/포트폴리오') if _is_univ(f['name'])), key=_univ_key)
     if not names:
         raise FileNotFoundError('드라이브 콜로키움/포트폴리오에 콜로키움100_유니버스 csv가 없습니다')
@@ -115,7 +115,7 @@ log(f'[준비] {NOW:%Y-%m-%d %H:%M} KST | 실행 {where} | 저장 폴더 {D_DATA
     f'뉴스 키 네이버 {"있음" if SEC["NAVER_CLIENT_ID"] and SEC["NAVER_CLIENT_SECRET"] else "없음"}·'
     f'Finnhub {"있음" if SEC["FINNHUB_KEY"] else "없음"}·Tavily {"있음" if SEC["TAVILY_KEY"] else "없음"}')
 
-# 유니버스: 포트폴리오 폴더의 최신 콜로키움 100 종목표 (드라이브 한글 이름이 NFD일 수 있어 NFC로 맞춰 찾는다)
+# 유니버스: 포트폴리오 폴더의 최신 스튜디오 톰앤수 100 종목표 (드라이브 한글 이름이 NFD일 수 있어 NFC로 맞춰 찾는다)
 cands = sorted((f for f in os.listdir(UNIV_DIR) if _is_univ(f)), key=_univ_key)
 if not cands:
     raise FileNotFoundError(f'포트폴리오 폴더에 콜로키움100_유니버스 csv가 없습니다: {os.listdir(UNIV_DIR)}')

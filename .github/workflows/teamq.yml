@@ -1,6 +1,6 @@
 name: 팀Q 과거데이터 (일회성)
 
-# 기존 '콜로키움 자료수집'(07시)과 완전히 별개. 예약 실행 없음.
+# 기존 '스튜디오 톰앤수 자료수집'(07시)과 완전히 별개. 예약 실행 없음.
 # 실행: Actions 화면 'Run workflow' 또는 teamq/trigger.txt 를 고쳐 push (안에 단계 이름, all 이면 전부)
 on:
   workflow_dispatch:
