@@ -96,12 +96,12 @@ def order_premarket(secs):
         num, _, nm = t.partition(' ')
         if '결론' in t:
             continue
-        if '미스터 마켓' in t:
+        if '마켓 센터' in t or '미스터 마켓' in t:
             mm.append(b)
             continue
         m = re.match(r'(\d+)(.*)', num)
         rest.append((f'{int(m.group(1)) + 1}{m.group(2)} {nm}' if m else t, b))
-    return ([('2 미장전 시황 | 미스터 마켓', '\n\n'.join(mm))] if mm else []) + rest
+    return ([('2 미장전 시황 | 마켓 센터', '\n\n'.join(mm))] if mm else []) + rest
 
 
 def sections(md):
