@@ -335,6 +335,20 @@ def dart_std(raw, code):
     return d.sort_values(['item', 'period_type', 'period_end', 'filed']).drop_duplicates(['item', 'period_type', 'period_end'], keep='first')
 
 
+KR_STD = 'processed/fundamentals/kr_standardized_pit.parquet'
+KR_FILES = [KR_STD, 'raw/fundamentals/dart_fnltt_all.parquet', 'raw/fundamentals/dart_shares_outstanding.parquet',
+            'raw/corporate_actions/dart_dividend_matters.parquet', 'raw/corporate_actions/dart_disclosures.parquet']
+
+
+def _add(OLD, rel, new):
+    """이어 받기: 기존 표(새로 받은 종목 행은 뺌) + 새 표"""
+    old = OLD.get(rel)
+    if old is None or not len(old):
+        return new
+    old = old[~old['ticker'].astype(str).isin(set(new['ticker'].astype(str)))]
+    return pd.concat([old.astype({c: str for c in old.columns if old[c].dtype == object}), new], ignore_index=True)
+
+
 def part_fund_kr():
     if not KEY['DART_KEY']:
         status('fundamentals', 'DART', False, note='DART_KEY 없음')
@@ -345,8 +359,13 @@ def part_fund_kr():
     cc = {(e.findtext('stock_code') or '').strip(): e.findtext('corp_code') for e in root.iter('list')}
     kr = U[(U['country'] == '한국') & (U['kind'] == 'stock')]
     years = range(int(START[:4]), int(TODAY[:4]) + 1)
+    # 이어 받기: 드라이브에 이미 있는 종목은 건너뛰고 새 종목만 받아 기존 표에 붙인다(TEAMQ_KR_FULL=1이면 전부 다시)
+    OLD = {} if os.environ.get('TEAMQ_KR_FULL') else {rel: load(rel) for rel in KR_FILES}
+    have = set() if OLD.get(KR_STD) is None else set(OLD[KR_STD]['ticker'].astype(str))
+    if have:
+        log(f'  DART 이어 받기: 이미 {len(have)}종목, 새로 {len(set(kr["code"]) - have)}종목')
     raws, stds, shares, divs, disc = [], [], [], [], []
-    for code in kr['code']:
+    for code in [c for c in kr['code'] if c not in have]:
         corp = cc.get(code)
         if not corp:
             status('fundamentals', f'DART {code}', False, note='고유번호 없음')
@@ -392,16 +411,16 @@ def part_fund_kr():
                 break
             page += 1
     if raws:
-        save(pd.concat(raws), 'raw/fundamentals/dart_fnltt_all.parquet')
-        save(pd.concat(stds), 'processed/fundamentals/kr_standardized_pit.parquet')
+        save(_add(OLD, 'raw/fundamentals/dart_fnltt_all.parquet', pd.concat(raws)), 'raw/fundamentals/dart_fnltt_all.parquet')
+        save(_add(OLD, KR_STD, pd.concat(stds)), KR_STD)
     if shares:
         sh = pd.DataFrame(shares)
         sh['filed'] = pd.to_datetime(sh['rcept_no'].str[:8], errors='coerce')
-        save(sh, 'raw/fundamentals/dart_shares_outstanding.parquet')
+        save(_add(OLD, 'raw/fundamentals/dart_shares_outstanding.parquet', sh), 'raw/fundamentals/dart_shares_outstanding.parquet')
     if divs:
         dv = pd.DataFrame(divs)
         dv['filed'] = pd.to_datetime(dv['rcept_no'].str[:8], errors='coerce')
-        save(dv, 'raw/corporate_actions/dart_dividend_matters.parquet')
+        save(_add(OLD, 'raw/corporate_actions/dart_dividend_matters.parquet', dv), 'raw/corporate_actions/dart_dividend_matters.parquet')
     if disc:
         d = pd.DataFrame(disc)
         d['rcept_dt'] = pd.to_datetime(d['rcept_dt'])
@@ -416,6 +435,7 @@ def part_fund_kr():
         d['event'] = d['event'].fillna('기타 공시')
         d['url'] = 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=' + d['rcept_no']
         d['source'] = 'DART list.json'
+        d = _add(OLD, 'raw/corporate_actions/dart_disclosures.parquet', d)
         save(d, 'raw/corporate_actions/dart_disclosures.parquet')
         status('corporate_actions', 'DART 공시 목록', True, len(d))
 
