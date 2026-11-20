@@ -6,6 +6,8 @@ S&P500(1928~)·나스닥100(1985~) 종가로 고점 대비 조정을 자동으�
   그 단계에 처음 닿은 날 샀을 때 13·26주 절대수익률·승률, 산 뒤 더 빠진 폭.
 - 변동성 배수: 낙폭 ÷ 고점 당시 1년 연율 변동성. 변동성이 큰 시기의 −10%와 조용한 시기의 −10%를 같은 자로 잰다.
 - 표시만 한다. 바닥 근접도 모형(bottom.py)은 바꾸지 않는다.
+- 11/20 의장 확정: 한국(코스피·코스닥) 단계 = 미국 단계(−5 pullback, −10 correction, −15, −20 bear market) × 배수.
+  배수 = 최근 N년 주간 수익률 표준편차 ÷ S&P500 같은 기간 표준편차, 매일 다시 계산. N은 비공개 blocks.yaml 결론 '한국_배수_년'.
 """
 import sys
 
@@ -15,6 +17,18 @@ import pandas as pd
 DEF = dict(단계=[5, 10, 15, 20, 30], 배수=[0.3, 0.6, 0.9, 1.2, 1.8], 최근해=10)
 START = {'^GSPC': '1927-12-01', '^NDX': '1985-10-01', '^KS11': '1996-07-01', '^KQ11': '1996-07-01'}
 NAME = {'^GSPC': 'S&P500', '^NDX': '나스닥100', '^KS11': '코스피', '^KQ11': '코스닥'}
+KR = ('^KS11', '^KQ11')
+US_NAME = {5: 'pullback', 10: 'correction', 20: 'bear market'}
+
+
+def vol_ratio(p, years, ref=None):
+    """최근 years년 주간 수익률 표준편차 ÷ S&P500 같은 기간 표준편차(11/20 의장)."""
+    ref = prices('^GSPC') if ref is None else ref
+    cut = p.index[-1] - pd.DateOffset(years=years)
+    w = lambda x: x[x.index >= cut].resample('W-FRI').last().pct_change().dropna()
+    a, b = w(p), w(ref)
+    a, b = a.align(b, join='inner')
+    return float(a.std() / b.std()) if len(a) > 20 else None
 
 
 def prices(idx):
@@ -79,6 +93,11 @@ def table(p, E, dd, cfg, col='깊이'):
 def run(W, idx='^GSPC', cfg=None, p=None):
     C = {**DEF, **(cfg or {})}
     p = prices(idx) if p is None else p
+    k = None
+    if idx in KR and C.get('한국_배수_년'):   # 한국 단계 = 미국 단계 × 변동성 비율
+        k = vol_ratio(p, C['한국_배수_년'])
+        if k:
+            C['단계'] = [round(x * k, 1) for x in C['단계']]
     E, dd = episodes(p)
     T = table(p, E, dd, C); TV = table(p, E, dd, C, '배수')
     now = E.iloc[-1] if E.iloc[-1]['진행중'] else None
@@ -89,7 +108,7 @@ def run(W, idx='^GSPC', cfg=None, p=None):
     mult = cur / (now['고점변동성'] if now is not None else vol_now)
     name = NAME.get(idx, idx)
     if st == 0:
-        msg = f'{name} 고점 대비 −{cur:.1f}%, 조정 단계 아님(5% 미만). 5% 조정은 1년 평균 {T.iloc[0]["1년_평균횟수"]}번.'
+        msg = f'{name} 고점 대비 −{cur:.1f}%, 조정 단계 아님({C["단계"][0]:g}% 미만). {C["단계"][0]:g}% 조정은 1년 평균 {T.iloc[0]["1년_평균횟수"]}번.'
     else:
         r = T.iloc[st - 1]
         msg = (f'{name} {st}단계(−{lv[-1]}%) 조정: 고점 대비 −{cur:.1f}%(변동성 {mult:.2f}배), 이번 조정 최저 −{now["깊이"]:.1f}%. '
@@ -99,7 +118,10 @@ def run(W, idx='^GSPC', cfg=None, p=None):
                f'26주 {r["처음닿은날_사면_26주평균(%)"]:+.1f}%(승률 {r["26주_승률(%)"]}%), 산 뒤 더 빠진 폭 중앙값 {r["산뒤_더빠진폭_중앙값(%)"]}%.')
     ONE = pd.DataFrame([dict(기준지수=idx, 날짜=p.index[-1].date(), 고점일=None if now is None else now['고점일'].date(),
                              고점대비=round(-cur, 1), 이번조정_최저=None if now is None else round(-now['깊이'], 1),
-                             단계=st, 변동성배수=round(mult, 2), 연변동성=round(vol_now, 1), 문장=msg)])
+                             단계=st, 변동성배수=round(mult, 2), 연변동성=round(vol_now, 1),
+                             단계배수=None if k is None else round(k, 2), 배수_년=C.get('한국_배수_년') if k else None,
+                             단계목록=', '.join(f"−{x:g}%" + (f"(미국 −{u}% {US_NAME[u]}×{k:.2f})" if k and u in US_NAME else '')
+                                             for x, u in zip(C['단계'], DEF['단계'])), 문장=msg)])
     L = E[E['깊이'] >= C['단계'][0]].copy()
     for c in ('고점일', '저점일', '회복일'):
         L[c] = pd.to_datetime(L[c]).dt.date
