@@ -311,7 +311,8 @@ def main():
     extra = sorted({t for b in books.values() for k in ('코어', '해외ETF') for t in b.get(k, {}).get('종목', [])})
     tick = sorted(set(U['yfinance 티커'].dropna()) | set(extra))
     P = UL.prices(tick, max(ucfg['변동성_년'], common.get('공분산_년', 3)))
-    U = UL.classify(U, ucfg, UL.vol_from(P[P.index >= P.index.max() - pd.DateOffset(years=ucfg['변동성_년'])], tick, ucfg.get('제외_구간', [])))
+    PL = UL.asof(P, ucfg)   # '재분류: 월' → 층은 지난달 마지막 거래일 기준
+    U = UL.classify(U, ucfg, UL.vol_from(PL[PL.index >= PL.index.max() - pd.DateOffset(years=ucfg['변동성_년'])], tick, ucfg.get('제외_구간', [])))
 
     cand = (BLK.get('의장 장기 후보') or {}) if '4-13' not in X else {}
     num2t = U.set_index('번호')['yfinance 티커'].to_dict()
