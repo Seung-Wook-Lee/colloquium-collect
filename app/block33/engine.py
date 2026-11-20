@@ -209,35 +209,44 @@ def layers_l(d, f, B, P):
     return f.assign(층L=f['번호'].map(L['층']).fillna(''), vol_yr=pd.to_numeric(f['번호'].map(L['연변동성']), errors='coerce'))
 
 
+def _try(name, fn, default):
+    """11/21 의장 '병렬식': 보조 계산 하나가 실패해도 엔진은 계속(그 칸은 자료 없음)."""
+    try:
+        return fn()
+    except Exception as e:   # noqa: BLE001
+        F._fail(name, e)
+        return default
+
+
 def run(d, cfg=None):
     B = QCC.load_blocks(cfg)
     f = F.stocks(d)
     f = f[f['시장'].isin(['한국', '미국'])].reset_index(drop=True)
     m = F.market(d)
     P = F._px(d)
-    f = layers_l(d, f, B, P)   # 11/20 의장 "층별 기준을 넣어라": 유니버스 생성법 L1~L5·연 변동성
+    f = _try('층L', lambda: layers_l(d, f, B, P), f.assign(층L='', vol_yr=np.nan))   # 11/20 의장 "층별 기준을 넣어라": 유니버스 생성법 L1~L5·연 변동성
     # B00 시장별 방어 국면(챗지 식: 5일 중 3일 + 당일, 해제도 같은 방식, 그 사이 유지)
-    RG = O.regime(d, P, B['국면']) if len(P) and not B['국면'].get('_끔') else {}   # 2-14 꺼지면 방어 국면 없음
+    RG = _try('방어 국면', lambda: O.regime(d, P, B['국면']), {}) if len(P) and not B['국면'].get('_끔') else {}   # 2-14 꺼지면 방어 국면 없음
     for mk, v in RG.items():
         m[f'DEF_{mk}'] = v['DEF']; m[f'ROT_G_{mk}'] = v['G']; m[f'ROT_M_{mk}'] = v['M']
     if m.get('DEF_미국'): m['DEF_한국'] = 1   # 11/17 의장: 미국이 방어 국면이면 한국도 방어
     m['ROT_DEF'] = int(any(v['DEF'] for v in RG.values()))
-    m.update(O.record(m))                      # 제이미 C_rate·C_techvol·C_breadth: 기록만
-    IR = O.index_regime(d)                     # 지수 252·21일 4국면: 기록만
+    m.update(_try('기록(제이미)', lambda: O.record(m), {}))                      # 제이미 C_rate·C_techvol·C_breadth: 기록만
+    IR = _try('지수 4국면', lambda: O.index_regime(d), {})                     # 지수 252·21일 4국면: 기록만
     for mk, v in IR.items(): m[f'IDX_{mk}'] = v
     OC = B.get('주문', {})
-    LR = O.layer_rs(d, P) if len(P) else {}
+    LR = _try('층 상대강도', lambda: O.layer_rs(d, P), {}) if len(P) else {}
     f['lay_rs_rank'] = [LR.get((mk, l), (np.nan, 0))[0] for mk, l in zip(f['시장'], f['layer'])]
     f['lay_rs_top'] = [int(LR[(mk, l)][0] <= max(1, LR[(mk, l)][1] // 3)) if (mk, l) in LR else np.nan for mk, l in zip(f['시장'], f['layer'])]
     # 11/17 의장: 방어 국면 기준은 절대값이 아니라 시장 안 상대 순위(한국은 한국끼리, 미국은 미국끼리)
-    f = O.relative(d, P, f)
-    ADV, ADV_W, ADV_F = O.advisors(d, B.get('자문사_이름', {}))   # 외부자문사 MP(S·C, 파일 생기면 자동)
+    f = _try('시장 안 상대 순위', lambda: O.relative(d, P, f), f)
+    ADV, ADV_W, ADV_F = _try('외부자문사', lambda: O.advisors(d, B.get('자문사_이름', {})), ({}, {}, []))   # 외부자문사 MP(S·C, 파일 생기면 자동)
     f['adv_hold'] = [ADV.get(t, (0, 0))[0] for t in f['ticker']]
     f['adv_new'] = [ADV.get(t, (0, 0))[1] for t in f['ticker']]
     m['_d'] = d; m['ADV_W'] = ADV_W; m['ADV_FILES'] = ', '.join(ADV_F)
-    MULT, WHY, FLOW = O.limits(d, P, f, OC) if len(P) else ({}, {}, {})
-    CRW = O.crowding(d, P, f, m, OC) if len(P) else {}
-    FLIP = O.cta_flip(d)
+    MULT, WHY, FLOW = _try('비중 한도', lambda: O.limits(d, P, f, OC), ({}, {}, {})) if len(P) else ({}, {}, {})
+    CRW = _try('쏠림', lambda: O.crowding(d, P, f, m, OC), {}) if len(P) else {}
+    FLIP = _try('CTA 전환', lambda: O.cta_flip(d), {})
     for mk, v in FLIP.items(): m[f'CTA_FLIP_{mk}'] = v
     EN = B.get('시장_공식영문') or {}   # 11/20 의장: 원고 제목은 영어 공식 이름, 한글 설명은 아랫줄
     en = lambda e, b: next((EN[v] for v in compile(e, '<f>', 'eval').co_names if v in EN), b.get('영문', ''))

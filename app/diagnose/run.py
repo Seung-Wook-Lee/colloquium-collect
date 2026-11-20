@@ -162,10 +162,11 @@ def fundamentals(tk):
     try:
         q = yf.Ticker(tk).quarterly_income_stmt
         q = q[sorted(q.columns)]
-        def yoy(row):
+        def yoy(row, k=0):   # k=1: 한 분기 앞
             if row not in q.index:
                 return None
             v = q.loc[row].dropna()
+            v = v.iloc[:len(v) - k] if k else v
             if len(v) < 2:
                 return None
             last = v.index[-1]
@@ -176,6 +177,12 @@ def fundamentals(tk):
             out.update(분기=r[0].strftime('%Y-%m'), 매출성장=(r[1] / r[2] - 1) * 100)
         if n and r and r[1]:
             out.update(순이익성장=(n[1] / n[2] - 1) * 100 if n[2] > 0 else None, 순이익률=n[1] / r[1] * 100, 순이익률_작년=n[2] / r[2] * 100)
+        # 11/21 의장 '실적은 한 번으로 보지 말고 2번 연속': 앞 분기 매출·순이익 전년비도 계산
+        r0 = yoy('Total Revenue', 1); n0 = yoy('Net Income', 1)
+        if r0:
+            out['매출성장_앞'] = (r0[1] / r0[2] - 1) * 100
+        if n0:
+            out['순이익성장_앞'] = (n0[1] / n0[2] - 1) * 100 if n0[2] > 0 else None
     except Exception:   # noqa: BLE001
         pass
     try:
@@ -233,8 +240,28 @@ def story(r):
         if f.get('서프라이즈'):
             beat = sum(v > 0 for v in f['서프라이즈'])
             t += (f"최근 4번 실적 발표 중 {beat}번 예상을 넘었고, 마지막({f['최근발표']})은 예상보다 {f['최근서프라이즈']:+.1f}%였습니다. ")
-        grow = (f.get('매출성장') or 0) > r['C']['서사_매출성장'] and (f.get('순이익성장') or 0) > 0
-        t += '실적은 꺾이지 않았습니다. 주가 하락이 실적 때문은 아닙니다.' if grow else '실적 쪽에도 힘이 빠진 신호가 있습니다.'
+        if (f.get('순이익성장') or 0) > 100 and f.get('순이익률_작년') is not None and f['순이익률_작년'] * 2 < f['순이익률']:
+            t += '순이익이 크게 는 것은 1년 전 이익이 낮았던 탓(기저 효과)이 큽니다. '
+        # 11/21 의장: 실적은 한 번으로 보지 않고, 2번 연속 문제일 때만 문제로 삼는다.
+        # 한 분기 문제 = 예상보다 낮음(서프라이즈 < 0) 또는 매출 성장 ≤ 서사_매출성장 또는 순이익 감소
+        def bad(g, ni, sp):
+            why = []
+            if sp is not None and sp < 0:
+                why.append(f'예상보다 {sp:+.1f}%')
+            if g is not None and g <= r['C']['서사_매출성장']:
+                why.append(f'매출 {g:+.1f}%')
+            if ni is not None and ni <= 0:
+                why.append(f'순이익 {ni:+.1f}%')
+            return why
+        sp = f.get('서프라이즈') or []
+        now = bad(f.get('매출성장'), f.get('순이익성장'), sp[-1] if sp else None)
+        prev = bad(f.get('매출성장_앞'), f.get('순이익성장_앞'), sp[-2] if len(sp) >= 2 else None)
+        if now and prev:
+            t += f"2번 연속 실적에 문제가 있습니다(지난 분기 {', '.join(now)}, 그 앞 분기 {', '.join(prev)}). 실적 쪽에도 힘이 빠졌습니다."
+        elif now:
+            t += f"지난 분기 한 번 실적에 문제가 있었지만({', '.join(now)}), 그 앞 분기는 괜찮아 아직 문제로 보지 않습니다. 다음 분기도 그러면 문제입니다."
+        else:
+            t += '실적은 꺾이지 않았습니다. 주가 하락이 실적 때문은 아닙니다.'
         T.append(t)
     if st.get('TTM PER') is not None:
         p = st['PER 백분위(2015~)']
