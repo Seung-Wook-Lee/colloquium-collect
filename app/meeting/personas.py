@@ -986,6 +986,15 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     last = picks_ + moved
     if last:
         out.append(('8 종목 추천', '뚜지(센터장)', '눈에 띄는 저평가 종목·엔진 추천', last, [], ''))
+    if c.R.get('종목추천', True) is False:
+        # 11/21 1:29 의장: "이제 회의에서 종목 추천하지 마." → 종목을 고르는 칸·줄을 원고에서 모두 뺀다(시장·수급·리스크·섹터 소식만).
+        # 엔진 판정표는 포트폴리오용으로 따로 남는다(원고·화면에는 안 나옴).
+        drop_sec = ('4 엔진 블록 센터', '4 퀀트센터', '7 반대 의견', '8 종목 추천')
+        drop_line = _re.compile(r'오늘의 한 종목|눈에 띄는 저평가|의장 기준가|가장 싼 쪽|가장 비싼 쪽|지켜볼 종목|공포 속 기회|^추천 \d|^제외 |오늘의 추천 종목')
+        out = [(sec, who, role, [l for l in lines if not drop_line.search(str(l.title))], g, extra)
+               for sec, who, role, lines, g, extra in out if not sec.startswith(drop_sec)]
+        out = [x for x in out if x[3] or x[4] or x[5]]
+        c.picks = {}
     return c, out
 
 
