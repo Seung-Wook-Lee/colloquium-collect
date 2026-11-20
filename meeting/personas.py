@@ -462,7 +462,7 @@ def phobos(c):
 def ttuji(c):
     S = c.S
     cnt = S['추천'].value_counts().to_dict()
-    out = [L('엔진 판정', ', '.join(f'{k} {v}' for k, v in cnt.items()), '전 종목 블록 계산')]
+    out = [L('엔진 판정', ', '.join(f'{k} {v}' for k, v in cnt.items()), '퀀트센터 blocks.yaml 전 종목 계산(out_판정표)')]
     rc = c.RC
     out.append(L('선정 기준', f"블록 예 비율 {rc.get('추천선', 0.6667):.2f} 이상 추천·{rc.get('관찰선', 0.5):.2f} 이상 관찰, 국내 {rc.get('국내수', 5)} + 국내 상장 미국 ETF {rc.get('미국ETF수', 2)}, 60일 변동성 {rc.get('변동성상한', 60)}% 이하, 외국인 5·20일 동시 순매도 제외",
                  '콜로키움_룰.txt 2장 + blocks.yaml 추천 설정'))
@@ -872,9 +872,9 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     a2, g2, tbl = phobos(c)
     sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, tbl))
     a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
-    a, g = miss_chart(c); sections.append(('4 기술적 분석', '미스 차트', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
+    a, g = miss_chart(c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
-        a, g = nyx(c, who); sections.append(('4 기술적 분석', who, role, a, g, ''))
+        a, g = nyx(c, who); sections.append(('4 퀀트센터 — 닉스 팀', who, role, a, g, ''))
     dk, has = desks(c)
     a, g = miss_value(c, has); sections.append(('4-1 밸류에이션', '미스 밸류', '밸류에이션', a, g, ''))
     for desk in DESKS:
