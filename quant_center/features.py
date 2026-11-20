@@ -480,7 +480,9 @@ def market(d):
     if len(P):
         g = dict(zip(P['항목'], _num(P['값'])))
         m.update(CTA=g.get('CTA σ(근사)'), VOLT=g.get('변동성타기팅 노출(배)'), VXN_PCT=g.get('VXN 1년 백분위(%)'),
-                 VIX_PCT=g.get('VIX 1년 백분위(%)'), EWNDX_PCT=g.get('비율 1년 백분위(%)'))
+                 VIX_PCT=g.get('VIX 1년 백분위(%)'), EWNDX_PCT=g.get('비율 1년 백분위(%)'),
+                 CTA_BUYN=g.get('추세 신호 매수 수(21·63·100일)'), CTA_UP_PCT=g.get('CTA 매수 전환까지(%)'), CTA_D5=g.get('CTA σ 5일 변화'),
+                 VOLT_D5=g.get('변동성타기팅 5일 변화(배)'), SYS_TURN=g.get('시스템 매수 전환'), CTA_PLUS=g.get('CTA 플러스 전환'))
     A = _r(d, 'ETF자금')
     if len(A):
         safe = A[(A['시장'] == '한국') & A['이름'].astype(str).str.contains('200|커버드콜|미국S&P500|미국나스닥100')]

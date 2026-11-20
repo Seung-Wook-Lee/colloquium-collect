@@ -358,6 +358,18 @@ def miss_citadel(c):
             rows.append(['Vol-target exposure', f"{n(ve, 2)}배", f"{n(w.get('변동성타기팅 노출(배)'), 2)}배",
                          '이미 많이 팜(기회)' if ve < vz else '보통',
                          f"변동성 목표 펀드 보유 배수 = 목표 변동성 10% ÷ 실현 변동성(상한 1.5). {vz}배 아래 = 기계적 매도가 이미 많이 나옴"])
+        buyn, upp, turn, plus = (num(g.get(k)) for k in ('추세 신호 매수 수(21·63·100일)', 'CTA 매수 전환까지(%)', '시스템 매수 전환', 'CTA 플러스 전환'))
+        if buyn is not None:   # 11/20 의장: 시스템 자금 매수 전환이 중요(그래야 지른다)
+            rows.append(['CTA 추세 신호(21·63·100일)', f"매수 {int(buyn)}/3", '', '전부 매수' if buyn >= 3 else f"매수 전환까지 S&P {p(upp, 1)}",
+                         'S&P500이 21·63·100일 전보다 높으면 매수 신호(JPM 방식). 매수 전환까지 = 가장 가까운 매도 신호가 바뀌는 상승 폭'])
+            vd = num(g.get('변동성타기팅 5일 변화(배)'))
+            if turn == 1 or plus == 1:
+                out.insert(0, L('시스템 거래 전환', '시스템 거래가 플러스(매수) 쪽으로 돌았습니다' if plus == 1 else '시스템 거래가 매수 쪽으로 돌기 시작했습니다',
+                                f"CTA 매수 신호 {int(buyn)}/3, CTA 포지션 5일 {p(num(g.get('CTA σ 5일 변화')), 2, '')}σ, 변동성 목표 노출 5일 {p(vd, 2, '')}배",
+                                crit='5일 사이 CTA 매수 신호가 늘고 CTA 포지션이 오름(CTA 0 위로 = 플러스)', sig='green'))
+            else:
+                out.append(L('시스템 거래 전환', '아직 아님' if (num(g.get('CTA σ 5일 변화')) or 0) <= 0 else '포지션은 오르지만 새 매수 신호 없음',
+                             f"CTA 매수 신호 {int(buyn)}/3, 매수 전환까지 S&P {p(upp, 1)}, 변동성 목표 노출 5일 {p(vd, 2, '')}배"))
         if rows:
             out.append(L('포지셔닝', ', '.join(f"{r[0]} {r[1]}({r[3]})" for r in rows),
                          f"VIX 1년 백분위 {n(g.get('VIX 1년 백분위(%)'), 0)}%, VXN 1년 백분위 {n(g.get('VXN 1년 백분위(%)'), 0)}%"))
