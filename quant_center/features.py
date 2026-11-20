@@ -182,9 +182,12 @@ def stocks(d):
     # 자기역사 PER 3년 밴드(11/16 의장: 3년치만)
     P3 = _r(d, 'PER3년')
     if P3 is not None and len(P3):
-        f = f.merge(P3[['번호', 'per_now', 'per_med3', 'per_pct3']], on='번호', how='left')
+        f = f.merge(P3[[k for k in ('번호', 'per_now', 'per_med3', 'per_pct3', 'per_med1', 'per_pct1') if k in P3]], on='번호', how='left')
     else:
         f['per_pct3'] = np.nan; f['per_med3'] = np.nan
+    for k in ('per_now', 'per_med1', 'per_pct1'):   # 11/20 52주 PER(옛 PER3년.csv엔 없음)
+        if k not in f:
+            f[k] = np.nan
     RV = _r(d, '연매출')
     if len(RV):
         f = f.merge(pd.DataFrame({'번호': RV['번호'], 'rev_krw': _num(RV['연매출(원)'])}), on='번호', how='left')

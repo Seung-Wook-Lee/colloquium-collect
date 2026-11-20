@@ -85,11 +85,19 @@ def st_judge(S, c):
         seen = RK.notna().sum(axis=1) >= P.get('순위_최소관측', 2)
         cut_r = P.get('추천선', 0.5)
         cand = S['판정'] == '후보'
-        S['원칙'] = np.where(nodata, '떨어짐 자료 없음', np.where(~fell, '고점 부근(안 떨어짐)', np.where(~good, '우량 아님', '떨어진 우량주')))
+        # 11/20 의장 "52주 중간값보다 PER 높으면 추천 안 해도 됨(로얄캐리비안)": 비쌈 관문(yaml 원칙.비쌈 식, 자료 없으면 통과)
+        dear = pd.Series(False, index=S.index)
+        if P.get('비쌈') and 'f' in c and '번호' in c['f']:
+            F = c['f'].drop_duplicates('번호').set_index('번호')
+            dear = S['번호'].map(lambda b: bool(_ev(P['비쌈'], F.loc[b].to_dict())) if b in F.index else False).fillna(False).astype(bool)
+            for k in ('per_now', 'per_med1'):
+                if k in F:
+                    S[{'per_now': 'PER', 'per_med1': 'PER52주중앙'}[k]] = S['번호'].map(F[k])
+        S['원칙'] = np.where(nodata, '떨어짐 자료 없음', np.where(~fell, '고점 부근(안 떨어짐)', np.where(~good, '우량 아님', np.where(dear, '비쌈(PER 52주 중앙값 위)', '떨어진 우량주'))))
         S['추천'] = np.where(~cand, S['판정'], np.where(nodata, '자료 부족(52주 고점 없음)', np.where(~fell, '대기(고점 부근)', np.where(~good, '대기(우량 아님)',
-                    np.where(~seen, '자료 부족(블록 수 모자람)', np.where(S['순위점수'] >= cut_r, '추천', '관찰'))))))
+                    np.where(dear, '대기(비쌈)', np.where(~seen, '자료 부족(블록 수 모자람)', np.where(S['순위점수'] >= cut_r, '추천', '관찰')))))))
         c['info']['판정기준'] = (f"원칙: 떨어짐 {P.get('떨어짐')} 통과 → 우량 {P.get('우량_통과')} 통과·{P.get('우량_예')} 예 → "
-                              f"순위 {P.get('순위')} 평균 ≥ {cut_r} 추천, 아래는 관찰")
+                              f"{'비쌈(' + P['비쌈'] + ') 아님 → ' if P.get('비쌈') else ''}순위 {P.get('순위')} 평균 ≥ {cut_r} 추천, 아래는 관찰")
         return S
     # 11/19 의장: 가짜 바닥 검사 폐지(10년 성적에서 걸린 쪽이 52주 수익률 더 높음). '가짜바닥아님'(분산비·EWMAC 기울기)은 표시만
     c['info']['판정기준'] = f'{key} 추천 ≥ {cut:.2f}, 관찰 ≥ {cut2:.2f}'
