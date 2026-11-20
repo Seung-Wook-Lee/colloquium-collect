@@ -13,7 +13,7 @@ import streamlit as st
 st.set_page_config(page_title='스튜디오 톰앤수 · 주가 뉴스 고르기', page_icon='🗞️', layout='wide')
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path[:0] = [str(ROOT / 'collect'), str(ROOT / 'app')]
 try:
     for k in ('DRIVE_URL', 'DRIVE_TOKEN'):
         if k in st.secrets and not os.environ.get(k):

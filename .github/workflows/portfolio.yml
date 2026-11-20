@@ -44,4 +44,4 @@ jobs:
         run: |
           ARGS=""
           if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="--date ${{ github.event.inputs.date }}"; fi
-          python portfolio/run.py $ARGS
+          python app/portfolio/run.py $ARGS

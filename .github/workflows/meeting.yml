@@ -69,7 +69,7 @@ jobs:
           if [ -n "${{ github.event.inputs.session }}" ]; then ARGS="--session ${{ github.event.inputs.session }}"; fi
           if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi
           if [ "${{ github.event.inputs.skip_fetch }}" = "yes" ]; then ARGS="$ARGS --skip-fetch"; fi
-          python meeting/daily.py $ARGS
+          python app/meeting/daily.py $ARGS
       - name: 위원 공부 후보 모으기(국장전 원고 뒤, 의장 승인 대기)
         if: github.event_name != 'schedule'
         continue-on-error: true
@@ -79,5 +79,5 @@ jobs:
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          python meeting/study.py shelf || true   # 승인 화면에서 승인한 자료 → 서재 카드(드라이브)
-          python meeting/study.py gather
+          python app/meeting/study.py shelf || true   # 승인 화면에서 승인한 자료 → 서재 카드(드라이브)
+          python app/meeting/study.py gather

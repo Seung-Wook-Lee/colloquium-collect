@@ -23,7 +23,7 @@ import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-sys.path[:0] = [REPO, os.path.join(REPO, 'block33')]
+sys.path[:0] = [REPO, os.path.join(os.path.dirname(REPO), 'collect'), os.path.join(REPO, 'block33')]   # data(universe_layers)·drive는 collect
 import qc_config as QCC          # noqa: E402
 from data import universe_layers as UL     # noqa: E402
 from portfolio import optimize as O  # noqa: E402

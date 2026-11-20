@@ -8,7 +8,9 @@ import yaml
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 _CANDS = [os.environ.get('QC_PRIVATE', ''),
+          os.path.join(HERE, '..', '..', '..', 'team_q', 'colloquium_private'),
           os.path.join(HERE, '..', '..', 'team_q', 'colloquium_private'),
+          os.path.join(HERE, '..', '..', 'team_q_private', 'colloquium_private'),
           os.path.join(HERE, '..', 'team_q_private', 'colloquium_private'),
 ]
 

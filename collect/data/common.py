@@ -6,7 +6,7 @@ import pandas as pd
 import yaml
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path[:0] = [REPO, os.path.join(REPO, 'block33')]
+sys.path[:0] = [REPO, os.path.join(os.path.dirname(REPO), 'app', 'block33')]   # qc_config(비공개 설정 읽기)는 app/block33
 import qc_config as QCC  # noqa: E402
 
 D_DATA = '콜로키움 수집데이터'

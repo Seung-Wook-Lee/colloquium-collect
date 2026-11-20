@@ -27,4 +27,4 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
-        run: python rag/lecture.py --drive
+        run: python app/rag/lecture.py --drive

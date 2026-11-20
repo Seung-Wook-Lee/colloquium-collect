@@ -19,7 +19,7 @@ import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), 'collect'))   # drive.py
 import indicators as ind  # noqa: E402
 
 KST = dt.timezone(dt.timedelta(hours=9))
