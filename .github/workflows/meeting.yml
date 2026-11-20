@@ -7,8 +7,8 @@ on:
   workflow_run:
     workflows: ['콜로키움 자료수집']
     types: [completed]
-  schedule:                   # 11/19 의장: 하루 두 번 회의 — 22:00 미장전 회의용 원고(21:00 한국)
-    - cron: '0 12 * * *'      # UTC 12:00 = 한국 21:00
+  schedule:                   # 11/19 의장: 하루 두 번 회의 — 22:00 미장전 회의용 원고(20:17 한국, GitHub 지연 대비)
+    - cron: '17 11 * * *'     # UTC 11:17 = 한국 20:17 (11/20 첫날 21:00 예약이 47분 늦게 떠서 앞당김, 정각 혼잡 피함)
   workflow_dispatch:
     inputs:
       session:
