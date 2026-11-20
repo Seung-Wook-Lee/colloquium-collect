@@ -171,6 +171,9 @@ def sleeve(names, share, method, P, years, score, upper=None, bl=None):
 
 
 def build(name, book, T, P, common, state, last):
+    per = [f'{k} 점수' for k in book.get('점수기간', []) if f'{k} 점수' in T]
+    if per:   # 이 포트폴리오의 순위·비중 점수 = 블록 3 기간 점수 평균(예: 법인·배당 = 장기)
+        T = T.assign(점수=T[per].mean(axis=1))
     yrs = common.get('공분산_년', 3)
     score = T.set_index('티커')['점수']
     parts, cash, notes = [], 0.0, []
@@ -320,6 +323,13 @@ def main():
         S[['번호', '_점수', '추천', '원칙'] + [c for c in S.columns if c.startswith('B') and c[1:].isdigit()]], on='번호', how='left')
     T = T.rename(columns={'_점수': '점수'})
     T['점수'] = pd.to_numeric(T['점수'], errors='coerce')
+    try:   # 11/20 재편: 블록 3 기간별 점수(단기·중기·장기)를 포트폴리오가 받는다(portfolio.yaml '점수기간')
+        from analysis import b3_scores as B3
+        PS = B3.build(S.rename(columns={'_점수': '순위점수'}), BLK).set_index('번호')
+        for k in ('단기', '중기', '장기'):
+            T[f'{k} 점수'] = pd.to_numeric(T['번호'].map(PS[f'{k} 점수']), errors='coerce')
+    except Exception as e:   # noqa: BLE001
+        print(f'[기간 점수] 실패: {e}')
 
     state = buy_state(f'{IN}/발표.json')
     last = load_last(f'{IN}/지난주_포트폴리오.csv')
