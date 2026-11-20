@@ -37,6 +37,7 @@ h1, h2, h3, h4, h5 {font-weight: 500 !important; letter-spacing: -0.2px;}
 .sec-t {font-size: 22px; font-weight: 500; line-height: 1.4; margin: 2px 0 10px; font-family: inherit; font-variant-numeric: lining-nums;}
 .big-t td, .big-t th {font-size: 18px !important; padding: 8px 14px !important;}
 .who {font-size: 13px; font-weight: 400; color: #8a8a8a; margin-left: 10px; letter-spacing: 0.2px;}
+.box-t {font-size: 17px; font-weight: 500; color: #333; margin-bottom: 4px;}
 .note {font-size: 12.5px; color: #8a8a8a; line-height: 1.6; margin-top: 6px;}
 </style>''', unsafe_allow_html=True)
 
@@ -317,9 +318,17 @@ def render(body):
             st.markdown(t)
             rows.clear()
 
+    merged = []
+    for b in bl:   # '**제목**' 바로 뒤 표 → 한 묶음
+        if b[0] == 'table' and merged and merged[-1][0] == 'text' and merged[-1][1].strip().startswith('**') and merged[-1][1].strip().endswith('**'):
+            merged[-1] = ('titled', merged[-1][1].strip().strip('*'), b[1])
+        else:
+            merged.append(b)
+    bl = merged
     for b in bl:
         if b[0] == 'item':
             _, n, title, val, why = b
+            title = title.replace('근원 CPI', 'Core CPI').replace('근원 PCE', 'Core PCE')   # 11/20 의장: 연준 용어 그대로
             if why:
                 whys.append(f'**{title}** — {why}')
             if '지수(오늘)' in title or (title == '시장 이격' and '50일 이격' in val):   # 11/20 의장: 지수 종가는 위 시세 그래프와 겹침
@@ -342,7 +351,11 @@ def render(body):
                 rows.append((title, val))
             continue
         flush()
-        if b[0] == 'table':
+        if b[0] == 'titled':   # 11/20 의장: 제목·그래프·표를 한 상자로
+            with st.container(border=True):
+                st.markdown(f'<div class="box-t">{b[1]}</div>', unsafe_allow_html=True)
+                table_chart(b[2])
+        elif b[0] == 'table':
             table_chart(b[1])
         else:
             t = b[1].strip()
