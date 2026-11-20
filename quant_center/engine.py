@@ -240,6 +240,8 @@ def run(d, cfg=None):
         if out.get(K_HIGH) == '탈락': sell.append(f"고점 부근(52주 고점 대비 {row.get('dd52')}%)")
         if isinstance(out.get(K_HOT), float) and out[K_HOT] > 0: sell.append('너무 많이 오름')
         if _ev('f5 < 0 and f20 < 0', row): sell.append('외국인 5·20일 순매도')
+        if row.get('layer') == 'S0':   # 11/20: 기준층(지수·현금·MMF·금·커버드콜)은 매도 신호 대상 아님(MMF가 RSI 100으로 '너무 많이 오름' 뜬 일)
+            sell = []
         out[K_SELL] = ', '.join(sell)
         # 빠지는 이유(20일 하락일 때)
         why_dn = []

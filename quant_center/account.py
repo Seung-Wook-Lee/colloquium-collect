@@ -4,12 +4,13 @@
 엔진 판정표(out_판정표.csv), 유니버스(층·번호), 나스닥100 바닥 근접도 원점수.
 
 의장 운영 원칙(11/20 0:44):
-  ① 한국 커버드콜 분배금을 받아 대부분 투자한다 → 재투자 후보 = 엔진 '추천' 순위점수 순.
+  ① (11/20 12:55 개정) 한국 보유는 전부 커버드콜. 분배금은 MMF에 쌓아 두고, 결론이 '산다'(나스닥100 바닥 근접도 준비·경보)일 때
+     MMF를 단계마다 나눠 아래 ②의 고베타 '떨어진 우량주'에 넣는다. 평상·약세장(바닥 신호 없음)이면 MMF에서 기다린다.
   ② 미국 주식은 자산 증식용, 위기 때 고베타 주도주에 투입한다.
      위기 = 나스닥100 바닥 근접도 준비(≥0.5)·경보(≥0.9), 조정 단계표 3단계(−15%).
      고베타 주도주 = 미국 개별주 중 나스닥 1년 베타 상위 1/3 + 주도 업종(B33) + 원칙 '떨어진 우량주'.
      실탄(현금+BOXX 등 현금성)을 단계마다 나눠 넣는다.
-숫자 기본값은 cfg(blocks.yaml '계좌')로 바꾼다. 로그에는 비중(%)만 찍는다.
+규칙 숫자는 비공개 blocks.yaml '계좌:'(cfg)에서 읽는다. 아래 DEF는 비공개 설정이 없을 때만 쓰는 기본값. 로그에는 비중(%)만 찍는다.
 """
 import os
 import sys
@@ -17,8 +18,8 @@ import sys
 import numpy as np
 import pandas as pd
 
-DEF = dict(재투자_비율=0.8, 단계_나눔=3, 종목_상한=8.0, 후보수=5, 고베타_분위=2 / 3, 준비=0.5, 경보=0.9,
-           현금성=['BOXX', 'SGOV', 'SHY', '0043B0.KS'], 주도='1년수익', 층_상한=25.0, 베타_최소=1.0, 층당=2, 고르는법='층별')   # 11/20 의장 "반도체 위주" → 층별: 층 비중 상한(울타리) 넘은 층은 안 사고, 남은 층마다 1종목(층 안 베타 상위 절반 중 순위점수 1등)   # 주도: 'B33'(지금 돈이 도는 업종) 또는 '1년수익'(지난 1년 수익률 상위 1/3 = 이번 상승장 주도주)
+DEF = dict(단계_나눔=3, 종목_상한=8.0, 후보수=5, 고베타_분위=2 / 3, 준비=0.5, 경보=0.9,
+           현금성=['BOXX', 'SGOV', 'SHY', '0043B0.KS'], 커버드콜_낱말='커버드콜', 주도='1년수익', 층_상한=25.0, 베타_최소=1.0, 층당=2, 고르는법='층별')   # 11/20 의장 "반도체 위주" → 층별: 층 비중 상한(울타리) 넘은 층은 안 사고, 남은 층마다 1종목(층 안 베타 상위 절반 중 순위점수 1등)   # 주도: 'B33'(지금 돈이 도는 업종) 또는 '1년수익'(지난 1년 수익률 상위 1/3 = 이번 상승장 주도주)
 
 
 def betas(tickers, idx='^NDX'):
@@ -93,20 +94,25 @@ def run(W, hold, S, U, ndx_raw=None, stage=None, cfg=None):
     BUY['보유%'] = BUY['티커'].map(held).fillna(0)
     BUY['이번단계_더살%'] = [round(max(0.0, min(each, C['종목_상한'] - h)), 2) for h in BUY['보유%']]
     BUY['나스닥베타'] = BUY['나스닥베타'].round(2); BUY['고점대비'] = BUY['고점대비'].round(1); BUY['수익1년'] = BUY['수익1년'].round(1)
-    # 분배금 재투자 후보(엔진 추천 순)
-    RE = S[S['추천'] == '추천'].sort_values('순위점수', ascending=False)[['번호', '종목', '시장', '층', '순위점수']].head(10)
-    RE['보유%'] = RE['번호'].map(S.set_index('번호')['티커']).map(held).fillna(0)
+    # 분배금: MMF 적립 → '산다' 단계에서만 고베타 떨어진 우량주로(11/20 의장)
+    cc = H['종목'].astype(str).str.contains(C['커버드콜_낱말'])
+    cc_w = float(H.loc[cc, '전체비중%'].sum())
+    act = '산다' if st in ('준비', '경보') or deep else '기다린다(MMF)'
+    RE = BUY[['종목', '티커', '층 이름', '나스닥베타', '이번단계_더살%']].copy() if act == '산다' else pd.DataFrame(columns=['종목', '티커', '층 이름', '나스닥베타', '이번단계_더살%'])
+    RE.insert(0, '분배금 쓰는 곳', 'MMF에서 꺼내 고베타 떨어진 우량주' if act == '산다' else '')
     # 보유 점검
     CHK = H[H['원칙'].isin(['우량 아님', '고점 부근(안 떨어짐)'])][['시장', '종목', '티커', '전체비중%', '수익률%', '원칙', '추천']]
+    kr_left = H[(H['시장'] == '한국') & ~cc & ~H['원칙'].isin(['현금', '현금성'])][['시장', '종목', '티커', '전체비중%', '수익률%', '원칙', '추천']]
+    CHK = pd.concat([CHK[CHK['시장'] != '한국'], kr_left.assign(원칙='규칙: 한국은 전부 커버드콜 → 남은 한국 보유')], ignore_index=True)
     lines = [f'미국 계좌 단계: {st} (나스닥100 바닥 근접도 원점수 {ndx_raw if ndx_raw is not None else "없음"}'
              + (f', 조정 {stage}단계' if stage is not None else '') + ')',
              f'실탄(현금+현금성) {cash:.1f}% → 이번 단계까지 투입 {put:.1f}% (단계 {k}/{C["단계_나눔"]})',
              (f'층별: 층 비중 {C["층_상한"]}% 넘은 층({", ".join(LAY.index[LAY["층 비중%"] >= LAY["상한"]]) or "없음"})은 안 사고, 나머지 층에서 엔진 추천·나스닥베타 {C["베타_최소"]} 이상 중 순위점수 순 층당 {C["층당"]}개 → {n}종목에 {each:.1f}%씩'
               if C['고르는법'] == '층별' else f'고베타 주도주 후보 {len(cand)}개(나스닥베타 {cut:.2f} 이상·주도={C["주도"]}·떨어진 우량주) 중 상위 {n}개에 {each:.1f}%씩') + f', 종목 상한 {C["종목_상한"]}%',
-             f'분배금 재투자: 들어온 분배금의 {int(C["재투자_비율"] * 100)}%를 엔진 추천 순위대로',
+             f'분배금(커버드콜 비중 {cc_w:.1f}%): MMF에 적립 → 지금은 {act}' + (f' (위 고베타 후보에 단계 몫만큼)' if act == '산다' else ' (결론이 산다일 때 투입)'),
              f'점검 대상(원칙 밖 보유) {len(CHK)}개, 비중 합 {CHK["전체비중%"].sum():.1f}%']
     LAY.reset_index().to_csv(f'{W}/계좌_층비중.csv', index=False, encoding='utf-8-sig')
-    for k_, v in (('계좌_보유판정', H), ('계좌_요약', SUM), ('계좌_고베타후보', BUY), ('계좌_분배금재투자', RE), ('계좌_점검', CHK)):
+    for k_, v in (('계좌_보유판정', H), ('계좌_요약', SUM), ('계좌_고베타후보', BUY), ('계좌_분배금', RE), ('계좌_점검', CHK)):
         v.to_csv(f'{W}/{k_}.csv', index=False, encoding='utf-8-sig')
     open(f'{W}/계좌_할일.txt', 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
     print('\n'.join(lines))
@@ -120,4 +126,9 @@ if __name__ == '__main__':
     stg = int(sys.argv[6]) if len(sys.argv) > 6 else None
     os.makedirs(W, exist_ok=True)
     rd = lambda f: pd.read_csv(f, encoding='utf-8-sig')
-    run(W, rd(h), rd(s), rd(u), raw, stg)
+    try:   # 규칙 숫자는 비공개 blocks.yaml '계좌:'
+        import qc_config as QCC
+        cfg = QCC.load_blocks().get('계좌') or {}
+    except Exception:   # noqa: BLE001
+        cfg = {}
+    run(W, rd(h), rd(s), rd(u), raw, stg, cfg)

@@ -395,10 +395,11 @@ def miss_chart(c):
 
 def nyx(c, who):
     rule = c.R['한종목'][who]
-    r, cnt = pick(c.T, rule)
+    base = (c.T['층'] != 'S0') if '층' in c.T else None   # 11/20: 기준층(지수·현금·MMF·금·커버드콜)은 닉스 팀 한 종목 후보에서 뺀다(MMF가 '너무 많이 오름'으로 뽑힌 일)
+    r, cnt = pick(c.T, rule, base)
     out = []
     if who == '아트로포스':
-        X = c.T[(c.T['매도신호'].fillna('') != '') & (c.T['판정'] == '후보')]
+        X = c.T[(c.T['매도신호'].fillna('') != '') & (c.T['판정'] == '후보') & (base if base is not None else True)]
         X = X.sort_values('rsi_d', ascending=False).head(3)
         if len(X):
             out.append(L('주의 깊게 지켜볼 종목', ', '.join(f"{x['종목']}({x['매도신호']})" for _, x in X.iterrows()), '엔진 매도 신호(이익 꺾임·사건 역풍·고점 부근·너무 많이 오름·외국인 5·20일 순매도)'))
