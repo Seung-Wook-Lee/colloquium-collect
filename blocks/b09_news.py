@@ -640,13 +640,17 @@ def _fh_check(sym, d):
 
 
 def _fh_numbers(x):
-    """Finnhub 한 줄 → '매출 실제 ○ / 예상 ○' (십억 달러)"""
+    """Finnhub 한 줄 → ' · EPS 실제 ○ / 예상 ○ · 매출 실제 ○ / 예상 ○(Finnhub)'. 야후에 EPS가 없을 때 EPS도 Finnhub로."""
     if not x:
         return ''
+    out = ''
+    ea, ee = x.get('epsActual'), x.get('epsEstimate')
+    if ea is not None:
+        out += f' · EPS 실제 {ea:.2f}' + (f' / 예상 {ee:.2f}' if ee is not None else '')
     ra, re_ = x.get('revenueActual'), x.get('revenueEstimate')
     if ra:
-        return f' · 매출 실제 {ra / 1e9:.2f}B$' + (f' / 예상 {re_ / 1e9:.2f}B$' if re_ else '') + '(Finnhub)'
-    return ''
+        out += f' · 매출 실제 {ra / 1e9:.2f}B$' + (f' / 예상 {re_ / 1e9:.2f}B$' if re_ else '') + (f'({(ra / re_ - 1) * 100:+.1f}%)' if re_ else '')
+    return out + '(Finnhub)' if out else ''
 
 
 try:
@@ -667,9 +671,12 @@ try:
                     kk = k.tz_convert(KST)
                     hm = '' if (k.hour, k.minute) == (0, 0) else kk.strftime('%H:%M') + '경'   # 야후 시각은 정각 반올림(실제 06:05·06:30 등)
                     eps, est = row.get('Reported EPS'), row.get('EPS Estimate')
-                    if today <= kk.date() <= until and kk <= NOW and pd.notna(eps):
-                        what = f'간밤 발표: EPS 실제 {eps:.2f} / 예상 {est:.2f}' if pd.notna(est) else f'간밤 발표: EPS 실제 {eps:.2f}'
-                        hits[k.date()] = (kk.date(), hm, what + '(야후)')
+                    # 11/20 의장 "실적 이미 다 나온 거 아닌가, 그걸 보여줘야": 미국 장 전 발표(한국 전날 저녁)는
+                    # 한국 날짜가 어제라 빠졌다 → 지금부터 36시간 안에 발표된 것도 '간밤 발표'로 숫자와 함께 적는다.
+                    if kk <= NOW and (today <= kk.date() or kk >= NOW - dt.timedelta(hours=36)) and pd.notna(eps):
+                        sp = row.get('Surprise(%)')
+                        what = f'간밤 발표(미국 {k:%m-%d %H:%M} ET): EPS 실제 {eps:.2f}' + (f' / 예상 {est:.2f}' if pd.notna(est) else '') + (f' / 서프라이즈 {sp:+.1f}%' if pd.notna(sp) else '')
+                        hits[k.date()] = (max(kk.date(), today), hm, what + '(야후)')
                     elif today <= kk.date() <= until:
                         hits[k.date()] = (kk.date(), hm, '실적 발표(야후 예정일)')
             try:                # 야후 calendar(날짜만) — get_earnings_dates에 빠진 종목을 메운다
@@ -680,7 +687,7 @@ try:
                 if d in hits:
                     continue
                 if d == today - dt.timedelta(days=1) and s['시장'] == '미국':   # 미국 날짜 어제 = 한국 기준 간밤 발표
-                    hits[d] = (today, '', f'간밤 발표(미국 {d:%m-%d}, 야후 calendar) — 결과는 뉴스 확인')
+                    hits[d] = (today, '', f'간밤 발표(미국 {d:%m-%d}, 야후 calendar): 야후 EPS 아직 없음')
                 elif today <= d <= until:
                     hits[d] = (d, '', '실적 발표(야후 calendar, 미국 날짜·시각 미정)')
             sym = str(s['yfinance 티커'])
