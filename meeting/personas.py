@@ -313,9 +313,10 @@ def miss_citadel(c):
     """11/20 의장 "안 보이니까 표로": 긴 나열은 표(grid), 줄은 요약만."""
     R = c.R['미스 시타델']; k = R['상위']
     out, G = [], []
+    pre = getattr(c, 'session', '국장전') == '미장전'   # 11/21 의장: 미장전은 미국 수급, 한국 외국인 수급은 다음날 아침(국장전)에
     F = _read(c.d, '국내수급')
     F = F[~F['종목'].map(banned)] if len(F) else F
-    if len(F):
+    if len(F) and not pre:
         for col in ('외국인 5일(억원)', '외국인 20일(억원)', '기관 5일(억원)', '개인 5일(억원)'):
             F[col] = pd.to_numeric(F[col], errors='coerce')
         s5 = F['외국인 5일(억원)'].sum()
@@ -335,7 +336,7 @@ def miss_citadel(c):
     A = A[~A['이름'].map(banned)] if len(A) else A
     if len(A):
         A['유입_5일'] = pd.to_numeric(A['유입_5일'], errors='coerce')
-        for mk, unit, div in (('한국', '억원', 1), ('미국', '억 달러', 100)):   # 미국 원자료 백만달러 → 억 달러
+        for mk, unit, div in ((('미국', '억 달러', 100),) if pre else (('한국', '억원', 1), ('미국', '억 달러', 100))):   # 미국 원자료 백만달러 → 억 달러
             X = A[A['시장'] == mk].dropna(subset=['유입_5일'])
             if len(X):
                 fmt = (lambda v: p(v, 0, '')) if div == 1 else (lambda v: p(v / div, 1, ''))
