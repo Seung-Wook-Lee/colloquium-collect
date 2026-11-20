@@ -285,12 +285,32 @@ def main():
     U = pd.read_csv(f'{IN}/유니버스.csv', encoding='utf-8-sig', dtype=str)
     U = U[~U['정식 종목명'].isin(ucfg.get('삭제', [])) & ~U['yfinance 티커'].isin(ucfg.get('삭제', [])) & ~U['시장'].isin(ucfg.get('제외_시장', []))]
     books = cfg['포트폴리오']
+    BLK = QCC.load_blocks()
+    X = set(BLK.get('_꺼짐', []))   # 11/20 의장: 블록 4 하위 블록 켜기·끄기(subblocks.yaml)
+    FALL = {'4-3': '계층적 위험 균형', '4-4': '위험 균형', '4-5': '블랙-리터만', '4-6': '점수 × 역변동성'}
+    for b in books.values():
+        for k in ('위성', '해외ETF', '섹터ETF'):
+            s = b.get(k)
+            if not s:
+                continue
+            if '4-7' in X:
+                s.pop('종목상한', None)
+            if any(FALL[n] == s.get('방식') for n in FALL if n in X):
+                s['방식'] = '역변동성'   # 꺼진 계산법 → 역변동성
+        if '4-8' in X:
+            b.pop('변동성목표', None)
+        if '4-9' in X:
+            b.pop('회전율한도', None)
+        if '4-10' in X:
+            b['나눠사기'] = False
+    if '4-2' in X:
+        O.shrunk_cov = lambda R: R.dropna(how='all').fillna(0.0).cov() * O.ANN   # 공분산 축소 꺼짐 → 표본 공분산
     extra = sorted({t for b in books.values() for k in ('코어', '해외ETF') for t in b.get(k, {}).get('종목', [])})
     tick = sorted(set(U['yfinance 티커'].dropna()) | set(extra))
     P = UL.prices(tick, max(ucfg['변동성_년'], common.get('공분산_년', 3)))
     U = UL.classify(U, ucfg, UL.vol_from(P[P.index >= P.index.max() - pd.DateOffset(years=ucfg['변동성_년'])], tick, ucfg.get('제외_구간', [])))
 
-    cand = QCC.load_blocks().get('의장 장기 후보') or {}
+    cand = (BLK.get('의장 장기 후보') or {}) if '4-13' not in X else {}
     num2t = U.set_index('번호')['yfinance 티커'].to_dict()
     common['_기준가'] = {num2t[k]: (v['기준가'], float(P[num2t[k]].dropna().iloc[-1])) for k, v in cand.items()
                         if k in num2t and num2t[k] in P and v.get('기준가')}

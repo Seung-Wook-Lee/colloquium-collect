@@ -263,16 +263,20 @@ def bottom(W, use_drive, B, S):
         if not os.path.exists(cache):
             log('[바닥] 블록점수이력 없음 → 건너뜀'); return {}
         import bottom as BOT
+        X = set(B.get('_꺼짐', []))   # 하위 블록 2-12 바닥 근접도 · 2-13 조정 단계
         for idx in (B.get('바닥') or {}).get('지수', ['^GSPC', '^NDX']):   # S&P500·나스닥100 둘 다
-            one, test, _ = BOT.run(W, S, B.get('바닥'), idx)
-            r = one.iloc[0]
-            log(f"[바닥] {idx} 근접도 {r['원점수']} (과거 {r['과거백분위']}백분위, 경보 {r['경보']}) · 검정 AUC {test.iloc[0]['AUC']}")
+            if '2-12' not in X:
+                one, test, _ = BOT.run(W, S, B.get('바닥'), idx)
+                r = one.iloc[0]
+                log(f"[바닥] {idx} 근접도 {r['원점수']} (과거 {r['과거백분위']}백분위, 경보 {r['경보']}) · 검정 AUC {test.iloc[0]['AUC']}")
+            if '2-13' in X:
+                continue
             try:   # 11/20 의장: 조정 단계표(5·10·15·20·30%, 1년 횟수, 다음 단계 확률, 처음 닿은 날 사면 수익률)
                 import correction as COR
                 COR.run(W, idx, (B.get('바닥') or {}).get('조정'))
             except Exception as e:   # noqa: BLE001
                 log(f'[조정단계] {idx} 실패: {str(e)[:120]}')
-        for idx in ('^KS11', '^KQ11'):   # 11/20 의장: 국내도 — 조정 단계표는 코스피·코스닥도
+        for idx in ('^KS11', '^KQ11') if '2-13' not in X else ():   # 11/20 의장: 국내도 — 조정 단계표는 코스피·코스닥도
             try:
                 import correction as COR   # 11/20 의장: 한국 단계 = 미국 단계 × 변동성 비율(창 길이는 비공개 결론 '한국_배수_년')
                 COR.run(W, idx, {**((B.get('바닥') or {}).get('조정') or {}), '한국_배수_년': (B.get('결론') or {}).get('한국_배수_년')})
@@ -359,6 +363,8 @@ def main():
     f = F.stocks(IN)
     BAND = pd.DataFrame()
     try:   # 11/20 의장 '어느 가격이 적당한가, 블록 조합으로' → 가격대.csv(결론 칸이 읽음)
+        if '3-28' in B.get('_꺼짐', []):
+            raise RuntimeError('하위 블록 3-28 가격대 꺼짐')
         import price_band as PB
         BAND = PB.run(S, ENG.run.last_f, B)
         BAND.to_csv(f'{IN}/가격대.csv', index=False, encoding='utf-8-sig')
@@ -366,7 +372,7 @@ def main():
     except Exception as e:   # noqa: BLE001
         log(f'[가격대] 실패: {e}')
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
-    BTO = backtest(W, IN, use_drive, tday, B, S) if a.session == '국장전' and (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
+    BTO = backtest(W, IN, use_drive, tday, B, S) if '5-1' not in B.get('_꺼짐', []) and a.session == '국장전' and (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
     BTO.update(bottom(W, use_drive, B, S))
 
     # 4) 위원 원고
@@ -380,6 +386,22 @@ def main():
         sec.insert(0, ('0 미장전 시황', '미스터 마켓', '미장전 시황', PER.premarket(c, Q, tday), [], ''))
         note.insert(0, '미장전 회의(22:00) — 07시 파일 + 야후 가격(오늘 한국 종가까지)·RSS 다시 받아 엔진 다시 실행')
         Q.to_csv(f'{IN}/미장전시세.csv', index=False, encoding='utf-8-sig')
+    # 11/20 의장 블록 1~5 재편: 블록 2 phase(국면.csv) · 블록 3 Analysis(종목점수.csv) 출력 — 다음 블록은 이 파일만 읽는다
+    BLK = {}
+    try:
+        import phase.run as PH
+        G2, ex2 = PH.build(IN, W, B, m, M, c)
+        BLK['2_phase/국면.csv'] = G2
+        BLK.update({f'2_phase/{k}': v for k, v in ex2.items()})
+        log(f"[블록2] 국면: " + ' / '.join(f"{r['시장']} {r['결론(2-16)'] or r['방어 국면(2-14)']}" for _, r in G2.iterrows()))
+    except Exception as e:   # noqa: BLE001
+        log(f'[블록2] 실패: {str(e)[:160]}')
+    try:
+        from analysis import b3_scores as B3
+        BLK['3_analysis/종목점수.csv'] = B3.build(S, B)
+        log(f"[블록3] 종목점수 {len(BLK['3_analysis/종목점수.csv'])}종목")
+    except Exception as e:   # noqa: BLE001
+        log(f'[블록3] 실패: {str(e)[:160]}')
     head = ' | '.join(note)
     txt = PER.render_txt(sec, tday, c.picks, head)
     js = PER.render_json(sec, tday, head)
@@ -408,6 +430,15 @@ def main():
                 drive.put(f'{D_DATA}/{today}/{k}', v)
             except Exception as e:
                 fail.append(f'{k}({e})')
+        if a.session == '국장전':
+            for k, v in BLK.items():   # 블록 2·3 출력: 날짜 폴더와 '최신'(블록 폴더 바로 아래) 둘 다
+                b = v.to_csv(index=False).encode('utf-8-sig')
+                d0, nm = k.split('/')
+                for dst in (f'{D_DATA}/{d0}/{today}_{nm}', f'{D_DATA}/{d0}/{nm}'):
+                    try:
+                        drive.put(dst, b)
+                    except Exception as e:   # noqa: BLE001
+                        fail.append(f'{dst}({e})')
         try:
             drive.put(f'{D_DATA}/최신_' + ('' if a.session == '국장전' else '미장전_') + '회의원고.txt', txt.encode('utf-8'))
         except Exception as e:
