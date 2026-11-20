@@ -185,8 +185,8 @@ def table_chart(md):
         units = set(v.str.replace(r'^[+-−]?[\d,.]+', '', regex=True))
         return df[c].map(num).notna().mean() > 0.6 and v.str.match(r'^[+-−]').mean() > 0.6 and len(units) == 1
     numc = [c for c in df.columns if c not in lab and signed(c) and re.search(r'%|억|달러', c + ''.join(df[c].astype(str)))]
-    if '종가' in df.columns:   # 11/20 의장: 지수 종가 막대는 쓰지 않는다(위 시세 칸과 겹침)
-        numc = []
+    if '종가' in df.columns:   # 11/20 의장: 지수 종가·전일 대비는 위 시세 그래프와 겹침 → 남는 칸만
+        return
     if lab and numc and len(df) >= 2:
         d = df.copy()
         key = lab[1] if len(lab) > 1 and df[lab[0]].nunique() < len(df) else lab[0]
@@ -235,16 +235,25 @@ def kospi_gap():
     if g.empty:
         return False
     df = pd.DataFrame({'날짜': g.index, '50일 이격': g.round(1).values})
-    line = alt.Chart(df).mark_line(color=BLUE, strokeWidth=2).encode(
-        x=alt.X('날짜:T', title=None), y=alt.Y('50일 이격:Q', title=None, scale=alt.Scale(zero=False)),
-        tooltip=['날짜:T', '50일 이격:Q'])
-    ref = pd.DataFrame({'y': [100, 125, 130], '이름': ['50일 평균', '과열 주의 125', '과열 130']})
-    rules = alt.Chart(ref).mark_rule(strokeDash=[4, 4], color='#999').encode(y='y:Q')
-    lab = alt.Chart(ref).mark_text(align='left', dx=4, dy=-6, color='#777', fontSize=12).encode(
-        y='y:Q', x=alt.value(0), text='이름:N')
-    st.markdown(f'#### 코스피 50일 이격  {g.iloc[-1]:.1f}')
-    st.altair_chart((line + rules + lab).properties(height=260), use_container_width=True)
-    st.caption('종가를 50일 평균으로 나눈 값(×100). 최근 1년')
+    lo, hi = min(df['50일 이격'].min(), 95) - 3, max(df['50일 이격'].max(), 130) + 3
+    ax = alt.Axis(grid=True, gridColor='#eee', domain=False, ticks=False, labelColor='#888', labelFontSize=11)
+    x = alt.X('날짜:T', title=None, axis=alt.Axis(format='%y.%m', grid=False, domain=False, ticks=False, labelColor='#888', labelFontSize=11))
+    y = alt.Y('50일 이격:Q', title=None, scale=alt.Scale(domain=[lo, hi]), axis=ax)
+    band = alt.Chart(pd.DataFrame({'a': [125], 'b': [hi]})).mark_rect(color='#f3d6d3', opacity=0.5).encode(y='a:Q', y2='b:Q')
+    base = alt.Chart(pd.DataFrame({'y': [100]})).mark_rule(color='#bbb', strokeWidth=1).encode(y='y:Q')
+    area = alt.Chart(df).mark_area(
+        line={'color': BLUE, 'strokeWidth': 1.6}, interpolate='monotone',
+        color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='white', offset=0), alt.GradientStop(color='#cfe0f3', offset=1)],
+                           x1=1, x2=1, y1=1, y2=0)).encode(x=x, y=y, y2=alt.datum(lo), tooltip=['날짜:T', '50일 이격:Q'])
+    last = df.tail(1)
+    dot = alt.Chart(last).mark_circle(size=60, color=BLUE).encode(x='날짜:T', y='50일 이격:Q')
+    txt = alt.Chart(last).mark_text(align='right', dx=-8, dy=-10, fontSize=13, color='#333').encode(
+        x='날짜:T', y='50일 이격:Q', text=alt.Text('50일 이격:Q', format='.1f'))
+    tags = alt.Chart(pd.DataFrame({'y': [125, 100], 't': ['과열 주의 125 이상', '50일 평균 100']})).mark_text(
+        align='left', dx=4, dy=-6, fontSize=11, color='#999').encode(y='y:Q', x=alt.value(0), text='t:N')
+    st.markdown('<div class="item-t">코스피 50일 이격</div>', unsafe_allow_html=True)
+    st.altair_chart((band + base + area + dot + txt + tags).properties(height=240).configure_view(strokeWidth=0),
+                    use_container_width=True)
     return True
 
 
@@ -278,6 +287,8 @@ def render(body):
             _, n, title, val, why = b
             if why:
                 whys.append(f'**{title}** — {why}')
+            if '지수(오늘)' in title or (title == '시장 이격' and '50일 이격' in val):   # 11/20 의장: 지수 종가는 위 시세 그래프와 겹침
+                continue
             if '50일 이격' in title:   # 11/20 의장: 코스피 50일 이격은 그래프로
                 flush()
                 if kospi_gap():
@@ -379,5 +390,6 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
             bottom(day, name)
         for title, body in secs:
             with st.container(border=True):
+                title = title.replace('수급·포지셔닝', 'Flows & Positioning')   # 11/20 의장: 수급·포지셔닝은 영어로
                 st.markdown(f'<div class="sec-t">{title}</div>', unsafe_allow_html=True)
                 render(body)
