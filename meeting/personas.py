@@ -410,9 +410,9 @@ def rio(c):
     out.append(L('시장 블록', f"부담 통과 {len(b)}개, 기회 통과 {len(o)}개", '엔진 out_시장블록'))
     out += c.block_lines('부담') + c.block_lines('기회')
     dfn = any(c.m.get(f'DEF_{mk}') for mk in ('한국', '미국'))
-    go = eval(c.R['리오']['여건_규칙'], {'__builtins__': {}}, {'기회': len(o), '부담': len(b), '방어': dfn})
+    go = eval(c.R['미스 리스크']['여건_규칙'], {'__builtins__': {}}, {'기회': len(o), '부담': len(b), '방어': dfn})
     out.append(L('현금 집행 여건', '됨' if go else '아님', f"기회 {len(o)}, 부담 {len(b)}, 방어 국면 {'예' if dfn else '아니오'}",
-                 crit=f"규칙: {c.R['리오']['여건_규칙']}", sig='green' if go else 'orange'))
+                 crit=f"규칙: {c.R['미스 리스크']['여건_규칙']}", sig='green' if go else 'orange'))
     return out, []
 
 
@@ -420,7 +420,7 @@ def phobos(c):
     G = _read(c.d, '공포탐욕')
     if not len(G):
         return [L('공포탐욕', '자료 없음', '07시 공포탐욕.csv 없음')], [], ''
-    Z = c.R['포보스']['구간']
+    Z = c.R['미스 리스크']['구간']
     zone = lambda s: next((z for a, b, z in Z if num(s) is not None and a <= round(num(s)) <= b), '자료 없음')
     t = G[G['구분'] == '종합'].iloc[0]
     ind = G[G['구분'] == '지표'].reset_index(drop=True)
@@ -837,21 +837,22 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
             sections.append(('0 결론', '센터', '지금 살 때인가', [L('결론', '계산 실패', str(e)[:120])], [], ''))
     a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', a, g, tbl))
     a, g, tbl = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, tbl))
-    a, g = rio(c); sections.append(('3 리스크', '리오', '리스크', a, g, ''))
-    a, g, tbl = phobos(c)
-    sections.append(('4 공포와 탐욕', '포보스', '공포와 탐욕', a, g, tbl))
-    a, g = ttuji(c); sections.append(('5 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·오늘의 추천 종목', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
-    a, g = miss_chart(c); sections.append(('5 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
+    # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)는 겹치니 '미스 리스크' 한 위원으로 합친다
+    a1, g1 = rio(c)
+    a2, g2, tbl = phobos(c)
+    sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, tbl))
+    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·오늘의 추천 종목', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
+    a, g = miss_chart(c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
-        a, g = nyx(c, who); sections.append(('5 퀀트센터 — 닉스 팀', who, role, a, g, ''))
+        a, g = nyx(c, who); sections.append(('4 퀀트센터 — 닉스 팀', who, role, a, g, ''))
     dk, has = desks(c)
-    a, g = miss_value(c, has); sections.append(('5-1 밸류에이션', '미스 밸류', '밸류에이션', a, g, ''))
+    a, g = miss_value(c, has); sections.append(('4-1 밸류에이션', '미스 밸류', '밸류에이션', a, g, ''))
     for desk in DESKS:
-        sections.append(('5-2 섹터 데스크', desk, '섹터 데스크', dk[desk], [], ''))
-    a, g = elpis(c); sections.append(('6 긍정 요인', '엘피스', '긍정 요인', a, g, ''))
-    a, g = gukjang(c, EV, CAL); sections.append(('7 기타', '국장', '일정·승인 매체 기사·사건', a, g, ''))
+        sections.append(('4-2 섹터 데스크', desk, '섹터 데스크', dk[desk], [], ''))
+    a, g = elpis(c); sections.append(('5 긍정 요인', '엘피스', '긍정 요인', a, g, ''))
+    a, g = gukjang(c, EV, CAL); sections.append(('6 기타', '국장', '일정·승인 매체 기사·사건', a, g, ''))
     if c.R.get('반대'):   # 11/20 의장: 회의니까 다른 위원이 반대한다
-        a, g = objections(c); sections.append(('8 반대 의견', c.R['반대'].get('위원', '리오'), '오늘의 한 종목 반대', a, g, ''))
+        a, g = objections(c); sections.append(('7 반대 의견', c.R['반대'].get('위원', '미스 리스크'), '오늘의 한 종목 반대', a, g, ''))
     return c, sections
 
 
@@ -914,7 +915,7 @@ def render_json(sections, today, note=''):
     for sec, who, role, lines, charts, extra in sections:
         ls = [f'{i}. **{l.title}**: {l.fact}' + (f'  \n:small[:gray[{l.why}]]' if l.why else '') for i, l in enumerate(lines, 1)]
         item = {'name': who, 'role': role, 'lines': ls, 'charts': charts, 'rows': [l.row() for l in lines]}
-        if sec.startswith('5-2'):
+        if sec.startswith('4-2'):
             if sub is None:
                 sub = {'name': '섹터 데스크', 'role': '담당 종목', 'lines': [], 'sub': []}
                 mem.append(sub)
@@ -966,7 +967,7 @@ def ask_index(c):
         alias = sorted({a for a in alias if a and a != 'nan' and a != str(r['종목'])})
         sec = r.get('sector', '') if str(r.get('sector', '')) not in ('', 'nan') else get('섹터/테마')
         rows.append(dict(번호=r['번호'], 종목=r['종목'], 별칭='|'.join(alias), 섹터=sec, 층=r.get('층'),
-                         데스크=desk_of(r['종목'], sec, r.get('층'), D) or ('리오' if r.get('층') == 'S0' else '')))
+                         데스크=desk_of(r['종목'], sec, r.get('층'), D) or ('미스 리스크' if r.get('층') == 'S0' else '')))
     return pd.DataFrame(rows, columns=['번호', '종목', '별칭', '섹터', '층', '데스크'])
 
 

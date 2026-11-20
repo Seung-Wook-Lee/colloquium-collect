@@ -78,4 +78,6 @@ jobs:
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python meeting/study.py gather
+        run: |
+          python meeting/study.py shelf || true   # 승인 화면에서 승인한 자료 → 서재 카드(드라이브)
+          python meeting/study.py gather
