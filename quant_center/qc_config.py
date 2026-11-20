@@ -25,5 +25,10 @@ def blocks_path():
     return os.path.join(private_dir(), 'blocks.yaml')
 
 
-def load_blocks(path=None):
-    return yaml.safe_load(open(path or blocks_path(), encoding='utf-8'))
+def load_blocks(path=None, switches=True):
+    """blocks.yaml. switches=True면 하위 블록 켜기 목록(subblocks.yaml)을 반영해 꺼진 하위 블록을 뺀 사본(11/20 의장)."""
+    B = yaml.safe_load(open(path or blocks_path(), encoding='utf-8'))
+    if switches and path is None:
+        import subblocks as SBK
+        B = SBK.apply(B, SBK.load(private_dir()))
+    return B

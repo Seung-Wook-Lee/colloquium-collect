@@ -484,7 +484,20 @@ def ttuji(c):
         out.append(c.pick_line('뚜지', {**rule, '설명': rule.get('없을때', rule.get('설명', ''))}, r, len(A),
                                lambda r: why(r) + (f" — 편입 제외 사유: {dict(c.drops).get(r['종목'], '')}" if dict(c.drops).get(r['종목']) else ''), mark='주목'))
     c.picks['센터'] = {**c.picks['뚜지'], '위원': '오늘의 한 종목(퀀트센터)'}
-    return out, [{'type': 'line', 'tickers': [r['ticker'] for r in c.top if ok(r.get('ticker'))], 'days': 365}] if c.top else []
+    G = [{'type': 'line', 'tickers': [r['ticker'] for r in c.top if ok(r.get('ticker'))], 'days': 365}] if c.top else []
+    try:   # 11/20 의장: 블록 1~5 하위 블록(1-1 번호)은 언제든 넣고 뺀다 → 뚜지 발표에 켜짐·꺼짐 표
+        import qc_config as QCC
+        import subblocks as SBK
+        B = QCC.load_blocks()
+        rows = SBK.table(B)
+        if rows:
+            X = [r for r in rows if r[3] != '켜짐']
+            out.append(L('하위 블록', f"켜짐 {len(rows) - len(X)} · 꺼짐 {len(X)}" + (f" ({', '.join(r[1] + ' ' + r[2] for r in X[:8])})" if X else ''),
+                         '비공개 subblocks.yaml 켜기 목록(블록 2 phase · 3 Analysis · 4 portfolio · 5 colloquium)'))
+            G.append({'type': 'grid', 'title': '하위 블록 켜짐·꺼짐', 'columns': ['블록', '번호', '이름', '상태'], 'rows': rows, 'source': 'subblocks.yaml'})
+    except Exception:   # noqa: BLE001
+        pass
+    return out, G
 
 
 def miss_chart(c):

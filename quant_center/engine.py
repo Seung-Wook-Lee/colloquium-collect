@@ -34,9 +34,13 @@ def _ev(expr, row):
 def st_filter(S, c):
     """거르기: 역할 '거르기' 블록(이익·사건·크기) → 후보 / 참고만 / 걸러짐 / 자료 부족"""
     K_EARN, K_EVENT = c['K_EARN'], c['K_EVENT']
+    if c['B'].get('_거르기_끔'):   # 하위 블록 3-23 거르기 꺼짐 → 모두 후보
+        S['판정'] = '후보'
+        S.loc[S['층'] == 'S0', '판정'] = '기준층(지수·현금·금, 추천 대상 아님)'
+        return S
     # 11/19 의장: '큰 회사인가'는 블록이 아니라 추천 자격 설정(추천.최소매출원). 개별주만, 자료 없으면 참고만
     big = (S['구분'] != '개별주') | (pd.to_numeric(S['연매출(원)'], errors='coerce') >= c['B'].get('추천', {}).get('최소매출원', 1e13))
-    filt = S[K_EARN].isin(['통과', '해당 없음']) & (S[K_EVENT] == '통과')   # B12 거르기 폐지 → 갈래(주도·눌림)
+    filt = S[K_EARN].isin(['통과', '해당 없음', '꺼짐']) & S[K_EVENT].isin(['통과', '꺼짐'])   # 꺼짐 = 하위 블록 꺼짐(거르지 않음)   # B12 거르기 폐지 → 갈래(주도·눌림)
     S['판정'] = np.where(filt, np.where(big, '후보', '참고만'),
                         np.where(S[K_EARN] == '자료 없음', '자료 부족', '걸러짐'))
     S.loc[S['층'] == 'S0', '판정'] = '기준층(지수·현금·금, 추천 대상 아님)'
@@ -213,7 +217,7 @@ def run(d, cfg=None):
     P = F._px(d)
     f = layers_l(d, f, B, P)   # 11/20 의장 "층별 기준을 넣어라": 유니버스 생성법 L1~L5·연 변동성
     # B00 시장별 방어 국면(챗지 식: 5일 중 3일 + 당일, 해제도 같은 방식, 그 사이 유지)
-    RG = O.regime(d, P, B['국면']) if len(P) else {}
+    RG = O.regime(d, P, B['국면']) if len(P) and not B['국면'].get('_끔') else {}   # 2-14 꺼지면 방어 국면 없음
     for mk, v in RG.items():
         m[f'DEF_{mk}'] = v['DEF']; m[f'ROT_G_{mk}'] = v['G']; m[f'ROT_M_{mk}'] = v['M']
     if m.get('DEF_미국'): m['DEF_한국'] = 1   # 11/17 의장: 미국이 방어 국면이면 한국도 방어
@@ -240,6 +244,7 @@ def run(d, cfg=None):
     M = pd.DataFrame([dict(블록=bid, 질문=b['질문'], 공식=n, 영문=en(e, b), 결과=LBL[_ev(e, m)], 방향=side)
                       for bid, b in B['시장'].items() for n, e, side in b['공식']])
     SB = B['종목']
+    OFF = set(B.get('_꺼짐_종목', []))
     Q = {b['질문']: k for k, b in SB.items()}   # 질문으로 블록 찾기(번호가 바뀌어도 됨)
     K_EARN, K_EVENT, K_HOT = Q['이익이 늘고 있나?'], Q['제2의 젠슨 황 있나?'], Q['너무 많이 올랐나?']
     K_HIGH = Q['고점 부근이 아닌가?']; K_CHEAP = Q['그래서, 지금 싼가?']
@@ -267,6 +272,8 @@ def run(d, cfg=None):
         yes_blocks = []
         DEF = bool(m.get(f"DEF_{row['시장']}"))
         for bid, b in SB.items():
+            if bid in OFF:   # 하위 블록 꺼짐(subblocks.yaml 켜기 목록에서 뺌)
+                out[bid] = '꺼짐'; continue
             if b.get('대상') == '개별주' and row['구분'] != '개별주':
                 out[bid] = '해당 없음'; continue
             if '조건' in b and not _ev(b['조건'], row):   # 보너스 블록: 조건이 맞을 때만 셈
@@ -349,6 +356,8 @@ def run(d, cfg=None):
         fl = FLIP.get(row['시장'])
         if fl is not None and fl > -OC.get('CTA_전환_%', 2) and _ev(f"beta > {OC.get('고베타', 1.2)}", row):
             mu = min(mu, OC.get('승수', 0.5)); al.append(f'CTA 매도 전환까지 {fl}%(고베타)')
+        if '4-12' in B.get('_꺼짐', []):   # 하위 블록 4-12 주문 한도 꺼짐
+            mu, al = 1.0, []
         out['주문승수'] = mu; out['경보'] = ' / '.join(al)
         out['블록예'] = ny; out['블록수'] = nb; out['블록예비율'] = round(ny / nb, 2) if nb else None
         out['블록 예'] = ' / '.join(f'{k} {q}' for k, q, y, _ in yes_blocks if y)
