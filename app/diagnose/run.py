@@ -94,7 +94,38 @@ def ttm_pe(tk, s):
     return pe.where(ttm > 0)
 
 
-def state(s, b, vix, pe):
+def check_calendar(s, name='', ref=None):
+    """앞날 계산 전에 달력 검사(11/21 의장 "실수는 코드가 막게"). 어기면 멈춘다.
+    ① 날짜 중복·역순 없음 ② ref(그 시장 기준지수 거래일)가 있으면 그 밖의 날이 없어야 함
+    ③ 252거래일 앞이 달력 358~390일(미국 365·한국 374 안팎, 미국+한국 거래일이 섞이면 356으로 짧아짐 — 11/21 실수)
+    ④ 같은 값 5일 연속 없음(빈 날을 앞 값으로 채운 흔적)"""
+    if not s.index.is_monotonic_increasing or s.index.has_duplicates:
+        raise ValueError(f'{name}: 날짜 중복·역순')
+    if ref is not None:
+        extra = s.index.difference(ref)
+        if len(extra) > 5:
+            raise ValueError(f'{name}: 기준지수에 없는 날 {len(extra)}일(예 {extra[0].date()}) — 다른 나라 거래일 섞임')
+    if len(s) > 300:
+        gap = np.median((s.index[252:] - s.index[:-252]).days)
+        if not 358 <= gap <= 390:
+            raise ValueError(f'{name}: 252거래일 = 달력 {gap:.0f}일(358~390 아님) — 다른 거래일 달력이 섞임')
+    if (s.diff() == 0).astype(int).rolling(5).sum().max() >= 5:
+        raise ValueError(f'{name}: 같은 값 5일 연속 — 빈 날 채움 의심')
+
+
+def forward(s):
+    """한 종목 자기 거래일 기준 앞날 수익·추가 하락(1달=21, 반년=126, 1년=252 거래일)"""
+    D = pd.DataFrame(index=s.index)
+    D['f4'] = s.shift(-21) / s - 1
+    D['f26'] = s.shift(-126) / s - 1
+    D['f52'] = s.shift(-252) / s - 1
+    D['lo4'] = s[::-1].rolling(21, min_periods=21).min()[::-1].shift(-1) / s - 1
+    D['lo26'] = s[::-1].rolling(126, min_periods=126).min()[::-1].shift(-1) / s - 1
+    return D
+
+
+def state(s, b, vix, pe, ref=None):
+    check_calendar(s, s.name, ref)
     r = s.pct_change()
     D = pd.DataFrame(index=s.index)
     D['dd52'] = s / s.rolling(252, min_periods=200).max() - 1
@@ -105,12 +136,7 @@ def state(s, b, vix, pe):
     D['bdd'] = b / b.rolling(252, min_periods=200).max() - 1
     D['vix'] = vix
     D['pe'] = pe
-    D['f4'] = s.shift(-21) / s - 1
-    D['f26'] = s.shift(-126) / s - 1
-    D['f52'] = s.shift(-252) / s - 1
-    D['lo4'] = s[::-1].rolling(21, min_periods=21).min()[::-1].shift(-1) / s - 1
-    D['lo26'] = s[::-1].rolling(126, min_periods=126).min()[::-1].shift(-1) / s - 1
-    return D
+    return D.join(forward(s))
 
 
 def analog(H, m, label, min_ep):
@@ -248,7 +274,8 @@ def diagnose(tk, P, MKT, C, FGR):
     s = P[tk].dropna()
     bm = bench(s, P)
     b = P[bm].reindex(s.index).ffill()
-    D = state(s, b, P['^VIX'].reindex(s.index).ffill(), ttm_pe(tk, s))
+    ref = None if tk.endswith(('.KS', '.KQ')) else P['^GSPC'].dropna().index
+    D = state(s, b, P['^VIX'].reindex(s.index).ffill(), ttm_pe(tk, s), ref)
     now = D.iloc[-1]
     H = D.loc[:s.index[-1] - pd.Timedelta(days=366)].loc['2015-06':]
     pep = (D['pe'].loc['2015':].dropna() <= now.pe).mean() * 100 if pd.notna(now.pe) else np.nan
@@ -359,7 +386,7 @@ def main():
     import yfinance as yf
     C = cfg()
     bms = ['^NDX', '^GSPC', 'SOXX', '^VIX']
-    P = yf.download(a.tickers + bms, start='2010-06-01', auto_adjust=True, progress=False)['Close'].ffill()
+    P = yf.download(a.tickers + bms, start='2010-06-01', auto_adjust=True, progress=False)['Close']   # 채우지 않음: 종목마다 자기 거래일만(check_calendar)
     MKT = market(bms)
     import fear_greed as FGM
     FGR = FGM.say(fear_greed(a.fg_csv), C['공포탐욕'])
