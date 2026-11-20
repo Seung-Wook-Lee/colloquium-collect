@@ -115,6 +115,8 @@ def hazard_weeks(s, vix, tnx, cfg=None):
     D['10년_4주변화'] = tnx.reindex(s.index).ffill().diff(20)
     D['RSI'] = _rsi(s); D['200일선_이격'] = (s / s.rolling(200).mean() - 1) * 100; D['4주_수익'] = s.pct_change(20) * 100
     D['뒤13주'] = (s.shift(-63) / s - 1) * 100; D['뒤26주'] = (s.shift(-126) / s - 1) * 100
+    # 11/21 의장(XLK 손실): 평균·승률만 보이면 안 됨 → 뒤 13주 안 최저점까지 낙폭(최대 낙폭)
+    D['뒤13주_최대낙폭'] = (s.iloc[::-1].rolling(63, min_periods=63).min().iloc[::-1].shift(-1) / s - 1).clip(upper=0) * 100
     W = D.resample('W-FRI').last()
     W = W[W.ph >= 0].copy()
     W['y'] = np.where(W.done, (W.px <= W.fin * (1 + C['바닥_여유'])).astype(float), np.nan)
@@ -146,8 +148,10 @@ def hazard(s, vix, tnx, cfg=None, start_year=2000):
     near = raw[ev | (raw.notna() & W.done)].dropna()
     near = near[(near - p0).abs() <= 0.1].index
     f13, f26 = W.loc[near, '뒤13주'].dropna(), W.loc[near, '뒤26주'].dropna()
+    m13 = W.loc[near, '뒤13주_최대낙폭'].dropna()
     ONE = dict(하락중=True, 확률=round(p0 * 100, 1), 지금낙폭=round(r['낙폭'], 1), 주수=int(r['주수']), VIX=round(r['VIX'], 1), RSI=round(r['RSI'], 1),
                비슷한확률_주수=int(len(near)), 뒤13주_평균=round(f13.mean(), 1), 뒤13주_승률=round((f13 > 0).mean() * 100, 1),
+               뒤13주_최대낙폭_평균=round(m13.mean(), 1), 뒤13주_최대낙폭_최악=round(m13.min(), 1),
                뒤26주_평균=round(f26.mean(), 1), 뒤26주_승률=round((f26 > 0).mean() * 100, 1))
     return ONE, TEST
 

@@ -772,15 +772,28 @@ def _buy_state(c):
     kthr = -R['한국_산다_미국단계'] * kmul if (kmul is not None and R.get('한국_산다_미국단계')) else None
     kdesc = (f"미국 −{R['한국_산다_미국단계']:g}% correction × 코스피 배수 {kmul:.2f}(최근 {n(KC.iloc[0].get('배수_년'), 0)}년 주간 변동성 ÷ S&P500) = {kthr:.1f}%"
              if kthr is not None else '한국 문턱 자료 없음(조정단계_오늘_코스피.csv 단계배수)')
+    # 11/21 의장(XLK 손실 뒤 "다시는 실수 안 나오게"): 바닥 확률만으로 '산다' 금지.
+    # 미국은 ① 보정된 바닥 확률(바닥확률.csv '확률', 원점수 아님) ≥ 문턱 AND ② 시스템 자금 확인(매수 전환·CTA 플러스 전환 또는 CTA ≤ 바닥 σ)일 때만.
+    Q = _read(c.d, '수급포지셔닝')
+    qg = dict(zip(Q['항목'], Q['값'])) if len(Q) and '항목' in Q else {}
+    cta = num(qg.get('CTA σ(근사)'))
+    turn, plus = num(qg.get('시스템 매수 전환')), num(qg.get('CTA 플러스 전환'))
+    cta_floor = c.R.get('미스 시타델', {}).get('CTA_바닥', -4)
+    conf_on = (turn == 1) or (plus == 1) or (cta is not None and cta <= cta_floor)
+    conf_txt = (f"시스템 매수 전환 {'켜짐' if turn == 1 else '꺼짐'}, CTA 플러스 전환 {'켜짐' if plus == 1 else '꺼짐'}, "
+                f"CTA {p(cta, 2, 'σ') if cta is not None else '자료 없음'}(바닥 {cta_floor}σ)") if qg else '수급포지셔닝.csv 없음 → 확인 안 됨'
     ST = {}
     for mk in ('미국', '한국'):
         g = c.regime(mk); dfn = bool(g and g[0] == '방어')
         if crisis:
             act, why = '사지 않는다', '신용 위기 규칙'
+        elif mk == '미국' and nd is not None and nd >= R['바닥_준비'] and not conf_on:
+            act = '아직 사지 않는다(바닥 확인 신호 없음)'
+            why = f"나스닥100이 이번 하락의 바닥일 확률 {nd:.0%} ≥ 준비 {R['바닥_준비']:.0%}이지만 시스템 자금 확인 없음: {conf_txt}"
         elif mk == '미국' and nd is not None and nd >= R['바닥_경보']:
-            act, why = '산다(바닥 경보)', f"나스닥100이 이번 하락의 바닥일 확률 {nd:.0%} ≥ 경보 {R['바닥_경보']:.0%}"
+            act, why = '산다(바닥 경보)', f"나스닥100이 이번 하락의 바닥일 확률 {nd:.0%} ≥ 경보 {R['바닥_경보']:.0%} · 확인: {conf_txt}"
         elif mk == '미국' and nd is not None and nd >= R['바닥_준비']:
-            act, why = f"산다 — {R['나눔']}번 나눠 1번째(바닥 준비)", f"나스닥100이 이번 하락의 바닥일 확률 {nd:.0%} ≥ 준비 {R['바닥_준비']:.0%}(경보 {R['바닥_경보']:.0%})"
+            act, why = f"산다 — {R['나눔']}번 나눠 1번째(바닥 준비)", f"나스닥100이 이번 하락의 바닥일 확률 {nd:.0%} ≥ 준비 {R['바닥_준비']:.0%}(경보 {R['바닥_경보']:.0%}) · 확인: {conf_txt}"
         elif mk == '한국' and kdd is not None and kthr is not None and kdd <= kthr:
             act, why = f"산다 — {R['나눔']}번 나눠 1번째(많이 빠짐)", f"코스피 사상 최고 대비 {kdd:+.1f}% ≤ {kdesc}"
         elif dfn:
@@ -790,7 +803,7 @@ def _buy_state(c):
         else:
             act, why = '엔진 포트폴리오대로', '평상 국면'
         ST[mk] = dict(act=act, why=why, buy=act.startswith('산다'), dfn=dfn, g=g)
-    return out, ST, dict(cnear=cnear, nd=nd, bp=bp, WB=WB, crisis=crisis)
+    return out, ST, dict(cnear=cnear, nd=nd, bp=bp, WB=WB, crisis=crisis, conf_on=conf_on, conf_txt=conf_txt, B=B)
 
 
 def conclusion(c):
@@ -828,12 +841,23 @@ def conclusion(c):
         X['베타'] = X['번호'].map(beta)
         X = X[(X['싼가'].fillna(0) >= R['싼가_최소']) & (X['베타'].fillna(0) >= R['베타_최소'])]
         X = X.sort_values('순위점수', ascending=False).head(R['종목수'])
+        if not ST[mk]['buy']:   # 11/21 의장(XLK 손실): 시장 '산다' 판정(바닥 확률 + 시스템 자금 확인)이 없으면 종목·ETF 줄을 내지 않는다
+            out.append(L(f"{mk}: 눈에 띄는 저평가 종목", '내지 않음 — 바닥 확인 전',
+                         f"{ST[mk]['act']}: {ST[mk]['why']}. 종목 줄은 바닥 확률 문턱 + 시스템 자금 확인이 함께 켜진 날만 나온다"))
+            continue
         if len(X):
             fact = ', '.join(f"{r['종목']}(52주 고점 대비 {p(r.get('dd52'))}, 베타 {r['베타']:.2f}, 싼가 {n(r['싼가'], 2)}) "
                              f"PER {n(r.get('per_now'), 1, '배')}·3년 중앙 {n(r.get('per_med3'), 1, '배')}·순위점수 {n(r.get('순위점수'), 2)}" for _, r in X.iterrows())
         else:
             fact = '해당 없음'
         ev = R['검정근거']
+        if mk == '미국':   # 11/21 의장: 평균·승률만 쓰지 말 것 → 같은 확률대 과거의 뒤 13주 최대 낙폭을 함께
+            B = V['B']; b = B[B['기준지수'] == '^NDX'] if len(B) and '기준지수' in B else pd.DataFrame()
+            if len(b):
+                b = b.iloc[0]
+                ev += (f" / 확률 비슷했던 과거 {n(b.get('비슷한확률_주수'), 0)}주의 뒤 13주: 평균 {p(num(b.get('뒤13주_평균')))}, 승률 {n(b.get('뒤13주_승률'), 0)}%, "
+                       f"그 사이 최대 낙폭 평균 {p(num(b.get('뒤13주_최대낙폭_평균')))}(최악 {p(num(b.get('뒤13주_최대낙폭_최악')))})")
+            ev += f" / 시스템 자금 확인: {V['conf_txt']}"
         WB = V['WB']
         if mk == '미국' and len(WB):
             band = '경보(≥0.9)' if (nd or 0) >= R['바닥_경보'] else '준비(≥0.5)'

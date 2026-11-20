@@ -600,9 +600,11 @@ def bottom(day, name, title='바닥 근접도'):
                 st.metric(f'{nm}이 지금 이번 하락의 바닥일 확률', pct(r.get('확률')))
                 st.markdown(f'<div class="sub">고점 대비 {pct(r.get("지금낙폭"))} · {int(r.get("주수"))}주째 · VIX {r.get("VIX"):.1f} · RSI {r.get("RSI"):.0f}</div>'
                             f'<div class="sub">확률이 비슷했던 과거 {int(r.get("비슷한확률_주수"))}주, 그 뒤 지수</div>', unsafe_allow_html=True)
-                st.markdown('<table class="num-t"><tr><th></th><th>평균 수익률</th><th>승률</th></tr>'
-                            f'<tr><td class="lab">13주 뒤</td><td>{pct(r.get("뒤13주_평균"), True)}</td><td>{pct(r.get("뒤13주_승률"))}</td></tr>'
-                            f'<tr><td class="lab">26주 뒤</td><td>{pct(r.get("뒤26주_평균"), True)}</td><td>{pct(r.get("뒤26주_승률"))}</td></tr></table>', unsafe_allow_html=True)
+                mdd = (f'{pct(r.get("뒤13주_최대낙폭_평균"), True)} (최악 {pct(r.get("뒤13주_최대낙폭_최악"), True)})'
+                       if '뒤13주_최대낙폭_평균' in r and pd.notna(r.get('뒤13주_최대낙폭_평균')) else '자료 없음')
+                st.markdown('<table class="num-t"><tr><th></th><th>평균 수익률</th><th>승률</th><th>그 사이 최대 낙폭</th></tr>'
+                            f'<tr><td class="lab">13주 뒤</td><td>{pct(r.get("뒤13주_평균"), True)}</td><td>{pct(r.get("뒤13주_승률"))}</td><td>{mdd}</td></tr>'
+                            f'<tr><td class="lab">26주 뒤</td><td>{pct(r.get("뒤26주_평균"), True)}</td><td>{pct(r.get("뒤26주_승률"))}</td><td></td></tr></table>', unsafe_allow_html=True)
         tt = '; '.join(f"{NAME.get(r['기준지수'])} AUC {r['검정_AUC']:.2f}" for _, r in T.iterrows())
         st.markdown('<div class="note">산출 방법: Lunde &amp; Timmermann(2004) 위험률 모형. 하락 구간(고점 −5%에서 시작, 저점 +10%에서 끝, R bbdetection 판정) 안에서 '
                     '낙폭·기간·VIX·금리·RSI·200일선 이격으로 "최종 저점 3% 안일 확률"을 계산. '
