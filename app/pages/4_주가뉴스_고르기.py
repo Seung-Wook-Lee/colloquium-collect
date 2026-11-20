@@ -66,19 +66,29 @@ if acc is not None and len(acc) and (acc['날짜'].astype(str) == day).any():
     cand['의장이유'] = [str(m.loc[t, '의장이유']) if t in m.index and pd.notna(m.loc[t, '의장이유']) else '' for t in cand['제목']]
     st.success('이 날짜는 이미 저장하셨습니다. 고치고 다시 저장할 수 있습니다.')
 
-show = ['의장선택', '의장이유', '순위', '구분', '발생대상', '판정', '제목', '출처', '종목', '등락률(%)', '긍정', '부정', '프로그램추천', '링크']
-edited = st.data_editor(
-    cand[show], hide_index=True, use_container_width=True, height=min(80 + 36 * len(cand), 900),
-    disabled=[c for c in show if c not in ('의장선택', '의장이유')],
-    column_config={
-        '의장선택': st.column_config.CheckboxColumn('고름', width='small'),
-        '의장이유': st.column_config.TextColumn('이유(한 줄)', width='medium'),
-        '순위': st.column_config.NumberColumn(width='small'),
-        '발생대상': st.column_config.TextColumn('전쟁 발생', width='small'),
-        '제목': st.column_config.TextColumn(width='large'),
-        '프로그램추천': st.column_config.CheckboxColumn('프로그램', width='small'),
-        '링크': st.column_config.LinkColumn('원문', display_text='열기', width='small'),
-    })
+# 11/20 의장: "기사 내용이 보여야 한다, 평가는 뒤로" → 표 대신 기사 카드. 제목·요약이 앞, 고름·이유는 카드 맨 아래.
+cand = cand.reset_index(drop=True)
+sel, why = [], []
+for i, r in cand.iterrows():
+    with st.container(border=True):
+        st.markdown(f"**{r['제목']}**" + (f"  [원문]({r['링크']})" if str(r.get('링크', '')).startswith('http') else ''))
+        if pd.notna(r.get('요약')) and str(r.get('요약')).strip():
+            st.write(str(r['요약']))
+        bits = [str(r.get('출처', '')), str(r.get('구분', ''))]
+        if pd.notna(r.get('종목')) and str(r.get('종목')).strip():
+            bits.append(f"{r['종목']} {r['등락률(%)']}%" if pd.notna(r.get('등락률(%)')) and str(r.get('등락률(%)')).strip() else str(r['종목']))
+        bits.append(f"긍정 {r.get('긍정')} · 부정 {r.get('부정')}")
+        if r.get('발생대상'):
+            bits.append(f"전쟁 발생: {r['발생대상']}")
+        bits.append('프로그램 추천' if str(r.get('프로그램추천')) in ('1', 'True', '1.0') else '프로그램 비추천')
+        st.caption(' · '.join(b for b in bits if b and b != 'nan'))
+        c1, c2 = st.columns([1, 4])
+        sel.append(c1.checkbox('고름', value=bool(cand['의장선택'].iloc[i]), key=f's_{day}_{i}'))
+        why.append(c2.text_input('이유', value=cand['의장이유'].iloc[i], key=f'w_{day}_{i}',
+                                 placeholder='이유 한 줄', label_visibility='collapsed'))
+edited = cand.copy()
+edited['의장선택'], edited['의장이유'] = sel, why
+edited['프로그램추천'] = pd.to_numeric(edited['프로그램추천'], errors='coerce').fillna(0).astype(int)
 
 k = int(edited['의장선택'].sum())
 same = int((edited['의장선택'] & (edited['프로그램추천'] == 1)).sum())
