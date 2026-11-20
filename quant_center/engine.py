@@ -361,6 +361,11 @@ if __name__ == '__main__':
     S.to_csv(f'{d}/../out_판정표.csv', index=False, encoding='utf-8-sig')
     D.to_csv(f'{d}/../out_공식별결과.csv', index=False, encoding='utf-8-sig')
     M.to_csv(f'{d}/../out_시장블록.csv', index=False, encoding='utf-8-sig')
+    try:   # 11/20 의장 '어느 가격이 적당한가' → 추천 원칙 조합이 추천·관찰로 바뀌는 가격
+        import price_band as PB
+        PB.run(S, run.last_f, QCC.load_blocks()).to_csv(f'{d}/../out_가격대.csv', index=False, encoding='utf-8-sig')
+    except Exception as ex:   # noqa: BLE001
+        print('[가격대] 실패', ex)
     print(M.to_string(index=False))
     print(S['판정'].value_counts().to_dict())
     cols = ['종목', '구분', '층', '점수', '5일(%)', '20일(%)', '분할', '매도신호', '빠지는 이유']
