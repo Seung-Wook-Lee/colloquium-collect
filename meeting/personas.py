@@ -6,6 +6,7 @@
 import datetime as dt
 import json
 import math
+import os
 
 import numpy as np
 import pandas as pd
@@ -534,6 +535,120 @@ def gukjang(c, EV, CAL):
     return out, []
 
 
+# ---------------------------------------------------------------- 0 결론 (11/20 의장)
+def _read2(d, name):
+    """작업 폴더(in/)에 없으면 한 단계 위(bottom.py 출력 자리)에서 읽는다."""
+    X = _read(d, name)
+    return X if len(X) else _read(os.path.dirname(os.path.abspath(d)), name)
+
+
+def _betas(c, rows):
+    """1년 일별 베타: 미국 종목·이름에 '미국'이 든 ETF는 나스닥100 대비, 나머지 한국은 코스피 대비."""
+    if not len(rows) or not len(c.U) or 'yfinance 티커' not in c.U:
+        return {}
+    tk = c.U.drop_duplicates('번호').set_index('번호')['yfinance 티커'].dropna().to_dict()
+    want = {}
+    for _, r in rows.iterrows():
+        t = tk.get(r['번호'])
+        if ok(t):
+            want[r['번호']] = (t, c.R['결론']['기준지수']['미국' if (r['시장'] == '미국' or '미국' in str(r['종목'])) else '한국'])
+    if not want:
+        return {}
+    try:
+        import yfinance as yf
+        P = yf.download(sorted({t for t, _ in want.values()} | {i for _, i in want.values()}), period='1y', auto_adjust=True, progress=False)['Close']
+    except Exception:   # noqa: BLE001 — 내려받기 실패면 유니버스 '베타(2년 주간)'
+        if '베타(2년 주간)' in c.U:
+            bb = c.U.drop_duplicates('번호').set_index('번호')['베타(2년 주간)']
+            return {b: float(bb[b]) for b in want if b in bb and ok(bb[b])}
+        return {}
+    Rt = P.pct_change(fill_method=None)
+    out = {}
+    for b, (t, i) in want.items():
+        if t in Rt and i in Rt:
+            x = pd.concat([Rt[t], Rt[i]], axis=1).dropna()
+            if len(x) > 60:
+                out[b] = float(x.iloc[:, 0].cov(x.iloc[:, 1]) / x.iloc[:, 1].var())
+    return out
+
+
+def conclusion(c):
+    """11/20 의장: "지금 살 때인가, 살 거면 오래 가져갈 것을 무엇을 살 것인가". 장기 보유할 것을 싸게 산다.
+    ① 신용 위기 → 사지 않는다 ② 바닥 근처(나스닥 바닥 근접도·코스피 최고 대비) → 산다(나눠서) ③ 방어 국면·바닥 아님 → 아직 사지 않는다
+    ④ 평상 → 엔진 포트폴리오대로. 살 것 = 엔진 원칙 '떨어진 우량주'(추천·관찰) 중 싼가·베타 기준 통과, 순위점수 순."""
+    R = c.R['결론']; out = []
+    K = _read(c.d, '리스크')
+
+    def rk(item):
+        if not len(K):
+            return None
+        x = K[K['항목'].astype(str).str.replace('\\', '') == item]
+        return x.iloc[0] if len(x) else None
+    hy, hy20, ccc = rk('하이일드 스프레드'), rk('하이일드 스프레드 20일 변화'), rk('CCC 이하 스프레드')
+    hyv = num(hy['값']) if hy is not None else None
+    h20 = num(hy20['값']) if hy20 is not None else None
+    cv = num(ccc['값']) if ccc is not None else None
+    m_ = _re.search(r'최고\s*([\d.]+)', str(ccc.get('비고', '')).replace('\\', '')) if ccc is not None else None
+    chi = float(m_.group(1)) if m_ else None
+    crisis = (hyv is not None and hyv >= R['신용위기_하이일드']) or (h20 is not None and h20 >= R['신용위기_하이일드20일'])
+    cnear = cv is not None and chi is not None and cv >= chi * R['신용주의_CCC_수집최고비']
+    st = '위기' if crisis else ('약한 회사채(CCC) 최고치 부근 — 주의' if cnear else '위기 기준 아래')
+    out.append(L('회사채(신용)', f"{st}: 하이일드 {n(hyv, 2, '%')}(20일 {p(h20, 2, '%p')}), CCC 이하 {n(cv, 2, '%')}(수집 최고 {n(chi, 2, '%')})",
+                 f"규칙: 하이일드 {R['신용위기_하이일드']}% 이상 또는 20일 +{R['신용위기_하이일드20일']}%p 이상 = 위기(사지 않음), "
+                 f"CCC가 수집 최고의 {R['신용주의_CCC_수집최고비']:.0%} 이상 = 주의 (리스크.csv)"))
+    B = _read2(c.d, '바닥근접도_나스닥100')
+    nd = num(B.iloc[0]['원점수']) if len(B) else None
+    WB = _read2(c.d, '바닥근접도_무엇을살까_나스닥100')
+    kr = c.mac_row('코스피')
+    kdd = num(kr.get('최고 대비(%)')) if kr is not None else None
+    T = c.T
+    cand_all = T[(T.get('원칙', pd.Series(index=T.index, dtype=str)) == '떨어진 우량주') & T['추천'].isin(['추천', '관찰'])]
+    beta = _betas(c, pd.concat([cand_all, T[T['종목'].isin([r['종목'] for r in c.top])]]).drop_duplicates('번호'))
+    for mk in ('미국', '한국'):
+        g = c.regime(mk); dfn = bool(g and g[0] == '방어')
+        if crisis:
+            act, why = '사지 않는다', '신용 위기 규칙'
+        elif mk == '미국' and nd is not None and nd >= R['바닥_경보']:
+            act, why = '산다(바닥 경보)', f"나스닥100 바닥 근접도 {nd:.3f} ≥ 경보 {R['바닥_경보']}"
+        elif mk == '미국' and nd is not None and nd >= R['바닥_준비']:
+            act, why = f"산다 — {R['나눔']}번 나눠 1번째(바닥 준비)", f"나스닥100 바닥 근접도 {nd:.3f} ≥ 준비 {R['바닥_준비']}(경보 {R['바닥_경보']})"
+        elif mk == '한국' and kdd is not None and kdd <= R['한국_조정']:
+            act, why = f"산다 — {R['나눔']}번 나눠 1번째(많이 빠짐)", f"코스피 사상 최고 대비 {kdd:+.1f}% ≤ {R['한국_조정']}%(후보값)"
+        elif dfn:
+            why = (f"방어 국면, 나스닥100 바닥 근접도 {n(nd, 3)} < 준비 {R['바닥_준비']}" if mk == '미국'
+                   else f"방어 국면, 코스피 사상 최고 대비 {p(kdd)} > {R['한국_조정']}%(후보값)")
+            act = '아직 사지 않는다(약세장, 바닥 신호 없음)'
+        else:
+            act, why = '엔진 포트폴리오대로', '평상 국면'
+        buy = act.startswith('산다')
+        if buy and cnear:
+            act += ' · CCC 최고치 부근이라 1번째까지만'
+        out.append(L(f'{mk}: 지금 살 때인가', act, f"{why} · 국면 {g[0] if g else '자료 없음'}"))
+        X = cand_all[cand_all['시장'] == mk].copy()
+        X['베타'] = X['번호'].map(beta)
+        X = X[(X['싼가'].fillna(0) >= R['싼가_최소']) & (X['베타'].fillna(0) >= R['베타_최소'])]
+        X = X.sort_values('순위점수', ascending=False).head(R['종목수'])
+        ttl = f"{mk}: 오래 가져갈 것(지금 산다)" if buy else f"{mk}: 때가 오면 살 것"
+        if len(X):
+            fact = ', '.join(f"{r['종목']}(52주 고점 대비 {p(r.get('dd52'))}, 베타 {r['베타']:.2f}, 싼가 {n(r['싼가'], 2)})" for _, r in X.iterrows())
+        else:
+            fact = '해당 없음'
+        ev = R['검정근거']
+        if mk == '미국' and len(WB):
+            band = '경보(≥0.9)' if (nd or 0) >= R['바닥_경보'] else '준비(≥0.5)'
+            w = WB[WB['구간'] == band]
+            ev += ' / 바닥근접도_무엇을살까 ' + band + ' 26주: ' + ', '.join(f"{r['대상']} {p(r['26주 평균'])}(승률 {n(r['26주 승률'], 0)}%)" for _, r in w.iterrows())
+        out.append(L(ttl, fact, f"규칙: 엔진 원칙 '떨어진 우량주'(추천·관찰) + 싼가 {R['싼가_최소']} 이상 + 베타 {R['베타_최소']} 이상, 순위점수 순 {R['종목수']}개 · {ev}"))
+        if not buy and dfn:   # 11/20 의장 카드: 방어 국면·바닥 아님 → 베타 높은 '추천'은 관찰로
+            hi = [r for r in c.top if r['시장'] == mk and (beta.get(r['번호']) or 0) >= R['방어_베타상한']]
+            if hi:
+                c.top = [r for r in c.top if r['종목'] not in {h['종목'] for h in hi}]
+                c.drops += [(h['종목'], f"방어 국면·바닥 아님, 베타 {beta[h['번호']]:.2f} ≥ {R['방어_베타상한']} → 관찰") for h in hi]
+                out.append(L(f'{mk}: 추천에서 관찰로 내림', ', '.join(f"{h['종목']}(베타 {beta[h['번호']]:.2f})" for h in hi),
+                             f"규칙: 방어 국면·바닥 아님이면 베타 {R['방어_베타상한']} 이상 추천은 관찰"))
+    return out, []
+
+
 # ---------------------------------------------------------------- 묶기
 def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     c = Ctx(d, S, M, m, f, R, RC, today)
@@ -541,6 +656,11 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     EV = EV if EV is not None else _read(d, '사건상태')
     CAL = CAL if CAL is not None else _read(d, '변수달력')
     sections = []   # (번호 제목, 위원, 역할, 줄, 그래프, 덧붙일 글)
+    if c.R.get('결론'):   # 11/20 의장: 맨 앞에 '지금 살 때인가 · 오래 가져갈 것 무엇'
+        try:
+            a, g = conclusion(c); sections.append(('0 결론', '센터', '지금 살 때인가 · 무엇을 오래 가져갈 것인가', a, g, ''))
+        except Exception as e:   # noqa: BLE001
+            sections.append(('0 결론', '센터', '지금 살 때인가', [L('결론', '계산 실패', str(e)[:120])], [], ''))
     a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', a, g, tbl))
     a, g = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, ''))
     a, g = rio(c); sections.append(('3 리스크', '리오', '리스크', a, g, ''))
