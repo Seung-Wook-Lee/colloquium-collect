@@ -402,6 +402,15 @@ def main():
         log(f"[블록3] 종목점수 {len(BLK['3_analysis/종목점수.csv'])}종목")
     except Exception as e:   # noqa: BLE001
         log(f'[블록3] 실패: {str(e)[:160]}')
+    if '3-30' not in B.get('_꺼짐', []):   # 11/20 의장 '따로 집계': 바닥 기법은 종목점수에 섞지 않고 갈래별 한 표 집계만
+        try:
+            from analysis import b3_30_votes as B330
+            T30 = B330.today(pd.read_csv(f'{IN}/유니버스.csv', dtype=str, encoding='utf-8-sig'))
+            if T30 is not None and len(T30):
+                BLK['3_analysis/바닥신호집계.csv'] = T30
+                log(f"[3-30] 바닥 신호 집계 {len(T30)}종목, 최다 표 {T30['바닥 신호(표)'].max()}")
+        except Exception as e:   # noqa: BLE001
+            log(f'[3-30] 실패: {str(e)[:160]}')
     head = ' | '.join(note)
     txt = PER.render_txt(sec, tday, c.picks, head)
     js = PER.render_json(sec, tday, head)
