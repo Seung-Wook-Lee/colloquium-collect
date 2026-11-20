@@ -28,11 +28,14 @@ def kind(r):
     return f"{r['시장']}{'ETF' if r['구분'] == 'ETF' else ' 기업'}"
 
 
-def vols(tickers, years, excl, end=None):
+def prices(tickers, years, end=None):
     import yfinance as yf
     end = pd.Timestamp(end or pd.Timestamp.today().normalize())
     start = end - pd.DateOffset(years=years)
-    P = yf.download(sorted(set(tickers)), start=start, end=end + pd.Timedelta(days=1), auto_adjust=True, progress=False)['Close']
+    return yf.download(sorted(set(tickers)), start=start, end=end + pd.Timedelta(days=1), auto_adjust=True, progress=False)['Close']
+
+
+def vol_from(P, tickers, excl):
     out = {}
     for t in tickers:
         if t not in P:
@@ -44,6 +47,10 @@ def vols(tickers, years, excl, end=None):
             r = r[(r.index < pd.Timestamp(a)) | (r.index > pd.Timestamp(b))]
         out[t] = round(r.std() * np.sqrt(252) * 100, 1) if len(r) >= 60 else np.nan
     return out
+
+
+def vols(tickers, years, excl, end=None):
+    return vol_from(prices(tickers, years, end), tickers, excl)
 
 
 def layer_of(v, edges):
