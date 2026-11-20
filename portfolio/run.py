@@ -70,7 +70,9 @@ def buy_state(path):
     if not os.path.exists(path):
         return {}
     J = json.load(open(path, encoding='utf-8'))
-    out = {}
+    out = {mk: (bool(v.get('buy')), str(v.get('act', ''))) for mk, v in (J.get('state') or {}).items()}   # 11/20부터 원고에 매수 문구 없음 → 'state'
+    if out:
+        return out
     import re
     for m in J.get('members', []):
         for ln in m.get('lines', []) or []:   # 옛 형식: '2. **미국: 지금 살 때인가**: 산다 — ...'

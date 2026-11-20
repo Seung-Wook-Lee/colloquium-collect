@@ -483,7 +483,7 @@ def ttuji(c):
         r = A.iloc[0] if len(A) else None
         out.append(c.pick_line('뚜지', {**rule, '설명': rule.get('없을때', rule.get('설명', ''))}, r, len(A),
                                lambda r: why(r) + (f" — 편입 제외 사유: {dict(c.drops).get(r['종목'], '')}" if dict(c.drops).get(r['종목']) else ''), mark='주목'))
-    c.picks['센터'] = {**c.picks['뚜지'], '위원': '오늘의 한 종목(퀀트센터)'}
+    c.picks['센터'] = {**c.picks['뚜지'], '위원': '오늘의 한 종목(뚜지)'}   # 키만 내부용, 원고에 '센터'라는 말은 쓰지 않음
     G = [{'type': 'line', 'tickers': [r['ticker'] for r in c.top if ok(r.get('ticker'))], 'days': 365}] if c.top else []
     try:   # 11/20 의장: 블록 1~5 하위 블록(1-1 번호)은 언제든 넣고 뺀다 → 뚜지 발표에 켜짐·꺼짐 표
         import qc_config as QCC
@@ -751,46 +751,51 @@ def _buy_state(c):
 
 
 def conclusion(c):
-    """11/20 의장: "지금 살 때인가, 살 거면 오래 가져갈 것을 무엇을 살 것인가". 장기 보유할 것을 싸게 산다.
-    ① 신용 위기 → 사지 않는다 ② 바닥 근처(나스닥 바닥 근접도·코스피 최고 대비) → 산다(나눠서) ③ 방어 국면·바닥 아님 → 아직 사지 않는다
-    ④ 평상 → 엔진 포트폴리오대로. 살 것 = 엔진 원칙 '떨어진 우량주'(추천·관찰) 중 싼가·베타 기준 통과, 순위점수 순."""
+    """11/20 의장: 결론 칸·'센터'는 없다. 미스터 마켓 = 약세/강세와 근거 숫자만(사라 마라 표현 금지, 사는 건 의장이 판단).
+    뚜지 = 시장별 '눈에 띄는 저평가 종목'(엔진 원칙 '떨어진 우량주' + 싼가·베타 기준, 순위점수 순)과 뽑힌 이유(판정표 칸 숫자), 검정 통계.
+    의장 장기 후보는 기준가에 닿은 날만. 돌려주는 값 = (미스터 마켓 줄, 뚜지 줄). 매수 판정(ST)은 포트폴리오용으로 c.state에만 둔다."""
     R = c.R['결론']
     out, ST, V = _buy_state(c)
-    cnear, nd, WB = V['cnear'], V['nd'], V['WB']
+    c.state = {mk: (v['buy'], v['act']) for mk, v in ST.items()}
+    nd = V['nd']
+    credit = out[0] if out else None
+    mood = []
+    for mk in ('미국', '한국'):
+        g = ST[mk]['g']
+        if not g:
+            continue
+        st = '약세' if g[0] == '방어' else '강세'
+        num_ = [f"국면 {g[0]}", f"지수 4국면 {g[3] or '자료 없음'}"]
+        if mk == '미국' and nd is not None:
+            num_.append(f"나스닥100 바닥 근접도 {nd:.2f}")
+        kr = c.mac_row('S&P500' if mk == '미국' else '코스피')
+        if kr is not None:
+            num_.append(f"{'S&P500' if mk == '미국' else '코스피'} 사상 최고 대비 {p(num(kr.get('최고 대비(%)')))}")
+        mood.append(L(f'{mk} 시장', st, ' · '.join(num_)))
+    if credit is not None:
+        mood.append(L('회사채(신용)', credit.fact, f"위기 기준: 하이일드 {R['신용위기_하이일드']}% 이상 또는 20일 +{R['신용위기_하이일드20일']}%p 이상 · 주의 기준: CCC가 수집 최고의 {R['신용주의_CCC_수집최고비']:.0%} 이상"))
     T = c.T
     cand_all = T[(T.get('원칙', pd.Series(index=T.index, dtype=str)) == '떨어진 우량주') & T['추천'].isin(['추천', '관찰', '바닥 대기'])]
     beta = _betas(c, pd.concat([cand_all, T[T['종목'].isin([r['종목'] for r in c.top])]]).drop_duplicates('번호'))
+    out = []
     for mk in ('미국', '한국'):
-        act, why, dfn, g = ST[mk]['act'], ST[mk]['why'], ST[mk]['dfn'], ST[mk]['g']
-        buy = act.startswith('산다')
-        if buy and cnear:
-            act += ' · CCC 최고치 부근이라 1번째까지만'
-        out.append(L(f'{mk}: 지금 살 때인가', act, f"{why} · 국면 {g[0] if g else '자료 없음'}"))
-        if mk in c.gate:   # 시장 관문
-            out.append(L(f'{mk}: 시장 관문', f"종목 추천 {c.gate[mk][0]}개 → 바닥 대기", "규칙: 결론이 '사지 않는다'인 시장은 종목 '추천'을 '바닥 대기'로(11/20 의장 블록 정비 1번)",
-                         crit='사지 않는다', sig='orange'))
         X = cand_all[cand_all['시장'] == mk].copy()
         X['베타'] = X['번호'].map(beta)
         X = X[(X['싼가'].fillna(0) >= R['싼가_최소']) & (X['베타'].fillna(0) >= R['베타_최소'])]
         X = X.sort_values('순위점수', ascending=False).head(R['종목수'])
-        ttl = f"{mk}: 오래 가져갈 것(지금 산다)" if buy else f"{mk}: 때가 오면 살 것"
         if len(X):
-            fact = ', '.join(f"{r['종목']}(52주 고점 대비 {p(r.get('dd52'))}, 베타 {r['베타']:.2f}, 싼가 {n(r['싼가'], 2)})" for _, r in X.iterrows())
+            fact = ', '.join(f"{r['종목']}(52주 고점 대비 {p(r.get('dd52'))}, 베타 {r['베타']:.2f}, 싼가 {n(r['싼가'], 2)}) "
+                             f"PER {n(r.get('per_now'), 1, '배')}·3년 중앙 {n(r.get('per_med3'), 1, '배')}·순위점수 {n(r.get('순위점수'), 2)}" for _, r in X.iterrows())
         else:
             fact = '해당 없음'
         ev = R['검정근거']
+        WB = V['WB']
         if mk == '미국' and len(WB):
             band = '경보(≥0.9)' if (nd or 0) >= R['바닥_경보'] else '준비(≥0.5)'
             w = WB[WB['구간'] == band]
-            ev += ' / 바닥근접도_무엇을살까 ' + band + ' 26주: ' + ', '.join(f"{r['대상']} {p(r['26주 평균'])}(승률 {n(r['26주 승률'], 0)}%)" for _, r in w.iterrows())
-        out.append(L(ttl, fact, f"규칙: 엔진 원칙 '떨어진 우량주'(추천·관찰) + 싼가 {R['싼가_최소']} 이상 + 베타 {R['베타_최소']} 이상, 순위점수 순 {R['종목수']}개 · {ev}"))
-        if not buy and dfn:   # 11/20 의장 카드: 방어 국면·바닥 아님 → 베타 높은 '추천'은 관찰로
-            hi = [r for r in c.top if r['시장'] == mk and (beta.get(r['번호']) or 0) >= R['방어_베타상한']]
-            if hi:
-                c.top = [r for r in c.top if r['종목'] not in {h['종목'] for h in hi}]
-                c.drops += [(h['종목'], f"방어 국면·바닥 아님, 베타 {beta[h['번호']]:.2f} ≥ {R['방어_베타상한']} → 관찰") for h in hi]
-                out.append(L(f'{mk}: 추천에서 관찰로 내림', ', '.join(f"{h['종목']}(베타 {beta[h['번호']]:.2f})" for h in hi),
-                             f"규칙: 방어 국면·바닥 아님이면 베타 {R['방어_베타상한']} 이상 추천은 관찰"))
+            ev += ' / 바닥 근접도 ' + band + ' 26주: ' + ', '.join(f"{r['대상']} {p(r['26주 평균'])}(승률 {n(r['26주 승률'], 0)}%)" for _, r in w.iterrows())
+        out.append(L(f"{mk}: 눈에 띄는 저평가 종목", fact,
+                     f"엔진 원칙 '떨어진 우량주'(추천·관찰) 중 싼가 {R['싼가_최소']} 이상·베타 {R['베타_최소']} 이상, 순위점수 순 {R['종목수']}개 · {ev}"))
     LC = R.get('장기후보') or []
     LC = LC if isinstance(LC, dict) else {k: {} for k in LC}
     for b, cfg in LC.items():   # 11/20 의장 "아주 좋은 주식, 많이 떨어지면 왕창 사서 오래" — 의장 기준가·지정학 충격 때 표시
@@ -807,20 +812,19 @@ def conclusion(c):
             px = next((num(r.get(k)) for k in ('close', '종가', 'px') if num(r.get(k)) is not None), None)
         ref, lo = num(cfg.get('기준가')), num(cfg.get('기준가_하단'))
         refs = (f", 의장 기준가 {(n(lo, 0) + '~') if lo else ''}{n(ref, 0)}(현재가 {n(px, 2)}, 기준가까지 {p((ref / px - 1) * 100 if px else None)})" if ref else '')
-        out.append(L(f"의장 장기 후보: {r['종목']}", f"52주 고점 대비 {p(r.get('dd52'))}, PER {n(r.get('per_now'), 1, '배')}(52주 중앙 {n(r.get('per_med1'), 1, '배')}, 3년 중앙 {n(r.get('per_med3'), 1, '배')}), 엔진 {r.get('추천')}" + refs + band,
-                     f"의장 기준가·지정학 조건은 비공개 blocks.yaml '의장 장기 후보'. 가격대 = 추천 원칙 조합이 바뀌는 가격(가격대.csv)"))
-        if ref and px is not None and px <= ref:
-            EVs = _read(c.d, '사건상태')
-            pat = cfg.get('지정학_낱말')
-            geo_ev = EVs[EVs['사건'].astype(str).str.contains(pat) & EVs['상태'].astype(str).str.contains('진행')] if (pat and len(EVs) and '사건' in EVs) else pd.DataFrame()
-            gpr = num(c.m.get('GPR_PCT')) if isinstance(c.m, dict) else None
-            geo = len(geo_ev) > 0 or (gpr is not None and cfg.get('GPR_PCT_최소') is not None and gpr >= cfg['GPR_PCT_최소'])
-            if not pat and cfg.get('GPR_PCT_최소') is None:   # 지정학 조건 없는 종목(예: 카니발) = 가격만
-                out.append(L(f"{r['종목']}: 의장 기준가 도달", '의장 매수 가격 도달', f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)}"))
-                continue
-            out.append(L(f"{r['종목']}: 의장 기준가 도달", '지정학 충격 진행 중 — 의장 기회 조건 충족' if geo else '기준가 도달(지정학 충격 조건은 아직)',
-                         f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)} · 지정학: 사건상태 진행 {len(geo_ev)}건, GPR 백분위 {n(gpr, 0)}"))
-    return out, []
+        if not (ref and px is not None and px <= ref):   # 11/20 의장 "장기 후보를 여기서 왜 얘기하냐": 기준가에 닿은 날만
+            continue
+        EVs = _read(c.d, '사건상태')
+        pat = cfg.get('지정학_낱말')
+        geo_ev = EVs[EVs['사건'].astype(str).str.contains(pat) & EVs['상태'].astype(str).str.contains('진행')] if (pat and len(EVs) and '사건' in EVs) else pd.DataFrame()
+        gpr = num(c.m.get('GPR_PCT')) if isinstance(c.m, dict) else None
+        geo = len(geo_ev) > 0 or (gpr is not None and cfg.get('GPR_PCT_최소') is not None and gpr >= cfg['GPR_PCT_최소'])
+        if not pat and cfg.get('GPR_PCT_최소') is None:   # 지정학 조건 없는 종목(예: 카니발) = 가격만
+            out.append(L(f"{r['종목']}: 의장 기준가 도달", '기준가 도달', f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)}"))
+            continue
+        out.append(L(f"{r['종목']}: 의장 기준가 도달", '지정학 충격 진행 중 — 의장 기회 조건 충족' if geo else '기준가 도달(지정학 충격 조건은 아직)',
+                     f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)} · 지정학: 사건상태 진행 {len(geo_ev)}건, GPR 백분위 {n(gpr, 0)}"))
+    return mood, out
 
 
 # ---------------------------------------------------------------- 반대 의견 (11/20 의장)
@@ -855,18 +859,19 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     EV = EV if EV is not None else _read(d, '사건상태')
     CAL = CAL if CAL is not None else _read(d, '변수달력')
     sections = []   # (번호 제목, 위원, 역할, 줄, 그래프, 덧붙일 글)
-    if c.R.get('결론'):   # 11/20 의장: 맨 앞에 '지금 살 때인가 · 오래 가져갈 것 무엇'
+    mood, picks_ = [], []   # 11/20 의장: 결론 칸·'센터' 없음 → 시장 약세/강세는 미스터 마켓, 저평가 종목은 뚜지
+    if c.R.get('결론'):
         try:
-            a, g = conclusion(c); sections.append(('0 결론', '센터', '지금 살 때인가 · 무엇을 오래 가져갈 것인가', a, g, ''))
+            mood, picks_ = conclusion(c)
         except Exception as e:   # noqa: BLE001
-            sections.append(('0 결론', '센터', '지금 살 때인가', [L('결론', '계산 실패', str(e)[:120])], [], ''))
-    a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', a, g, tbl))
+            mood = [L('시장', '계산 실패', str(e)[:120])]
+    a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', mood + a, g, tbl))
     a, g, tbl = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, tbl))
     # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)는 겹치니 '미스 리스크' 한 위원으로 합친다
     a1, g1 = rio(c)
     a2, g2, tbl = phobos(c)
     sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, tbl))
-    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·오늘의 추천 종목', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
+    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·눈에 띄는 저평가 종목', picks_ + a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
     a, g = miss_chart(c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
         a, g = nyx(c, who); sections.append(('4 퀀트센터 — 닉스 팀', who, role, a, g, ''))
@@ -889,7 +894,7 @@ def render_txt(sections, today, picks, note=''):
     if note:
         out.append(note)
     c0 = picks.get('센터')
-    out += ['', f"■ 오늘의 한 종목(퀀트센터): {c0['종목'] if c0 and c0['종목'] else '해당 없음'}" + (f" — {c0['근거']}" if c0 and c0['근거'] else '')]
+    out += ['', f"■ 오늘의 한 종목(뚜지): {c0['종목'] if c0 and c0['종목'] else '해당 없음'}" + (f" — {c0['근거']}" if c0 and c0['근거'] else '')]
     cur = None
     for sec, who, role, lines, _, extra in sections:
         if sec != cur:
@@ -921,7 +926,7 @@ def render_md(sections, today, picks, note=''):
         out.append(_it(note))
     c0 = picks.get('센터')
     if c0 and c0['종목']:
-        out += ['', f"**오늘의 한 종목(퀀트센터)**: [{c0.get('표시') or '추천'}] {c0['종목']}" + (f" — {c0['근거']}" if c0['근거'] else '')]
+        out += ['', f"**오늘의 한 종목(뚜지)**: [{c0.get('표시') or '추천'}] {c0['종목']}" + (f" — {c0['근거']}" if c0['근거'] else '')]
     for sec, who, role, lines, _, extra in sections:
         out += ['', f'## {sec} | {who}', '', f'{who}:', '']
         for i, l in enumerate(lines, 1):
@@ -935,7 +940,7 @@ def render_md(sections, today, picks, note=''):
     return '\n'.join(out).rstrip() + '\n'
 
 
-def render_json(sections, today, note=''):
+def render_json(sections, today, note='', state=None):
     mem, sub = [], None
     for sec, who, role, lines, charts, extra in sections:
         ls = [f'{i}. **{l.title}**: {l.fact}' + (f'  \n:small[:gray[{l.why}]]' if l.why else '') for i, l in enumerate(lines, 1)]
@@ -947,7 +952,8 @@ def render_json(sections, today, note=''):
             sub['sub'].append(item)
         else:
             mem.append(item)
-    return json.dumps({'date': f'{today:%Y%m%d}', 'note': note or '코드 자동 생성(meeting/personas.py). AI가 쓰지 않음.', 'members': mem}, ensure_ascii=False, indent=1,
+    return json.dumps({'date': f'{today:%Y%m%d}', 'note': note or '코드 자동 생성(meeting/personas.py). AI가 쓰지 않음.', 'members': mem,
+                       'state': {k: {'buy': v[0], 'act': v[1]} for k, v in (state or {}).items()}},   # 포트폴리오용(원고에는 안 나옴) ensure_ascii=False, indent=1,
                       default=lambda o: None if isinstance(o, float) and math.isnan(o) else (o.item() if hasattr(o, 'item') else str(o)))
 
 
