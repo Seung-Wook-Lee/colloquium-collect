@@ -198,3 +198,65 @@ G132,SPDR Dow Jones Industrial Average ETF Trust,미국,NYSE Arca,ETF,미국 다
 G133,Hilton Worldwide Holdings,미국,NYSE,개별주,호텔·여행,HLT,HLT
 G134,Chubb Limited,미국,NYSE,개별주,손해보험,CB,CB
 G135,iShares 7-10 Year Treasury Bond ETF,미국,NASDAQ,ETF,미국 7~10년 국채,IEF,IEF
+G136,Thermo Fisher Scientific,미국,NYSE,개별주,Health Care,TMO,TMO
+G137,CrowdStrike,미국,NASDAQ,개별주,Information Technology,CRWD,CRWD
+G138,Gilead Sciences,미국,NASDAQ,개별주,Health Care,GILD,GILD
+G139,Dell Technologies,미국,NYSE,개별주,Information Technology,DELL,DELL
+G140,Citigroup,미국,NYSE,개별주,Financials,C,C
+G141,PepsiCo,미국,NASDAQ,개별주,Consumer Staples,PEP,PEP
+G142,Amphenol,미국,NYSE,개별주,Information Technology,APH,APH
+G143,KLA Corporation,미국,NASDAQ,개별주,Information Technology,KLAC,KLAC
+G144,Analog Devices,미국,NASDAQ,개별주,Information Technology,ADI,ADI
+G145,Abbott Laboratories,미국,NYSE,개별주,Health Care,ABT,ABT
+G146,Welltower,미국,NYSE,개별주,Real Estate,WELL,WELL
+G147,Qualcomm,미국,NASDAQ,개별주,Information Technology,QCOM,QCOM
+G148,Union Pacific Corporation,미국,NYSE,개별주,Industrials,UNP,UNP
+G149,T-Mobile US,미국,NASDAQ,개별주,Communication Services,TMUS,TMUS
+G150,Deere & Company,미국,NYSE,개별주,Industrials,DE,DE
+G151,Danaher Corporation,미국,NYSE,개별주,Health Care,DHR,DHR
+G152,ConocoPhillips,미국,NYSE,개별주,Energy,COP,COP
+G153,Charles Schwab Corporation,미국,NYSE,개별주,Financials,SCHW,SCHW
+G154,Pfizer,미국,NYSE,개별주,Health Care,PFE,PFE
+G155,TJX Companies,미국,NYSE,개별주,Consumer Discretionary,TJX,TJX
+G156,AT&T,미국,NYSE,개별주,Communication Services,T,T
+G157,Intuitive Surgical,미국,NASDAQ,개별주,Health Care,ISRG,ISRG
+G158,Progressive Corporation,미국,NYSE,개별주,Financials,PGR,PGR
+G159,Lockheed Martin,미국,NYSE,개별주,Industrials,LMT,LMT
+G160,Vertex Pharmaceuticals,미국,NASDAQ,개별주,Health Care,VRTX,VRTX
+G161,Accenture,미국,NYSE,개별주,Information Technology,ACN,ACN
+G162,Medtronic,미국,NYSE,개별주,Health Care,MDT,MDT
+G163,S&P Global,미국,NYSE,개별주,Financials,SPGI,SPGI
+G164,AppLovin,미국,NASDAQ,개별주,Communication Services,APP,APP
+G165,Altria,미국,NYSE,개별주,Consumer Staples,MO,MO
+G166,Lowe's,미국,NYSE,개별주,Consumer Discretionary,LOW,LOW
+G167,McKesson,미국,NYSE,개별주,Health Care,MCK,MCK
+G168,Seagate Technology,미국,NASDAQ,개별주,Information Technology,STX,STX
+G169,Bristol Myers Squibb,미국,NYSE,개별주,Health Care,BMY,BMY
+G170,Stryker Corporation,미국,NYSE,개별주,Health Care,SYK,SYK
+G171,Automatic Data Processing,미국,NASDAQ,개별주,Industrials,ADP,ADP
+G172,Prologis,미국,NYSE,개별주,Real Estate,PLD,PLD
+G173,Parker Hannifin,미국,NYSE,개별주,Industrials,PH,PH
+G174,iShares U.S. Aerospace & Defense ETF,미국,Cboe BZX,ETF,미국 방산,ITA,ITA
+G175,SPDR S&P Biotech ETF,미국,NYSE Arca,ETF,미국 바이오,XBI,XBI
+G176,SPDR S&P Regional Banking ETF,미국,NYSE Arca,ETF,미국 지역 은행,KRE,KRE
+K76,삼성물산,한국,KOSPI,개별주,지주·유틸리티,028260,028260.KS
+K77,기아,한국,KOSPI,개별주,자동차,000270,000270.KS
+K78,한화에어로스페이스,한국,KOSPI,개별주,방산·전력기계,012450,012450.KS
+K79,HD현대중공업,한국,KOSPI,개별주,조선,329180,329180.KS
+K80,SK,한국,KOSPI,개별주,지주·유틸리티,034730,034730.KS
+K81,NAVER,한국,KOSPI,개별주,인터넷·통신·게임,035420,035420.KS
+K82,삼성화재,한국,KOSPI,개별주,금융,000810,000810.KS
+K83,HMM,한국,KOSPI,개별주,운송,011200,011200.KS
+K84,POSCO홀딩스,한국,KOSPI,개별주,소재·에너지,005490,005490.KS
+K85,한국전력,한국,KOSPI,개별주,지주·유틸리티,015760,015760.KS
+K86,삼성SDS,한국,KOSPI,개별주,IT·전자,018260,018260.KS
+K87,SK이노베이션,한국,KOSPI,개별주,소재·에너지,096770,096770.KS
+K88,HD한국조선해양,한국,KOSPI,개별주,조선,009540,009540.KS
+K89,현대글로비스,한국,KOSPI,개별주,운송,086280,086280.KS
+K90,고려아연,한국,KOSPI,개별주,소재·에너지,010130,010130.KS
+K91,HD현대일렉트릭,한국,KOSPI,개별주,방산·전력기계,267260,267260.KS
+K92,한화오션,한국,KOSPI,개별주,조선,042660,042660.KS
+K93,대한항공,한국,KOSPI,개별주,운송,003490,003490.KS
+K94,S-Oil,한국,KOSPI,개별주,소재·에너지,010950,010950.KS
+K95,KT,한국,KOSPI,개별주,인터넷·통신·게임,030200,030200.KS
+K96,한국항공우주,한국,KOSPI,개별주,방산·전력기계,047810,047810.KS
