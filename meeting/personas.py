@@ -386,11 +386,12 @@ def miss_citadel(c):
 
 def rio(c):
     out = []
-    for it in ('근원 CPI 전년비', '근원 PCE 전년비'):
+    for it in ('CPI 전년비', '근원 CPI 전년비', '근원 PCE 전년비'):   # 11/20 의장: CPI·Core CPI 둘 다, 연준 용어, 전월 대비
         r = c.mac_row(it)
         if r is not None:
-            out.append(L(it.replace(' 전년비', ''), f"전년비 {n(r['값'], 2, '%')}(직전 발표 대비 {p(r['1달'], 2, '%p')})", f"기준 {r['기준일']}, {r['출처']}"))
-    for it in ('미국 2년', '미국 10년', '미국 10년 실질'):
+            out.append(L(it.replace(' 전년비', '').replace('근원 CPI', 'Core CPI').replace('근원 PCE', 'Core PCE'),
+                         f"전년비 {n(r['값'], 2, '%')}(전월 대비 {p(r['1달'], 2, '%p')})", f"기준 {r['기준일']}, {r['출처']}"))
+    for it in ('미국 2년', '미국 10년'):   # 11/20 의장: 10년 실질 삭제
         r = c.mac_row(it)
         if r is not None:
             out.append(L(it, f"{n(r['값'], 3, '%')}(1달 {p(r['1달'], 2, '%p')}, YTD {p(r['YTD'], 2, '%p')})",
