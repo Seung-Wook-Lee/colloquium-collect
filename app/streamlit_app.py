@@ -49,6 +49,22 @@ def read(day, name):
     return b.decode('utf-8-sig') if b else None
 
 
+def order_premarket(secs):
+    """11/20 23:42 의장 미장전 순서: 1 바닥 근접도 | 엔진 블록 센터 → 2 미장전 시황 | 미스터 마켓 → 나머지는 한 칸씩 뒤로.
+    옛 원고의 '결론' 칸은 보이지 않는다."""
+    mm, rest = [], []
+    for t, b in secs:
+        num, _, nm = t.partition(' ')
+        if '결론' in t:
+            continue
+        if '미스터 마켓' in t:
+            mm.append(b)
+            continue
+        m = re.match(r'(\d+)(.*)', num)
+        rest.append((f'{int(m.group(1)) + 1}{m.group(2)} {nm}' if m else t, b))
+    return ([('2 미장전 시황 | 미스터 마켓', '\n\n'.join(mm))] if mm else []) + rest
+
+
 def sections(md):
     """'## 칸 제목' 단위로 나눈다. 맨 앞(제목·오늘의 한 종목)은 머리말."""
     parts = re.split(r'(?m)^## ', md)
@@ -262,7 +278,7 @@ def read_csv(day, fname):
     return pd.read_csv(io.BytesIO(b), encoding='utf-8-sig') if b else None
 
 
-def bottom(day, name):
+def bottom(day, name, title='바닥 근접도'):
     """바닥 근접도(quant_center/bottom.py 출력)를 그대로 표시. 보정확률 = 실제로 바닥 구간일 확률."""
     pre = '미장전_' if name.startswith('미장전') else ''
     rows = []
@@ -273,24 +289,25 @@ def bottom(day, name):
     if not rows:
         return
     T = pd.DataFrame(rows)
-    show = pd.DataFrame({
-        '지수': T['기준지수'].replace({'^NDX': '나스닥100', '^GSPC': 'S&P500'}),
-        '보정확률(%)': (pd.to_numeric(T['보정확률'], errors='coerce') * 100).round(1),
-        '원점수': pd.to_numeric(T['원점수'], errors='coerce').round(3),
-        '과거 백분위': T['과거백분위'],
-        '비슷한 주 수': T.get('비슷한점수_주수'),
-        '뒤 13주 평균(%)': T.get('비슷한점수_뒤13주_평균'),
-        '뒤 13주 승률(%)': T.get('비슷한점수_뒤13주_승률'),
-        '뒤 26주 평균(%)': T.get('비슷한점수_뒤26주_평균'),
-        '뒤 26주 승률(%)': T.get('비슷한점수_뒤26주_승률'),
-    })
-    with st.container(border=True):
-        st.subheader('바닥 근접도')
-        st.caption('보정확률 = 지금이 바닥 구간(앞뒤 13주 최저 3% 안)일 확률. 출처: quant_center/bottom.py 매일 출력')
-        st.dataframe(show, hide_index=True, use_container_width=True)
-        if '바닥쪽_블록' in T:
-            for _, r in T.iterrows():
-                st.caption(f"{r['기준지수']} · 바닥 쪽 블록: {r.get('바닥쪽_블록', '')} · 반대 쪽 블록: {r.get('반대쪽_블록', '')}")
+    NAME = {'^NDX': '나스닥100', '^GSPC': 'S&P500'}
+
+    def pct(v, sign=False):
+        x = pd.to_numeric(v, errors='coerce')
+        return '' if pd.isna(x) else (f'{x:+.1f}%' if sign else f'{x:.1f}%')
+    with st.container(border=True):   # 11/20 의장: 평균·승률을 번갈아 두지 말고 각각, % 붙여서
+        st.subheader(title)
+        cols = st.columns(len(T))
+        for col, (_, r) in zip(cols, T.iterrows()):
+            with col:
+                pr = pd.to_numeric(r.get('보정확률'), errors='coerce')
+                st.metric(f"{NAME.get(r.get('기준지수'), r.get('기준지수'))} 바닥 구간 확률", '' if pd.isna(pr) else f'{pr * 100:.1f}%')
+                st.markdown(f"비슷한 점수였던 과거 {r.get('비슷한점수_주수', '')}주, 그 뒤 지수")
+                st.dataframe(pd.DataFrame({
+                    '': ['13주 뒤', '26주 뒤'],
+                    '평균 수익률': [pct(r.get('비슷한점수_뒤13주_평균'), True), pct(r.get('비슷한점수_뒤26주_평균'), True)],
+                    '승률': [pct(r.get('비슷한점수_뒤13주_승률')), pct(r.get('비슷한점수_뒤26주_승률'))],
+                }), hide_index=True, use_container_width=True)
+        st.caption('바닥 구간 확률 = 지금이 바닥 구간(앞뒤 13주 최저점 3% 안)일 확률')
 
 
 if not LOCAL and not drive.ready():
@@ -307,9 +324,13 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
             st.info(f'{day[:4]}-{day[4:6]}-{day[6:]} {label} 원고가 아직 없습니다.')
             continue
         head, secs = sections(md)
-        if head:
-            st.markdown(clean(head))
-        bottom(day, name)
+        if name.startswith('미장전'):   # 11/20 의장: 원고 첫 줄 자료 메모·한 종목 머리말은 보이지 않음, 순서 1 바닥 근접도 · 2 미장전 시황
+            bottom(day, name, '1 바닥 근접도 | 엔진 블록 센터')
+            secs = order_premarket(secs)
+        else:
+            if head:
+                st.markdown(clean(head))
+            bottom(day, name)
         for title, body in secs:
             with st.container(border=True):
                 st.subheader(title)
