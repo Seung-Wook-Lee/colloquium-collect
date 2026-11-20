@@ -26,7 +26,7 @@ def _upload():
 def _latest():
     """날짜 없는 '최신_' 사본을 수집데이터 폴더 바로 아래에 덮어쓴다"""
     names = sorted(os.listdir(DAY))
-    guide = (f'콜로키움 최신 수집 안내\n'
+    guide = (f'스튜디오 톰앤수 최신 수집 안내\n'
              f'기준일: {TODAY[:4]}-{TODAY[4:6]}-{TODAY[6:]} (한국 시간)\n'
              f'만든 시각: {stamp()} KST\n'
              f'이 날짜의 자료 폴더: {D_DATA}/{TODAY}/\n'

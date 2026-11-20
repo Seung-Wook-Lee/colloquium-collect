@@ -102,7 +102,7 @@ def q_ready():
 
 
 def read_existing(path):
-    """기존 콜로키움 드라이브 자료 읽기 전용 (예: '콜로키움 수집데이터/00_누적/00_가격이력.csv')"""
+    """기존 스튜디오 톰앤수 드라이브 자료 읽기 전용 (예: '콜로키움 수집데이터/00_누적/00_가격이력.csv')"""
     if not (KEY['DRIVE_URL'] and KEY['DRIVE_TOKEN']):
         return None
     try:

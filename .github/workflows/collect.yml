@@ -1,4 +1,4 @@
-name: 콜로키움 자료수집
+name: 스튜디오 톰앤수 자료수집
 
 on:
   workflow_dispatch:          # Actions 화면의 'Run workflow' 버튼으로 손으로 돌리기

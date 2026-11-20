@@ -1,5 +1,5 @@
 # ======================================================================
-# 콜로키움 — 회의 화면 (2026-11-20 의장: "스트림릿 오후회의, 오전 회의 2개만 해. 단순화하라고")
+# 스튜디오 톰앤수 — 회의 화면 (2026-11-20 의장: "스트림릿 오후회의, 오전 회의 2개만 해. 단순화하라고")
 #   국장전 회의(10:00)와 미장전 회의(22:00) 두 칸만. 각 칸은 회의에서 읽는 원고(회의원고.md)를 그대로 보여 준다.
 #   읽는 것: 드라이브 '콜로키움 수집데이터/YYYYMMDD/YYYYMMDD_회의원고.md', 'YYYYMMDD_미장전_회의원고.md'
 #            (meeting.yml이 만든다. 원고와 화면이 같은 파일이라 회의 발표와 화면이 어긋나지 않는다)
@@ -22,7 +22,7 @@ except Exception:
     pass
 import drive  # noqa: E402
 
-st.set_page_config(page_title='콜로키움 회의', page_icon='📊', layout='wide')
+st.set_page_config(page_title='스튜디오 톰앤수 회의', page_icon='📊', layout='wide')
 st.markdown('''<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
 <style>
 .block-container {max-width: 1100px; padding-top: 2rem;}

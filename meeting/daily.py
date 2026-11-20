@@ -208,7 +208,7 @@ def premarket_quotes(R):
 
 
 def judge(W, S):
-    """11/19 의장: 콜로키움 판단 층. 엔진(블록33) 판정표 위에서 최종 포트폴리오를 정하는 코드는 비공개(colloquium_private/gen_port.py)."""
+    """11/19 의장: 스튜디오 톰앤수 판단 층. 엔진(블록33) 판정표 위에서 최종 포트폴리오를 정하는 코드는 비공개(colloquium_private/gen_port.py)."""
     try:
         p = os.path.join(QCC.private_dir(), 'gen_port.py')
     except FileNotFoundError:
