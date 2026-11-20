@@ -77,11 +77,33 @@ def st_judge(S, c):
         fell = pd.Series(True, index=S.index)
         nodata = pd.Series(False, index=S.index)
         for k in P.get('떨어짐', []): fell &= ok_pass(k); nodata |= val(k).eq('자료 없음')   # 11/20 상장 1년 안 된 종목(스페이스X)은 '고점 부근'이 아니라 자료 없음
+        LY = P.get('층별') or {}
+        FL = c['f'].drop_duplicates('번호').set_index('번호') if 'f' in c and '번호' in c['f'] else pd.DataFrame()
+        lay = S['번호'].map(FL['층L']).fillna('') if '층L' in FL else pd.Series('', index=S.index)
+        S['층L'] = lay
+        if LY.get('떨어짐_변동성배수') and 'vol_yr' in FL and 'dd52' in FL:
+            # 11/20 의장 "고점 대비 10% 하락의 의미는 종목마다 다르다" → 떨어짐 = 고점 대비 낙폭 ≤ −배수 × 자기 연 변동성(Carver 변동성 단위)
+            vy, dd = pd.to_numeric(S['번호'].map(FL['vol_yr']), errors='coerce'), pd.to_numeric(S['번호'].map(FL['dd52']), errors='coerce')
+            ok = vy.notna() & dd.notna()
+            S['떨어짐문턱(%)'] = (-LY['떨어짐_변동성배수'] * vy).round(1)
+            fell = np.where(ok, dd <= S['떨어짐문턱(%)'], fell)
+            fell = pd.Series(fell, index=S.index).astype(bool)
+            nodata = nodata & ~ok
         good = pd.Series(True, index=S.index)
         for k in P.get('우량_통과', []): good &= ok_pass(k)
         for k in P.get('우량_예', []): good &= (sc(k) >= 0.5)
         RK = pd.concat([sc(k) for k in P.get('순위', [])], axis=1)
         S['순위점수'] = RK.mean(axis=1).round(3)
+        if LY.get('가중') and LY.get('묶음'):
+            # 11/20 의장 "마벨과 버크셔를 같은 기준으로 볼 수 없다" → 층별 묶음 가중(가치·퀄리티 / 추세·바닥 / 이익 전망·과매도). 묶음 안은 평균, 자료 없는 묶음은 빼고 다시 나눔
+            G = {g: pd.concat([sc(k) for k in ks], axis=1).mean(axis=1) for g, ks in LY['묶음'].items()}
+            num = pd.Series(0.0, index=S.index); den = pd.Series(0.0, index=S.index)
+            for g, x in G.items():
+                w = lay.map(lambda l: (LY['가중'].get(l) or {}).get(g, np.nan)).astype(float)
+                use = x.notna() & w.notna()
+                num += np.where(use, x * w, 0); den += np.where(use, w, 0)
+            lw = (den > 0) & lay.ne('')
+            S['순위점수'] = np.where(lw, (num / den.where(den > 0)).round(3), S['순위점수'])
         seen = RK.notna().sum(axis=1) >= P.get('순위_최소관측', 2)
         cut_r = P.get('추천선', 0.5)
         cand = S['판정'] == '후보'
@@ -96,6 +118,12 @@ def st_judge(S, c):
         S['원칙'] = np.where(nodata, '떨어짐 자료 없음', np.where(~fell, '고점 부근(안 떨어짐)', np.where(~good, '우량 아님', np.where(dear, '비쌈(PER 52주 중앙값 위)', '떨어진 우량주'))))
         S['추천'] = np.where(~cand, S['판정'], np.where(nodata, '자료 부족(52주 고점 없음)', np.where(~fell, '대기(고점 부근)', np.where(~good, '대기(우량 아님)',
                     np.where(dear, '대기(비쌈)', np.where(~seen, '자료 부족(블록 수 모자람)', np.where(S['순위점수'] >= cut_r, '추천', '관찰')))))))
+        if LY.get('추세확인_층') and LY.get('추세확인'):
+            # 11/20 의장: L3~L5는 추세가 돌아선 것을 확인한 뒤에만 '추천'(아니면 관찰)
+            tr = pd.concat([sc(k) for k in LY['추세확인']], axis=1).mean(axis=1)
+            wait = (S['추천'] == '추천') & lay.isin(LY['추세확인_층']) & ~(tr >= 0.5)
+            S.loc[wait, '추천'] = '관찰'
+            S.loc[wait, '원칙'] = S.loc[wait, '원칙'] + '·추세 확인 대기'
         # 11/20 의장 블록 정비: 업종 관문(업종관문 = 추천 → 관찰로 내림) / 업종참고(내리지 않고 '관문' 칸에 참고 표시만)
         # 11/20 15:08 의장 "업종 관문은 참고만. 주도주는 바뀐다. 좋은 회사를 다양한 업종에서 길게" → yaml 업종참고 사용
         S['관문'] = ''
@@ -111,7 +139,8 @@ def st_judge(S, c):
         c['info']['판정기준'] = (f"원칙: 떨어짐 {P.get('떨어짐')} 통과 → 우량 {P.get('우량_통과')} 통과·{P.get('우량_예')} 예 → "
                               f"{'비쌈(' + P['비쌈'] + ') 아님 → ' if P.get('비쌈') else ''}순위 {P.get('순위')} 평균 ≥ {cut_r}"
                               f"{' + 업종 관문 ' + str(P['업종관문']) + ' 예' if P.get('업종관문') else ''} 추천, 아래는 관찰"
-                              f"{' (업종 ' + str(P['업종참고']) + '는 참고 표시만)' if P.get('업종참고') else ''}")
+                              f"{' (업종 ' + str(P['업종참고']) + '는 참고 표시만)' if P.get('업종참고') else ''}"
+                              f"{'. 층별: 떨어짐 = 고점 대비 −' + str(LY['떨어짐_변동성배수']) + '×연 변동성, 순위 = 층별 묶음 가중, ' + str(LY.get('추세확인_층')) + ' 추세 ' + str(LY.get('추세확인')) + ' 확인 뒤 추천' if LY else ''}")
         return S
     # 11/19 의장: 가짜 바닥 검사 폐지(10년 성적에서 걸린 쪽이 52주 수익률 더 높음). '가짜바닥아님'(분산비·EWMAC 기울기)은 표시만
     c['info']['판정기준'] = f'{key} 추천 ≥ {cut:.2f}, 관찰 ≥ {cut2:.2f}'
@@ -153,12 +182,36 @@ def run_stages(S, c):
     return S.drop(columns=[k for k in S.columns if k.startswith('_sc_')])
 
 
+def layers_l(d, f, B, P):
+    """유니버스 생성법(universe_layers) 규칙으로 층L(L1~L5)·연변동성(%)을 붙인다. 5년 가격은 야후, 못 받으면 2년 가격으로.
+    한 실행에 한 번만 계산(d/유니버스_층L.csv)."""
+    cfg = B.get('유니버스')
+    if not cfg:
+        return f.assign(층L='', vol_yr=np.nan)
+    cache = f'{d}/유니버스_층L.csv'
+    if os.path.exists(cache):
+        L = pd.read_csv(cache, encoding='utf-8-sig', dtype={'번호': str})
+    else:
+        import universe_layers as UL
+        U = pd.read_csv(f'{d}/유니버스.csv', encoding='utf-8-sig', dtype=str)
+        try:
+            L = UL.classify(U, cfg)
+        except Exception as e:   # noqa: BLE001
+            print(f'[층L] 5년 가격 실패 → 2년 가격: {e}')
+            L = UL.classify(U, cfg, UL.vol_from(P, U['yfinance 티커'].dropna().tolist(), cfg.get('제외_구간', [])) if len(P) else {})
+        L = L[['번호', '층', '연변동성']]
+        L.to_csv(cache, index=False, encoding='utf-8-sig')
+    L = L.drop_duplicates('번호').set_index('번호')
+    return f.assign(층L=f['번호'].map(L['층']).fillna(''), vol_yr=pd.to_numeric(f['번호'].map(L['연변동성']), errors='coerce'))
+
+
 def run(d, cfg=None):
     B = QCC.load_blocks(cfg)
     f = F.stocks(d)
     f = f[f['시장'].isin(['한국', '미국'])].reset_index(drop=True)
     m = F.market(d)
     P = F._px(d)
+    f = layers_l(d, f, B, P)   # 11/20 의장 "층별 기준을 넣어라": 유니버스 생성법 L1~L5·연 변동성
     # B00 시장별 방어 국면(챗지 식: 5일 중 3일 + 당일, 해제도 같은 방식, 그 사이 유지)
     RG = O.regime(d, P, B['국면']) if len(P) else {}
     for mk, v in RG.items():
