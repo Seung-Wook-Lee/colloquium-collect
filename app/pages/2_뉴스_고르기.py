@@ -52,6 +52,9 @@ if not ds:
 day = st.selectbox('날짜', ds, format_func=lambda d: f'{d[:4]}-{d[4:6]}-{d[6:]}')
 
 cand = read(f'{day}_후보.csv')
+for col in ('의장판정', '의장이유'):
+    if col not in cand:
+        cand[col] = ''
 done = read(f'{day}_판정.csv')
 if done is not None and len(done):
     m = done.set_index('제목')[['의장판정', '의장이유']].to_dict('index')
@@ -63,25 +66,31 @@ c1, c2 = st.columns([1, 3])
 if c1.button('비어 있는 칸을 제미나이 추천대로 채우기'):
     cand['의장판정'] = [p or (g if g in CHOICES else '') for p, g in zip(cand['의장판정'], cand['제미나이추천'])]
     st.session_state[f'pre_{day}'] = cand['의장판정'].tolist()
+    for i in range(len(cand)):
+        st.session_state.pop(f'p_{day}_{i}', None)
 if f'pre_{day}' in st.session_state:
     cand['의장판정'] = st.session_state[f'pre_{day}']
 c2.caption('제미나이 추천이 맞으면 이 버튼으로 채운 뒤 다른 것만 고치면 됩니다.')
 
-show = ['번호', '의장판정', '의장이유', '제미나이추천', '중요도', '분류', '매체', '시각', '제목', '제미나이이유', '보강', '링크']
-edited = st.data_editor(
-    cand[show], hide_index=True, use_container_width=True, height=min(80 + 36 * len(cand), 1100),
-    disabled=[c for c in show if c not in ('의장판정', '의장이유')],
-    column_config={
-        '번호': st.column_config.NumberColumn(width='small'),
-        '의장판정': st.column_config.SelectboxColumn('의장 판정', options=CHOICES, width='small'),
-        '의장이유': st.column_config.TextColumn('의장 이유(한 줄)', width='medium'),
-        '제미나이추천': st.column_config.TextColumn('제미나이', width='small'),
-        '중요도': st.column_config.TextColumn(width='small'),
-        '제목': st.column_config.TextColumn(width='large'),
-        '제미나이이유': st.column_config.TextColumn('제미나이 이유', width='medium'),
-        '보강': st.column_config.TextColumn('같은 사건 다른 보도', width='medium'),
-        '링크': st.column_config.LinkColumn('원문', display_text='열기', width='small'),
-    })
+# 11/20 의장: "기사 내용이 보여야 한다, 평가는 뒤로" → 표 대신 기사 카드. 제목·내용(요약)이 앞, 판정·이유는 카드 맨 아래.
+st.caption('기사마다 제목과 내용을 먼저 보고, 맨 아래 칸에서 판정과 이유를 고르시면 됩니다.')
+picks, reasons = [], []
+for i, r in cand.reset_index(drop=True).iterrows():
+    with st.container(border=True):
+        st.markdown(f"**{r['제목']}**" + (f"  [원문]({r['링크']})" if str(r.get('링크', '')).startswith('http') else ''))
+        if r.get('제미나이이유'):
+            st.write(r['제미나이이유'])
+        if r.get('보강'):
+            st.caption(f"같은 사건 다른 보도: {r['보강']}")
+        st.caption(f"{r['매체']} · {r['시각']} · {r['분류']} · 중요도 {r['중요도']} · 제미나이 {r['제미나이추천'] or '—'}")
+        c1, c2 = st.columns([1, 3])
+        cur = st.session_state.get(f'pre_{day}', cand['의장판정'].tolist())[i]
+        picks.append(c1.selectbox('판정', CHOICES, index=CHOICES.index(cur) if cur in CHOICES else 0,
+                                  key=f'p_{day}_{i}', label_visibility='collapsed'))
+        reasons.append(c2.text_input('이유', value=cand['의장이유'].iloc[i], key=f'r_{day}_{i}',
+                                     placeholder='이유 한 줄', label_visibility='collapsed'))
+edited = cand.reset_index(drop=True).copy()
+edited['의장판정'], edited['의장이유'] = picks, reasons
 
 n = int((edited['의장판정'] != '').sum())
 diff = int(((edited['의장판정'] != '') & (edited['의장판정'] != edited['제미나이추천'])).sum())
