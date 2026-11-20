@@ -355,6 +355,14 @@ def main():
     S, D, M, m = ENG.run(IN)
     import features as F
     f = F.stocks(IN)
+    BAND = pd.DataFrame()
+    try:   # 11/20 의장 '어느 가격이 적당한가, 블록 조합으로' → 가격대.csv(결론 칸이 읽음)
+        import price_band as PB
+        BAND = PB.run(S, ENG.run.last_f, B)
+        BAND.to_csv(f'{IN}/가격대.csv', index=False, encoding='utf-8-sig')
+        log(f"[가격대] {len(BAND)}종목")
+    except Exception as e:   # noqa: BLE001
+        log(f'[가격대] 실패: {e}')
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
     BTO = backtest(W, IN, use_drive, tday, B, S) if a.session == '국장전' and (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
     BTO.update(bottom(W, use_drive, B, S))
@@ -378,6 +386,7 @@ def main():
     outs = {f'{PFX}회의원고.txt': txt.encode('utf-8'), f'{PFX}회의원고.md': md.encode('utf-8'), f'{PFX}발표.json': js.encode('utf-8'),
             f'{PFX}오늘의한종목.csv': pk.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}판정표.csv': S.to_csv(index=False).encode('utf-8-sig'),
+            f'{PFX}가격대.csv': BAND.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}시장블록.csv': M.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}사건상태.csv': EV.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}변수달력.csv': CAL.to_csv(index=False).encode('utf-8-sig'),
