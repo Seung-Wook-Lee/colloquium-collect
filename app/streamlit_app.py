@@ -36,6 +36,7 @@ h1, h2, h3, h4, h5 {font-weight: 500 !important; letter-spacing: -0.2px;}
 .why {font-size: 13px; color: #888; line-height: 1.6;}
 .sec-t {font-size: 22px; font-weight: 500; line-height: 1.4; margin: 2px 0 10px; font-family: inherit; font-variant-numeric: lining-nums;}
 .big-t td, .big-t th {font-size: 18px !important; padding: 8px 14px !important;}
+.who {font-size: 13px; font-weight: 400; color: #8a8a8a; margin-left: 10px; letter-spacing: 0.2px;}
 .note {font-size: 12.5px; color: #8a8a8a; line-height: 1.6; margin-top: 6px;}
 </style>''', unsafe_allow_html=True)
 
@@ -53,6 +54,30 @@ def read(day, name):
         return p.read_text(encoding='utf-8') if p.exists() else None
     b = drive.get(f'{D_DATA}/{rel}')
     return b.decode('utf-8-sig') if b else None
+
+
+EN = [   # 11/20 의장: 사람·센터 이름은 영어로, 작게
+    ('엔진 블록 센터', 'Engine Block Center'), ('퀀트센터', 'Quant Center'), ('닉스 팀', 'Team Nyx'),
+    ('미스터 마켓', 'Mr. Market'), ('미스 시타델', 'Miss Citadel'), ('미스 리스크', 'Miss Risk'), ('미스 차트', 'Miss Chart'),
+    ('미스 밸류', 'Miss Value'), ('미스 세마이', 'Miss Semi'), ('미스터 빅스', 'Mr. Bix'), ('미스터 로보', 'Mr. Robo'),
+    ('미스 파이낸스', 'Miss Finance'), ('마담헤비', 'Madame Heavy'), ('일라이 존슨', 'Eli Johnson'), ('엘피스', 'Elpis'),
+    ('클로토', 'Clotho'), ('라케시스', 'Lachesis'), ('아트로포스', 'Atropos'), ('뚜지', 'Ttuji'), ('국장', 'Chief'),
+    ('(센터장)', ', Head'), ('(팀장)', ', Head'), ('센터장', 'Head'), ('팀장', 'Head')]
+
+
+def en(t):
+    for k, v in EN:
+        t = re.sub(re.escape(k) + ('(?!전)' if k == '국장' else ''), v, t)   # '국장전'은 그대로
+    return t
+
+
+def sec_title(title):
+    name, _, who = title.partition(' | ')
+    if ' — ' in name:   # '4 퀀트센터 — 닉스 팀' → 이름 칸은 센터·팀(영어 작게)로
+        name, team = name.split(' — ', 1)
+        who = f'{team} · {who}' if who else team
+    w = f'<span class="who">{en(who)}</span>' if who else ''
+    return f'<div class="sec-t">{en(name)}{w}</div>'
 
 
 def order_premarket(secs):
@@ -360,7 +385,7 @@ def bottom(day, name, title='바닥 근접도'):
         x = pd.to_numeric(v, errors='coerce')
         return '' if pd.isna(x) else (f'{x:+.1f}%' if sign else f'{x:.1f}%')
     with st.container(border=True):   # 11/20 의장: 평균·승률을 번갈아 두지 말고 각각, % 붙여서
-        st.markdown(f'<div class="sec-t">{title}</div>', unsafe_allow_html=True)
+        st.markdown(sec_title(title), unsafe_allow_html=True)
         cols = st.columns(len(T))
         for col, (_, r) in zip(cols, T.iterrows()):
             with col:
@@ -401,5 +426,5 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
         for title, body in secs:
             with st.container(border=True):
                 title = title.replace('수급·포지셔닝', 'Flows & Positioning')   # 11/20 의장: 수급·포지셔닝은 영어로
-                st.markdown(f'<div class="sec-t">{title}</div>', unsafe_allow_html=True)
+                st.markdown(sec_title(title), unsafe_allow_html=True)
                 render(body)
