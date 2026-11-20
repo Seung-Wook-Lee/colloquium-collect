@@ -383,13 +383,7 @@ def main():
     PFX = f'{today}_' if a.session == '국장전' else f'{today}_미장전_'
     if a.session == '미장전':
         Q = premarket_quotes(R)
-        pl, pt = PER.premarket(c, Q, tday)   # 11/20 의장: 미스터 마켓 한 칸 = 시세 표 한 장 + 시장 분위기
-        i = next((k for k, x in enumerate(sec) if x[1] == '미스터 마켓'), None)
-        if i is None:
-            sec.insert(0, ('1 시장', '미스터 마켓', '미장전 시황', pl, [], pt))
-        else:
-            s0, w0, r0, l0, g0, t0 = sec[i]
-            sec[i] = (s0, w0, '미장전 시황', l0 + pl, g0, pt)   # 미장전은 오늘 시세 표(07시 매크로 표는 아침 값이라 뺌)
+        sec.insert(0, ('0 미장전 시황', '미스터 마켓', '미장전 시황', PER.premarket(c, Q, tday), [], ''))
         note.insert(0, '미장전 회의(22:00) — 07시 파일 + 야후 가격(오늘 한국 종가까지)·RSS 다시 받아 엔진 다시 실행')
         Q.to_csv(f'{IN}/미장전시세.csv', index=False, encoding='utf-8-sig')
     # 11/20 의장 블록 1~5 재편: 블록 2 phase(국면.csv) · 블록 3 Analysis(종목점수.csv) 출력 — 다음 블록은 이 파일만 읽는다

@@ -273,24 +273,18 @@ def mr_market(c):
         if r is None:
             continue
         v, pv = num(r['값']), num(r.get('전일 값'))
-        rate = str(r.get('단위')) == '%'   # 금리는 %p 변화
-        d1 = (v - pv) if rate and v is not None and pv is not None else ((v / pv - 1) * 100 if v and pv else None)
-        rows.append([it, n(v, 2) + ('%' if rate else ''), p(d1, 2, '%p' if rate else '%'), str(r.get('기준일') or '')])
+        d1 = (v / pv - 1) * 100 if v and pv else None
+        rows.append([it, n(v, 2), p(d1, 2), p(num(r.get('최고 대비(%)')))])
     tbl = ''
-    if rows:   # 11/20 의장 "한 판에 넣어야 보지": 시장 숫자는 표 한 장, 근거는 표 아래 한 줄
-        tbl = market_table(cfg['지수제목'], rows, '야후·FRED, 등락 = 전일 값 대비(금리는 %p)')
+    if rows:
+        out.append(L(cfg['지수제목'], ', '.join(f"{a} {b}({c_})" for a, b, c_, _ in rows), '07시 매크로.csv, 전일 값 대비 · 사상 최고 대비는 표'))
+        tbl = '| 지수 | 종가 | 전일 대비 | 사상 최고 대비 |\n|---|---|---|---|\n' + '\n'.join('| ' + ' | '.join(x) + ' |' for x in rows)
     if cfg.get('코스피이격'):
         kg = c.m.get('KS_GAP50')
         if kg is not None:
             st = '과열' if kg >= R['코스피이격_과열'] else ('과열 주의' if kg >= R['코스피이격_주의'] else '과열 기준 아래')
             out.append(L('코스피 50일 이격', f"{kg:.1f} — {st}", f"의장 기준 {R['코스피이격_주의']} 과열 주의, {R['코스피이격_과열']} 과열"))
     return out, [], tbl
-
-
-def market_table(title, rows, why):
-    """미스터 마켓 시장 숫자 한 장 표: 항목 | 값 | 등락 | 기준일, 아래 한 줄 근거."""
-    return (f'**{title}**\n\n| 항목 | 값 | 등락 | 기준일 |\n|---|---|---|---|\n' + '\n'.join('| ' + ' | '.join(map(str, x)) + ' |' for x in rows)
-            + f'\n\n_근거: {why}_')
 
 
 def mover_news(c, name):
@@ -668,10 +662,9 @@ def gukjang(c, EV, CAL):
 
 # ---------------------------------------------------------------- 0 결론 (11/20 의장)
 def _read2(d, name):
-    """오늘 계산한 파일(한 단계 위 = bottom.py·correction.py 출력 자리)을 먼저, 없으면 작업 폴더(in/).
-    11/20 미장전: in/에 아침 사본(단계배수 칸 없음)이 먼저 읽혀 한국 문턱이 빠지던 것 고침."""
-    X = _read(os.path.dirname(os.path.abspath(d)), name)
-    return X if len(X) else _read(d, name)
+    """작업 폴더(in/)에 없으면 한 단계 위(bottom.py 출력 자리)에서 읽는다."""
+    X = _read(d, name)
+    return X if len(X) else _read(os.path.dirname(os.path.abspath(d)), name)
 
 
 def _betas(c, rows):
@@ -735,7 +728,7 @@ def _buy_state(c):
     kmul = num(KC.iloc[0].get('단계배수')) if len(KC) and '단계배수' in KC else None
     kthr = -R['한국_산다_미국단계'] * kmul if (kmul is not None and R.get('한국_산다_미국단계')) else None
     kdesc = (f"미국 −{R['한국_산다_미국단계']:g}% correction × 코스피 배수 {kmul:.2f}(최근 {n(KC.iloc[0].get('배수_년'), 0)}년 주간 변동성 ÷ S&P500) = {kthr:.1f}%"
-             if kthr is not None else '한국 문턱 계산 안 됨(코스피 배수 없음)')
+             if kthr is not None else '한국 문턱 자료 없음(조정단계_오늘_코스피.csv 단계배수)')
     ST = {}
     for mk in ('미국', '한국'):
         g = c.regime(mk); dfn = bool(g and g[0] == '방어')
@@ -814,18 +807,19 @@ def conclusion(c):
             px = next((num(r.get(k)) for k in ('close', '종가', 'px') if num(r.get(k)) is not None), None)
         ref, lo = num(cfg.get('기준가')), num(cfg.get('기준가_하단'))
         refs = (f", 의장 기준가 {(n(lo, 0) + '~') if lo else ''}{n(ref, 0)}(현재가 {n(px, 2)}, 기준가까지 {p((ref / px - 1) * 100 if px else None)})" if ref else '')
-        if not (ref and px is not None and px <= ref):   # 11/20 의장 "장기 후보를 여기서 왜 얘기하냐": 기준가에 닿는 날에만 알림
-            continue
-        EVs = _read(c.d, '사건상태')
-        pat = cfg.get('지정학_낱말')
-        geo_ev = EVs[EVs['사건'].astype(str).str.contains(pat) & EVs['상태'].astype(str).str.contains('진행')] if (pat and len(EVs) and '사건' in EVs) else pd.DataFrame()
-        gpr = num(c.m.get('GPR_PCT')) if isinstance(c.m, dict) else None
-        geo = len(geo_ev) > 0 or (gpr is not None and cfg.get('GPR_PCT_최소') is not None and gpr >= cfg['GPR_PCT_최소'])
-        if not pat and cfg.get('GPR_PCT_최소') is None:   # 지정학 조건 없는 종목(예: 카니발) = 가격만
-            out.append(L(f"{r['종목']}: 의장 기준가 도달", '의장 매수 가격 도달', f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)}"))
-            continue
-        out.append(L(f"{r['종목']}: 의장 기준가 도달", '지정학 충격 진행 중 — 의장 기회 조건 충족' if geo else '기준가 도달(지정학 충격 조건은 아직)',
-                     f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)} · 지정학: 사건상태 진행 {len(geo_ev)}건, GPR 백분위 {n(gpr, 0)}"))
+        out.append(L(f"의장 장기 후보: {r['종목']}", f"52주 고점 대비 {p(r.get('dd52'))}, PER {n(r.get('per_now'), 1, '배')}(52주 중앙 {n(r.get('per_med1'), 1, '배')}, 3년 중앙 {n(r.get('per_med3'), 1, '배')}), 엔진 {r.get('추천')}" + refs + band,
+                     f"의장 기준가·지정학 조건은 비공개 blocks.yaml '의장 장기 후보'. 가격대 = 추천 원칙 조합이 바뀌는 가격(가격대.csv)"))
+        if ref and px is not None and px <= ref:
+            EVs = _read(c.d, '사건상태')
+            pat = cfg.get('지정학_낱말')
+            geo_ev = EVs[EVs['사건'].astype(str).str.contains(pat) & EVs['상태'].astype(str).str.contains('진행')] if (pat and len(EVs) and '사건' in EVs) else pd.DataFrame()
+            gpr = num(c.m.get('GPR_PCT')) if isinstance(c.m, dict) else None
+            geo = len(geo_ev) > 0 or (gpr is not None and cfg.get('GPR_PCT_최소') is not None and gpr >= cfg['GPR_PCT_최소'])
+            if not pat and cfg.get('GPR_PCT_최소') is None:   # 지정학 조건 없는 종목(예: 카니발) = 가격만
+                out.append(L(f"{r['종목']}: 의장 기준가 도달", '의장 매수 가격 도달', f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)}"))
+                continue
+            out.append(L(f"{r['종목']}: 의장 기준가 도달", '지정학 충격 진행 중 — 의장 기회 조건 충족' if geo else '기준가 도달(지정학 충격 조건은 아직)',
+                         f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)} · 지정학: 사건상태 진행 {len(geo_ev)}건, GPR 백분위 {n(gpr, 0)}"))
     return out, []
 
 
@@ -861,23 +855,18 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     EV = EV if EV is not None else _read(d, '사건상태')
     CAL = CAL if CAL is not None else _read(d, '변수달력')
     sections = []   # (번호 제목, 위원, 역할, 줄, 그래프, 덧붙일 글)
-    # 11/20 의장 "그냥 미스터 마켓이 얘기하면 안 됨?": 결론 칸을 따로 두지 않는다. 시장 판정(지금 살 때인가·신용·시장 관문)은 미스터 마켓,
-    # 종목 목록(오래 가져갈 것·때가 오면 살 것, 검정 통계 포함)·의장 기준가 도달은 뚜지(엔진 블록 센터) 칸.
-    mood, picks_ = [], []
-    if c.R.get('결론'):
+    if c.R.get('결론'):   # 11/20 의장: 맨 앞에 '지금 살 때인가 · 오래 가져갈 것 무엇'
         try:
-            a, _ = conclusion(c)
-            for l in a:
-                (mood if (l.title.endswith(('지금 살 때인가', '시장 관문')) or l.title.startswith('회사채')) else picks_).append(l)
+            a, g = conclusion(c); sections.append(('0 결론', '센터', '지금 살 때인가 · 무엇을 오래 가져갈 것인가', a, g, ''))
         except Exception as e:   # noqa: BLE001
-            mood.append(L('지금 살 때인가', '계산 실패', str(e)[:120]))
-    a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', mood + a, g, tbl))
+            sections.append(('0 결론', '센터', '지금 살 때인가', [L('결론', '계산 실패', str(e)[:120])], [], ''))
+    a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', a, g, tbl))
     a, g, tbl = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, tbl))
     # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)는 겹치니 '미스 리스크' 한 위원으로 합친다
     a1, g1 = rio(c)
     a2, g2, tbl = phobos(c)
     sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, tbl))
-    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·오늘의 추천 종목', picks_ + a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
+    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·오늘의 추천 종목', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
     a, g = miss_chart(c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
         a, g = nyx(c, who); sections.append(('4 퀀트센터 — 닉스 팀', who, role, a, g, ''))
@@ -910,27 +899,11 @@ def render_txt(sections, today, picks, note=''):
         for i, l in enumerate(lines, 1):
             out.append(f'{i}. {l.title}')
             out.append(f'   {l.fact}')
-            if clean_why(l.why):
-                out.append(f'   └ 근거: {clean_why(l.why)}')
+            if l.why:
+                out.append(f'   └ 근거: {l.why}')
         if extra:
             out += ['', extra]
     return '\n'.join(out) + '\n'
-
-
-_CSV = _re.compile(r'\s*[—·]?\s*\(?(?:07시\s*)?[^\s,()·]+\.csv(?:\.gz)?\)?')
-
-
-def clean_why(t):
-    """11/20 의장 원고 정리: 근거에서 csv 파일명·'규칙:' 머리말을 빼고 출처와 기준값만."""
-    t = _CSV.sub('', str(t or ''))
-    t = _re.sub(r'규칙:\s*', '', t)
-    t = _re.sub(r'\s*·\s*(?=·|$)', '', t)
-    t = _re.sub(r'\(\s*\)|,\s*(?=$)', '', t)
-    return _re.sub(r'\s{2,}', ' ', t).strip(' ,·—')
-
-
-def _cell(t):
-    return str(t).replace('|', '/').replace('\n', ' ').strip()
 
 
 def _it(t):
@@ -949,14 +922,13 @@ def render_md(sections, today, picks, note=''):
     c0 = picks.get('센터')
     if c0 and c0['종목']:
         out += ['', f"**오늘의 한 종목(퀀트센터)**: [{c0.get('표시') or '추천'}] {c0['종목']}" + (f" — {c0['근거']}" if c0['근거'] else '')]
-    for sec, who, role, lines, _, extra in sections:   # 11/20 의장 "한 판에 넣어야 보지": 칸마다 표 한 장
-        out += ['', f'## {sec} | {who}', '']
-        if extra and who == '미스터 마켓':   # 시세 한 장 표 먼저, 아래 시장 분위기
-            out += [extra, '']
-            extra = ''
-        if lines:
-            out += ['| 항목 | 내용 | 근거 |', '|---|---|---|']
-            out += [f'| {_cell(l.title)} | {_cell(l.fact)} | {_cell(clean_why(l.why))} |' for l in lines]
+    for sec, who, role, lines, _, extra in sections:
+        out += ['', f'## {sec} | {who}', '', f'{who}:', '']
+        for i, l in enumerate(lines, 1):
+            out.append(f'**{i}. {l.title}**  ')
+            out.append(l.fact + ('  ' if l.why else ''))
+            if l.why:
+                out.append(_it('근거: ' + str(l.why)))
             out.append('')
         if extra:
             out += [extra, '']
@@ -966,7 +938,7 @@ def render_md(sections, today, picks, note=''):
 def render_json(sections, today, note=''):
     mem, sub = [], None
     for sec, who, role, lines, charts, extra in sections:
-        ls = [f'{i}. **{l.title}**: {l.fact}' + (f'  \n:small[:gray[{clean_why(l.why)}]]' if clean_why(l.why) else '') for i, l in enumerate(lines, 1)]
+        ls = [f'{i}. **{l.title}**: {l.fact}' + (f'  \n:small[:gray[{l.why}]]' if l.why else '') for i, l in enumerate(lines, 1)]
         item = {'name': who, 'role': role, 'lines': ls, 'charts': charts, 'rows': [l.row() for l in lines]}
         if sec.startswith('4-2'):
             if sub is None:
@@ -980,23 +952,19 @@ def render_json(sections, today, note=''):
 
 
 def premarket(c, Q, today):
-    """미장전 시황(미스터 마켓, 22:00 회의 맨 앞). Q = daily.py가 받은 야후 시세표(이름·티커·값·전일대비(%)·시각).
-    11/20 의장 "한 판에 넣어야 보지": 시세는 표 한 장(항목|값|등락|기준일), 줄은 선물 큰 움직임·밤 일정만. 돌려주는 값 = (줄, 표 md)."""
+    """미장전 시황(미스터 마켓, 22:00 회의 맨 앞). Q = daily.py가 받은 야후 시세표(이름·티커·값·전일대비(%)·시각)."""
     P = c.R.get('미장전', {})
-    out, rows, big = [], [], []
+    out = []
     if Q is not None and len(Q):
         for _, q in Q.iterrows():
             if pd.isna(q['값']):
                 continue
             chg = q['전일대비(%)']
-            if q['티커'] in ('ES=F', 'NQ=F', 'YM=F') and pd.notna(chg) and abs(chg) >= P.get('크게움직임_선물(%)', 1):
-                big.append(f"{q['이름']} {'+' if chg >= 0 else ''}{chg:.2f}%")
-            rows.append([q['이름'], n(q['값'], 2), (f"{'+' if chg >= 0 else ''}{chg:.2f}%" if pd.notna(chg) else '-'), q['시각']])
-        if big:
-            out.append(L('선물 큰 움직임', ', '.join(big), f"미국 지수 선물 ±{P.get('크게움직임_선물(%)', 1)}% 이상"))
+            big = (q['티커'].endswith('=F') and q['티커'] in ('ES=F', 'NQ=F', 'YM=F') and pd.notna(chg) and abs(chg) >= P.get('크게움직임_선물(%)', 1))
+            out.append(L(q['이름'], f"{n(q['값'], 2)}" + (f" ({'+' if chg >= 0 else ''}{chg:.2f}%)" if pd.notna(chg) else '') + (' — 선물 큰 움직임' if big else ''),
+                         f"야후 {q['티커']}, {q['시각']} 기준, 전일 종가 대비"))
     else:
         out.append(L('시세', '야후 시세를 받지 못함', '미장전 시세 받기 실패'))
-    tbl = market_table('미장전 시세', rows, '야후 시세, 등락 = 전일 종가 대비, 기준일 = 마지막 거래일(월-일)') if rows else ''
     S = _read(c.d, '일정')
     if len(S):
         t0, t1 = P.get('밤일정_시작', '18:00'), P.get('밤일정_끝', '08:00')
@@ -1008,7 +976,7 @@ def premarket(c, Q, today):
             out.append(L('오늘 밤 미국 일정', ' / '.join(f"{r['시각(한국)']} {r['대상']} {r['내용']}" for _, r in night.iterrows()), f'07시 일정.csv, 한국 시각 {d0} {t0} ~ {d1} {t1}'))
         else:
             out.append(L('오늘 밤 미국 일정', '없음', f'07시 일정.csv, 한국 시각 {d0} {t0} ~ {d1} {t1}'))
-    return out, tbl
+    return out
 
 
 def ask_index(c):
