@@ -356,6 +356,102 @@ def why_box(why):
         st.markdown(f'<div class="why">{short}</div>', unsafe_allow_html=True)
 
 
+FG_BANDS = [(0, 25, '#c0392b', 'Extreme Fear'), (25, 45, '#e67e22', 'Fear'), (45, 55, '#9aa0a6', 'Neutral'),
+            (55, 75, '#7cb342', 'Greed'), (75, 100, '#2e7d32', 'Extreme Greed')]
+
+
+def fg_color(v):
+    return next(c for lo, hi, c, _ in FG_BANDS if v < hi or hi == 100)
+
+
+def gauge_svg(score, label):
+    """11/21 의장: 공포탐욕은 구간이 보이는 그림으로(옛 게이지 되살림)"""
+    import base64, math
+    cx, cy, r = 150, 140, 115
+    pt = lambda val, rr: (cx + rr * math.cos(math.pi * (1 - val / 100)), cy - rr * math.sin(math.pi * (1 - val / 100)))
+    segs = ''
+    for lo, hi, c, _ in FG_BANDS:
+        (x1, y1), (x2, y2) = pt(lo, r), pt(hi, r)
+        segs += f'<path d="M{x1:.1f},{y1:.1f} A{r},{r} 0 0 1 {x2:.1f},{y2:.1f}" stroke="{c}" stroke-width="22" fill="none"/>'
+    ticks = ''.join(f'<text x="{pt(t, r + 22)[0]:.1f}" y="{pt(t, r + 22)[1] + 4:.1f}" font-size="11" fill="#6b7280" '
+                    f'text-anchor="middle">{t}</text>' for t in (0, 25, 45, 55, 75, 100))
+    nx, ny = pt(score, r - 30)
+    col = fg_color(score)
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 175">{segs}{ticks}'
+           f'<line x1="{cx}" y1="{cy}" x2="{nx:.1f}" y2="{ny:.1f}" stroke="#1d2330" stroke-width="4" stroke-linecap="round"/>'
+           f'<circle cx="{cx}" cy="{cy}" r="7" fill="#1d2330"/></svg>')
+    b64 = base64.b64encode(svg.encode()).decode()
+    return (f'<div style="text-align:center"><img src="data:image/svg+xml;base64,{b64}" style="width:100%;max-width:320px">'
+            f'<div style="font-size:40px;font-weight:400;line-height:1;margin-top:-6px;color:{col}">{score:.1f}</div>'
+            f'<div style="font-size:14px;color:{col}">{label}</div></div>')
+
+
+def score_bar(score, label):
+    col = fg_color(score)
+    marks = ''.join(f'<div style="position:absolute;left:{t}%;top:0;bottom:0;border-left:1px solid #fff"></div>' for t in (25, 45, 55, 75))
+    return (f'<div style="display:flex;align-items:center;gap:10px"><div style="position:relative;flex:1;height:10px;background:#eceff1;'
+            f'border-radius:5px;overflow:hidden"><div style="width:{score:.0f}%;height:100%;background:{col}"></div>{marks}</div>'
+            f'<span style="font-size:18px;font-variant-numeric:tabular-nums;min-width:38px;text-align:right">{score:.0f}</span>'
+            f'<span style="color:{col};font-size:12px;min-width:84px">{label}</span></div>')
+
+
+FG_TOTAL = re.compile(r'Fear & Greed Index ([\d.]+) ([A-Za-z ]+?) — 전일 ([+-]?[\d.]+), 1주 전 대비 ([+-]?[\d.]+), 1개월 전 대비 ([+-]?[\d.]+)')
+
+
+def fg_total(val):
+    m = FG_TOTAL.search(val)
+    if not m:
+        return False
+    s = float(m.group(1))
+    c1, c2 = st.columns([1, 1.3], gap='large')
+    c1.html(gauge_svg(s, m.group(2)))
+    rows = ''.join(f'<tr><td style="padding:6px 8px;color:#6b7280">{k}</td><td style="padding:6px 8px;text-align:right;'
+                   f'color:{RED if float(v) < 0 else BLUE};font-size:18px">{float(v):+.1f}</td></tr>'
+                   for k, v in (('전일 대비', m.group(3)), ('1주 전 대비', m.group(4)), ('1개월 전 대비', m.group(5))))
+    c2.html('<div style="font-size:13px;color:#888;margin:28px 0 4px">CNN Fear & Greed Index · 0 공포 ~ 100 탐욕</div>'
+            f'<table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:15px">{rows}</table>')
+    return True
+
+
+def fg_seven(df):
+    """7개 지표: 지표마다 0~100 막대(구간 색) + 오늘 값 한 줄"""
+    cols = st.columns(2)
+    for i, (_, r) in enumerate(df.iterrows()):
+        try:
+            sc = float(str(r['점수']).replace(',', ''))
+        except ValueError:
+            continue
+        with cols[i % 2].container(border=True):
+            st.markdown(f"<div style='font-size:14px;color:#333'>{str(r['지표']).split('. ', 1)[-1]}</div>", unsafe_allow_html=True)
+            st.html(score_bar(sc, r['구간']))
+            mean = re.sub(r'\s*\((공포|탐욕|중립) 쪽\)\s*$', '', str(r.get('시장 의미', '')))
+            st.markdown(f"<div style='font-size:12px;color:#888;line-height:1.5'>{mean}</div>", unsafe_allow_html=True)
+
+
+def signal_chips(md):
+    """시장 블록 표 → 켜진 신호만 부담·기회 두 줄 칩(11/21 의장: 난잡한 표 대신)"""
+    df = md_table(md)
+    if df is None or '쪽' not in df or '오늘' not in df:
+        return False
+    on = df[df['오늘'].str.strip() == '켜짐']
+    c1, c2 = st.columns(2, gap='large')
+    for col, side, color, name in ((c1, '부담', RED, '나쁜 신호'), (c2, '기회', '#2e7d32', '좋은 신호')):
+        x = on[on['쪽'].str.contains(side)]
+        tot = df['쪽'].str.contains(side).sum()
+        chips = ''.join(
+            f"<div style='border-left:3px solid {color};padding:6px 10px;margin:6px 0;background:#fafafa'>"
+            f"<div style='font-size:14px;color:#333'>{str(r['공식']).split(' — ', 1)[-1].split(' — ')[0]}</div>"
+            f"<div style='font-size:12px;color:#999'>{r['질문']}</div></div>" for _, r in x.iterrows())
+        col.html(f"<div style='font-size:13px;color:#888'>{name}</div>"
+                 f"<div style='font-size:30px;color:{color};line-height:1.2'>{len(x)}<span style='font-size:14px;color:#999'> / {tot}개 켜짐</span></div>"
+                 + (chips or "<div style='color:#999;font-size:13px;margin-top:6px'>없음</div>"))
+    return True
+
+
+SKIP_BOX = ('매크로 체크리스트', '리스크 표')   # 11/21 의장: 겹치는 표는 화면에서 뺌
+SKIP_ITEM = ('공포 쪽 지표', '탐욕 쪽 지표')
+
+
 def render(body):
     bl = blocks(body)
     quotes = [b for b in bl if b[0] == 'item' and QUOTE.match(b[3])]
@@ -395,6 +491,12 @@ def render(body):
             if '10년 실질' in title:   # 11/20 의장: 10년 실질금리 삭제
                 continue
             val = val.replace('직전 발표 대비', '전월 대비')
+            if title in SKIP_ITEM:
+                continue
+            if title == '종합' and 'Fear & Greed' in val:   # 11/21 의장: 공포탐욕은 구간 게이지로
+                flush()
+                if fg_total(val):
+                    continue
             if title == '하이일드 스프레드':   # 11/20 의장: 하이일드 스프레드는 그래프로
                 flush()
                 if hy_chart():
@@ -421,6 +523,19 @@ def render(body):
                 rows.append((title, val))
             continue
         flush()
+        if b[0] == 'titled' and b[1].startswith(SKIP_BOX):
+            continue
+        if b[0] == 'titled' and b[1].startswith('시장 블록'):
+            with st.container(border=True):
+                st.markdown('<div class="box-t">오늘 켜진 시장 신호</div>', unsafe_allow_html=True)
+                if not signal_chips(b[2]):
+                    table_chart(b[2])
+            continue
+        if b[0] == 'table' and (b[1].startswith('| 지표 | 점수 | 구간')):
+            d7 = md_table(b[1])
+            if d7 is not None:
+                fg_seven(d7)
+                continue
         if b[0] == 'titled':   # 11/20 의장: 제목·그래프·표를 한 상자로
             with st.container(border=True):
                 st.markdown(f'<div class="box-t">{b[1]}</div>', unsafe_allow_html=True)

@@ -389,7 +389,7 @@ def macro_table(c):
     """11/20 의장: 매크로 체크리스트는 칸 맨 아래로, 이유·근거를 표로 자세히, 몇 번째 항목(빨강·주황 박스)인지도."""
     out = []
     C = _read(c.d, '매크로체크리스트')
-    if len(C):
+    if len(C) and c.R.get('미스 리스크', {}).get('체크리스트_표', False):   # 11/21 의장: 겹치는 표라 기본은 뺌
         sm = C[C['항목'] == '요약']
         X = C[C['항목'] != '요약'].reset_index(drop=True)
         head = str(sm.iloc[0]['값']).split('|')[0].strip() if len(sm) else ''
@@ -423,7 +423,7 @@ def macro_table(c):
         out += [f"**시장 블록 · 나쁜 신호(부담) {nb.sum()}개 중 {(nb & X['_on']).sum()}개 켜짐, 좋은 신호(기회) {no.sum()}개 중 {(no & X['_on']).sum()}개 켜짐**",
                 '', '\n'.join(rows), '']
     K = _read(c.d, '리스크')
-    if len(K) and '신호' in K:
+    if len(K) and '신호' in K and c.R.get('미스 리스크', {}).get('빨강주황_표', False):   # 11/21 의장: 위 줄·시장 신호와 겹쳐 기본은 뺌
         Z = K[K['신호'].astype(str).str.contains('빨강|주황')].reset_index(drop=True)
         if len(Z):
             rows = ['| 번호 | 구분 | 항목 | 값 | 신호 | 이유 | 의장 기준 |', '|---|---|---|---|---|---|---|']
