@@ -1,0 +1,45 @@
+name: 종목 진단
+
+# 11/21 의장: "지금 ○○를 사도 되나? 26주·52주 뒤는?" — app/diagnose/run.py. 회의와 별개, 손으로 돌림.
+# 시장 신호: 공포탐욕(CNN, 블록 2-5) 또는 바닥 확률(블록 2-12). 문턱은 비공개 blocks.yaml '진단'·'진단_공포탐욕'.
+# 결과: 드라이브 '콜로키움 수집데이터/종목진단/진단_YYYYMMDD.md', 최신_진단.md + 이 실행의 산출물(artifact)
+on:
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: '종목 티커(띄어쓰기로)'
+        required: true
+        default: 'GOOGL MSFT MRVL JNJ JPM'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: 비공개 설정 받기(team_q colloquium_private, TEAMQ_TOKEN 필요)
+        uses: actions/checkout@v5
+        with:
+          repository: Seung-Wook-Lee/team_q
+          ref: main
+          path: team_q_private
+          sparse-checkout: colloquium_private
+          token: ${{ secrets.TEAMQ_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt pyyaml
+      - name: 종목 진단
+        env:
+          TZ: Asia/Seoul
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+          QC_PRIVATE: ${{ github.workspace }}/team_q_private/colloquium_private
+          TICKERS: ${{ github.event.inputs.tickers }}
+        run: python app/diagnose/run.py $TICKERS --drive --out app/diagnose/out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 종목진단
+          path: app/diagnose/out/
