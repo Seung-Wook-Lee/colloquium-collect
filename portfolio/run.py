@@ -176,7 +176,8 @@ def build(name, book, T, P, common, state, last):
     parts, cash, notes = [], 0.0, []
     core = book.get('코어', {})
     fx = book.get('해외ETF', {})
-    sat_share = 1 - core.get('비중', 0) - fx.get('비중', 0)
+    se = book.get('섹터ETF', {})   # 11/20 의장: 조선처럼 한 회사 고르기 애매한 업종은 섹터 ETF로 담는다
+    sat_share = 1 - core.get('비중', 0) - fx.get('비중', 0) - se.get('비중', 0)
     if core:
         w, c = sleeve(core['종목'], core['비중'], 'rp', P, yrs, score)
         parts.append(('코어', w)); cash += c
@@ -185,6 +186,18 @@ def build(name, book, T, P, common, state, last):
         parts.append(('해외ETF', w)); cash += c
     sat = book['위성']
     mk_buy = [state.get(m, (True, '결론 없음')) for m in book['시장']]
+    if se:
+        if all(b for b, _ in mk_buy):
+            skip = set(se.get('제외', [])) | set(fx.get('종목', [])) | set(core.get('종목', []))
+            Z = T[T['시장'].isin(book['시장']) & (T['구분'] == 'ETF') & T['추천'].isin(se.get('추천', ['추천', '관찰'])) & ~T['티커'].isin(skip)]
+            Z = Z.sort_values('점수', ascending=False).head(se.get('최대종목', 4))
+            w, c = sleeve(Z['티커'].tolist(), se['비중'], METHODS.get(se.get('방식'), 'siv'), P, yrs, score, se.get('종목상한'))
+            notes.append(f"섹터 ETF 후보 {len(Z)}개(엔진 판정 {'·'.join(se.get('추천', ['추천', '관찰']))}, 점수 순 최대 {se.get('최대종목', 4)}): "
+                         + (', '.join(Z['정식 종목명']) or '없음'))
+        else:
+            w = last[(last['포트폴리오'] == name) & (last['몫'] == '섹터ETF')].set_index('티커')['비중(%)'] / 100 if len(last) else pd.Series(dtype=float)
+            c = se['비중'] - w.sum()
+        parts.append(('섹터ETF', w)); cash += c
     if all(b for b, _ in mk_buy):
         held = set(last[last['포트폴리오'] == name]['티커']) if len(last) else set()
         C = pick(T, sat, {**book, '_기준가': common.get('_기준가', {}), '_지난주': held})
@@ -328,7 +341,7 @@ def main():
                                              '지난주(%)': prev.get((name, '현금(MMF)'), 0.0), '이번주 집행(%)': rest}])], ignore_index=True)
             A['차이(%p)'] = (A['비중(%)'] - A['지난주(%)']).round(1)
         next(h for h in head if h[0] == name)[4].append(f'결론이 나눠 사기 → 늘리는 몫의 {f:.0%}만 이번 주 집행, 나머지 현금(MMF)')
-    order = {'코어': 0, '해외ETF': 1, '위성': 2, '현금': 3}
+    order = {'코어': 0, '해외ETF': 1, '섹터ETF': 2, '위성': 3, '현금': 4}
     A = A.sort_values(['포트폴리오', '몫', '비중(%)'], key=lambda s: s.map(order) if s.name == '몫' else (s.map(list(books).index) if s.name == '포트폴리오' else -s))
     A = A[['포트폴리오', '몫', '종목', '티커', '층', '비중(%)', '지난주(%)', '차이(%p)', '이번주 집행(%)']]
 
