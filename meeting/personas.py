@@ -659,8 +659,10 @@ def conclusion(c):
         band = (f", 관찰 가격 {n(gb.get('관찰가격'), 2)}({p(gb.get('관찰_현재대비%'), 0)}), 추천 가격 {n(gb.get('추천가격'), 2)}({p(gb.get('추천_현재대비%'), 0)})"
                 + (f" — {gb['막는 것']}" if ok(gb.get('막는 것')) else '')) if gb is not None else ''
         px = num(gb.get('현재가')) if gb is not None else None
-        ref = num(cfg.get('기준가'))
-        refs = (f", 의장 기준가 {n(ref, 0)}(현재가 {n(px, 2)}, 기준가까지 {p((ref / px - 1) * 100 if px else None)})" if ref else '')
+        if px is None:   # 가격대는 후보 종목만 → 아니면 판정표 종가
+            px = next((num(r.get(k)) for k in ('close', '종가', 'px') if num(r.get(k)) is not None), None)
+        ref, lo = num(cfg.get('기준가')), num(cfg.get('기준가_하단'))
+        refs = (f", 의장 기준가 {(n(lo, 0) + '~') if lo else ''}{n(ref, 0)}(현재가 {n(px, 2)}, 기준가까지 {p((ref / px - 1) * 100 if px else None)})" if ref else '')
         out.append(L(f"의장 장기 후보: {r['종목']}", f"52주 고점 대비 {p(r.get('dd52'))}, PER {n(r.get('per_now'), 1, '배')}(52주 중앙 {n(r.get('per_med1'), 1, '배')}, 3년 중앙 {n(r.get('per_med3'), 1, '배')}), 엔진 {r.get('추천')}" + refs + band,
                      f"의장 기준가·지정학 조건은 비공개 blocks.yaml '의장 장기 후보'. 가격대 = 추천 원칙 조합이 바뀌는 가격(가격대.csv)"))
         if ref and px is not None and px <= ref:
@@ -669,6 +671,9 @@ def conclusion(c):
             geo_ev = EVs[EVs['사건'].astype(str).str.contains(pat) & EVs['상태'].astype(str).str.contains('진행')] if (pat and len(EVs) and '사건' in EVs) else pd.DataFrame()
             gpr = num(c.m.get('GPR_PCT')) if isinstance(c.m, dict) else None
             geo = len(geo_ev) > 0 or (gpr is not None and cfg.get('GPR_PCT_최소') is not None and gpr >= cfg['GPR_PCT_최소'])
+            if not pat and cfg.get('GPR_PCT_최소') is None:   # 지정학 조건 없는 종목(예: 카니발) = 가격만
+                out.append(L(f"{r['종목']}: 의장 기준가 도달", '의장 매수 가격 도달', f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)}"))
+                continue
             out.append(L(f"{r['종목']}: 의장 기준가 도달", '지정학 충격 진행 중 — 의장 기회 조건 충족' if geo else '기준가 도달(지정학 충격 조건은 아직)',
                          f"현재가 {n(px, 2)} ≤ 기준가 {n(ref, 0)} · 지정학: 사건상태 진행 {len(geo_ev)}건, GPR 백분위 {n(gpr, 0)}"))
     return out, []
