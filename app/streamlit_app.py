@@ -121,6 +121,7 @@ def clean(t):
 def blocks(body):
     """빈 줄로 나눈 덩어리: ('item', 번호, 제목, 내용, 근거) / ('table', md) / ('text', md)"""
     out = []
+    body = re.sub(r'(?m)^[*\s]*오늘의 한 종목.*\n?', '', body)   # 11/21 의장: 한 종목 줄은 어느 회의에도 안 보임
     for b in re.split(r'\n\s*\n', clean(body).strip()):
         lines = [l.rstrip() for l in b.split('\n') if l.strip()]
         if not lines:
@@ -494,9 +495,7 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
         if name.startswith('미장전'):   # 11/20 의장: 원고 첫 줄 자료 메모·한 종목 머리말은 보이지 않음, 순서 1 바닥 근접도 · 2 미장전 시황
             bottom(day, name, '1 바닥 근접도 | 엔진 블록 센터')
             secs = order_premarket(secs)
-        else:
-            if head:
-                st.markdown(clean(head))
+        else:   # 11/21 의장: 머리말(팀Q 자료 메모·오늘의 한 종목)은 국장전도 보이지 않음
             bottom(day, name)
         merged = []   # 11/20 의장: 같은 이름 칸(퀀트센터 미스 차트·닉스 팀, 섹터 데스크 등)은 상자 하나로
         for title, body in secs:
