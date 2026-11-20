@@ -328,6 +328,7 @@ def render(body):
     for b in bl:
         if b[0] == 'item':
             _, n, title, val, why = b
+            title = title.replace('근원 CPI', 'Core CPI').replace('근원 PCE', 'Core PCE')   # 11/20 의장: 연준 용어 그대로
             if why:
                 whys.append(f'**{title}** — {why}')
             if '지수(오늘)' in title or (title == '시장 이격' and '50일 이격' in val):   # 11/20 의장: 지수 종가는 위 시세 그래프와 겹침
