@@ -300,14 +300,14 @@ def bottom(day, name, title='바닥 근접도'):
         for col, (_, r) in zip(cols, T.iterrows()):
             with col:
                 pr = pd.to_numeric(r.get('보정확률'), errors='coerce')
-                st.metric(f"{NAME.get(r.get('기준지수'), r.get('기준지수'))} 바닥 구간 확률", '' if pd.isna(pr) else f'{pr * 100:.1f}%')
+                st.metric(f"{NAME.get(r.get('기준지수'), r.get('기준지수'))}이 바닥 구간일 확률", '' if pd.isna(pr) else f'{pr * 100:.1f}%')
                 st.markdown(f"비슷한 점수였던 과거 {r.get('비슷한점수_주수', '')}주, 그 뒤 지수")
                 st.dataframe(pd.DataFrame({
                     '': ['13주 뒤', '26주 뒤'],
                     '평균 수익률': [pct(r.get('비슷한점수_뒤13주_평균'), True), pct(r.get('비슷한점수_뒤26주_평균'), True)],
                     '승률': [pct(r.get('비슷한점수_뒤13주_승률')), pct(r.get('비슷한점수_뒤26주_승률'))],
                 }), hide_index=True, use_container_width=True)
-        st.caption('바닥 구간 확률 = 지금이 바닥 구간(앞뒤 13주 최저점 3% 안)일 확률')
+        st.caption('바닥 구간 = 앞뒤 13주 최저점에서 3% 안이면서 52주 고점보다 5% 넘게 빠진 주')
 
 
 if not LOCAL and not drive.ready():
