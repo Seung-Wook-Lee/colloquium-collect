@@ -7,7 +7,7 @@
   --skip-fetch                             # 야후 보조 자료 갱신 건너뛰기(전날 것 사용)
 
 드라이브: 읽기 '콜로키움 수집데이터/YYYYMMDD/'(07시), '콜로키움 수집데이터/00_퀀트입력/'(전날까지의 보조 자료·사건 로그)
-          쓰기 같은 날짜 폴더 YYYYMMDD_회의원고.txt·_발표.json·_오늘의한종목.csv·_판정표.csv·_시장블록.csv·_사건상태.csv·_변수달력.csv,
+          쓰기 같은 날짜 폴더 YYYYMMDD_회의원고.txt·_회의원고.md(회의실 채팅용)·_발표.json·_오늘의한종목.csv·_판정표.csv·_시장블록.csv·_사건상태.csv·_변수달력.csv,
                '최신_회의원고.txt', 00_퀀트입력/ 보조 자료"""
 import argparse
 import datetime as dt
@@ -357,7 +357,7 @@ def main():
     if os.path.exists(f'{IN}/아침보고.txt'):
         first = open(f'{IN}/아침보고.txt', encoding='utf-8').read().splitlines()[1:2]
         note.append('팀Q 자료 ' + (first[0][:40] if first else ''))
-    c, sec = PER.build(IN, S, M, m, f, R, B.get('추천', {}), tday, EV, CAL)
+    c, sec = PER.build(IN, S, M, m, f, R, B.get('추천', {}), tday, EV, CAL, session=a.session)
     PFX = f'{today}_' if a.session == '국장전' else f'{today}_미장전_'
     if a.session == '미장전':
         Q = premarket_quotes(R)
@@ -367,8 +367,9 @@ def main():
     head = ' | '.join(note)
     txt = PER.render_txt(sec, tday, c.picks, head)
     js = PER.render_json(sec, tday, head)
+    md = PER.render_md(sec, tday, c.picks, head)
     pk = PER.picks_csv(c.picks)
-    outs = {f'{PFX}회의원고.txt': txt.encode('utf-8'), f'{PFX}발표.json': js.encode('utf-8'),
+    outs = {f'{PFX}회의원고.txt': txt.encode('utf-8'), f'{PFX}회의원고.md': md.encode('utf-8'), f'{PFX}발표.json': js.encode('utf-8'),
             f'{PFX}오늘의한종목.csv': pk.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}판정표.csv': S.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}시장블록.csv': M.to_csv(index=False).encode('utf-8-sig'),

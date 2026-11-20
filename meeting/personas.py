@@ -194,60 +194,43 @@ class Ctx:
 
 
 def mr_market(c):
+    """11/20 의장: 미스터 마켓은 시장만(개별 종목 금지). 오전 국장전 = 간밤 미국 시장만, 밤 미장전 = 한국 시장만.
+    지수는 표(extra)로, 줄은 국면·이격만."""
     R = c.R['미스터 마켓']
+    cfg = R['회의별'][c.session]
     out = []
-    for mk in ('미국', '한국'):
+    for mk in cfg['국면']:
         g = c.regime(mk)
         if g:
             st, G, M_, idx = g
             out.append(L(f'{mk} 국면', f"{st} 국면 · 지수 4국면 {idx or '자료 없음'}",
                          f"AI(S1~S3)÷금융·방어(S5~S6) 비율 50일 이격 {p(G, 2)}, 20일 변화 {p(M_, 2)} — 진입 −2%·−3%(5일 중 3일+당일), 둘 다 0 이상이면 해제"))
-    for title, items in (('미국 지수', ['S&P500', '나스닥', '다우', '필라델피아 반도체(SOX)']),
-                         ('아시아 지수', ['코스피', '코스닥', '니케이225', '대만 가권'])):
-        parts = []
-        for it in items:
-            r = c.mac_row(it)
-            if r is None:
-                continue
-            v, pv = num(r['값']), num(r.get('전일 값'))
-            d1 = (v / pv - 1) * 100 if v and pv else None
-            parts.append(f"{it} {n(v, 2)}({p(d1, 2)})")
-        if parts:
-            hi = [f"{it} {p(c.mac_row(it)['최고 대비(%)'])}" for it in items if c.mac_row(it) is not None]
-            out.append(L(title, ', '.join(parts), '사상 최고 대비: ' + ', '.join(hi) + ' (07시 매크로.csv, 전일 값 대비)'))
-    kg = c.m.get('KS_GAP50')
-    if kg is not None:
-        st = '과열' if kg >= R['코스피이격_과열'] else ('과열 주의' if kg >= R['코스피이격_주의'] else '과열 기준 아래')
-        out.append(L('코스피 50일 이격', f"{kg:.1f} — {st}", f"의장 기준 {R['코스피이격_주의']} 과열 주의, {R['코스피이격_과열']} 과열"))
-    # 크게 움직인 종목: ① 무슨 일 ② 엔진이 본 이유 ③ 같은 층 동료 ④ 반론
-    P = c.px.copy()
-    if len(P):
-        P['등락'] = pd.to_numeric(P['등락률(%)'], errors='coerce')
-        lay = dict(zip(c.U.get('번호', []), c.U.get('층', []))) if len(c.U) else {}
-        P['층'] = P['번호'].map(lay)
-        big = P[P['등락'].abs() >= R['크게움직임_등락(%)']].reindex(P['등락'].abs().sort_values(ascending=False).index).dropna(subset=['등락'])
-        big = big[big['등락'].abs() >= R['크게움직임_등락(%)']].head(R['크게움직임_최대'])
-        if not len(big):
-            out.append(L('크게 움직인 종목', f"전일 ±{R['크게움직임_등락(%)']}% 넘은 종목 없음", '07시 시세.csv'))
-        T = c.T.set_index('번호')
-        for _, r in big.iterrows():
-            nm = r['정식 종목명']
-            hd = c.news[c.news.get('종목', pd.Series(dtype=str)).astype(str) == nm] if len(c.news) else pd.DataFrame()
-            what = f"{hd.iloc[0]['시각(한국)']} {hd.iloc[0]['출처']} \"{hd.iloc[0]['제목']}\"" if len(hd) else '07시 수집 뉴스에 이 종목 기사 없음'
-            e = T.loc[r['번호']] if r['번호'] in T.index else None
-            peer = P[(P['층'] == r['층']) & (P['번호'] != r['번호'])]['등락'].median()
-            if e is None:
-                hurt, counter = '엔진 판정 없음(유니버스 밖 또는 기준층)', '—'
-            elif r['등락'] < 0:
-                hurt = f"엔진 '빠지는 이유': {e.get('빠지는 이유') or '20일 기준 하락 아님'}"
-                counter = f"엔진 등급 {e.get('추천')}, 블록 예 비율 {n(e.get('블록예비율'), 2)}"
-            else:
-                hurt = f"엔진 블록 예: {e.get('블록 예') or '없음'}"
-                counter = f"엔진 매도 신호: {e.get('매도신호') or '없음'}"
-            out.append(L(f"{nm} {p(r['등락'], 2)}",
-                         f"① 무슨 일: {what} ② 왜: {hurt} ③ 같은 층({r['층']}) 동료 중앙값 {p(peer, 2)} ④ 반론: {counter}",
-                         '07시 시세·뉴스 + 엔진 판정표'))
-    return out, [{'type': 'change', 'tickers': big['yfinance 티커'].tolist()}] if len(P) and len(big) else []
+    rows = []
+    for it in cfg['지수']:
+        r = c.mac_row(it)
+        if r is None:
+            continue
+        v, pv = num(r['값']), num(r.get('전일 값'))
+        d1 = (v / pv - 1) * 100 if v and pv else None
+        rows.append([it, n(v, 2), p(d1, 2), p(num(r.get('최고 대비(%)')))])
+    tbl = ''
+    if rows:
+        out.append(L(cfg['지수제목'], ', '.join(f"{a} {b}({c_})" for a, b, c_, _ in rows), '07시 매크로.csv, 전일 값 대비 · 사상 최고 대비는 표'))
+        tbl = '| 지수 | 종가 | 전일 대비 | 사상 최고 대비 |\n|---|---|---|---|\n' + '\n'.join('| ' + ' | '.join(x) + ' |' for x in rows)
+    if cfg.get('코스피이격'):
+        kg = c.m.get('KS_GAP50')
+        if kg is not None:
+            st = '과열' if kg >= R['코스피이격_과열'] else ('과열 주의' if kg >= R['코스피이격_주의'] else '과열 기준 아래')
+            out.append(L('코스피 50일 이격', f"{kg:.1f} — {st}", f"의장 기준 {R['코스피이격_주의']} 과열 주의, {R['코스피이격_과열']} 과열"))
+    return out, [], tbl
+
+
+def mover_news(c, name):
+    """크게 움직인 종목 ① 무슨 일: 07시 수집 뉴스 첫 기사(데스크가 씀)."""
+    if not len(c.news):
+        return ''
+    hd = c.news[c.news.get('종목', pd.Series(dtype=str)).astype(str) == name]
+    return f" · 기사: {hd.iloc[0]['출처']} \"{hd.iloc[0]['제목']}\"" if len(hd) else ''
 
 
 def miss_citadel(c):
@@ -480,7 +463,7 @@ def desks(c):
         for _, r in G.iterrows():
             mv = px.get(r['번호'])
             if mv is not None and not math.isnan(mv) and abs(mv) >= D['보고문턱_등락(%)']:
-                out.append(L(f"{r['종목']} {p(mv, 2)}", f"엔진 {r['추천']}, 블록 예 {n(r['블록예비율'], 2)}, 20일 {p(r.get('20일(%)'))}" + (f", 빠지는 이유: {r['빠지는 이유']}" if mv < 0 and ok(r.get('빠지는 이유')) else ''),
+                out.append(L(f"{r['종목']} {p(mv, 2)}", f"엔진 {r['추천']}, 블록 예 {n(r['블록예비율'], 2)}, 20일 {p(r.get('20일(%)'))}" + (f", 빠지는 이유: {r['빠지는 이유']}" if mv < 0 and ok(r.get('빠지는 이유')) else '') + mover_news(c, r['종목']),
                              f"전일 ±{D['보고문턱_등락(%)']}% 이상(시세.csv)"))
             if r['번호'] in recent:
                 out.append(L(f"{r['종목']} 실적", recent[r['번호']], f"{D['실적일수']}일 안 DART 잠정 공시 또는 SEC 실적 수신"))
@@ -546,12 +529,13 @@ def gukjang(c, EV, CAL):
 
 
 # ---------------------------------------------------------------- 묶기
-def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None):
+def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     c = Ctx(d, S, M, m, f, R, RC, today)
+    c.session = session
     EV = EV if EV is not None else _read(d, '사건상태')
     CAL = CAL if CAL is not None else _read(d, '변수달력')
     sections = []   # (번호 제목, 위원, 역할, 줄, 그래프, 덧붙일 글)
-    a, g = mr_market(c); sections.append(('1 시장', '미스터 마켓', '시장', a, g, ''))
+    a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', a, g, tbl))
     a, g = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, ''))
     a, g = rio(c); sections.append(('3 리스크', '리오', '리스크', a, g, ''))
     a, g, tbl = phobos(c)
@@ -573,7 +557,7 @@ def render_txt(sections, today, picks, note=''):
     day = f'{today:%Y-%m-%d}'
     out = [f'콜로키움 회의 원고 {day}',
            '만든 방식: 코드 자동 생성(colloquium-collect meeting/personas.py + meeting/rules.yaml, 엔진 quant_center/blocks.yaml). AI가 쓰거나 고르지 않음.',
-           '숫자는 07시 수집 파일·엔진 결과 그대로. ( ) 안 "근거"는 그 줄의 출처·규칙.']
+           '숫자는 07시 수집 파일·엔진 결과 그대로. "└ 근거"는 그 줄의 출처·규칙.']
     if note:
         out.append(note)
     c0 = picks.get('센터')
@@ -583,12 +567,38 @@ def render_txt(sections, today, picks, note=''):
         if sec != cur:
             out += ['', '=' * 50, sec, '=' * 50]
             cur = sec
-        out.append(f'{who}:')
+        out += ['', f'{who}:']
         for i, l in enumerate(lines, 1):
-            out.append(f'{i}. {l.title}: {l.fact}' + (f'  (근거: {l.why})' if l.why else ''))
+            out.append(f'{i}. {l.title}')
+            out.append(f'   {l.fact}')
+            if l.why:
+                out.append(f'   └ 근거: {l.why}')
         if extra:
-            out.append(extra)
+            out += ['', extra]
     return '\n'.join(out) + '\n'
+
+
+def render_md(sections, today, picks, note=''):
+    """회의실(채팅)에 그대로 붙이는 원고(11/20 의장 'txt 파일 같다, 가독성 없다').
+    위원마다 '## 위원' 칸. 줄 = 굵은 '번호. 제목' / 내용 / 작은 글씨 근거. 표는 앞뒤 빈 줄."""
+    day = f'{today:%Y-%m-%d}'
+    out = [f'# 콜로키움 회의 원고 {day}']
+    if note:
+        out.append(f'<sub>{note}</sub>')
+    c0 = picks.get('센터')
+    if c0 and c0['종목']:
+        out += ['', f"**오늘의 한 종목(퀀트센터)**: [{c0.get('표시') or '추천'}] {c0['종목']}" + (f" — {c0['근거']}" if c0['근거'] else '')]
+    for sec, who, role, lines, _, extra in sections:
+        out += ['', f'## {sec} | {who}', '', f'{who}:', '']
+        for i, l in enumerate(lines, 1):
+            out.append(f'**{i}. {l.title}**  ')
+            out.append(l.fact + ('  ' if l.why else ''))
+            if l.why:
+                out.append(f'<sub>{l.why}</sub>')
+            out.append('')
+        if extra:
+            out += [extra, '']
+    return '\n'.join(out).rstrip() + '\n'
 
 
 def render_json(sections, today, note=''):
