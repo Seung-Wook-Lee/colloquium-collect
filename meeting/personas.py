@@ -584,13 +584,19 @@ def render_txt(sections, today, picks, note=''):
     return '\n'.join(out) + '\n'
 
 
+def _it(t):
+    """회의실 채팅은 <sub>를 글자로 보여 준다(11/20 의장) → 근거는 기울임체. 안의 * 는 지워 모양이 깨지지 않게."""
+    t = str(t).replace('*', '').strip()
+    return f'*{t}*' if t else ''
+
+
 def render_md(sections, today, picks, note=''):
     """회의실(채팅)에 그대로 붙이는 원고(11/20 의장 'txt 파일 같다, 가독성 없다').
-    위원마다 '## 위원' 칸. 줄 = 굵은 '번호. 제목' / 내용 / 작은 글씨 근거. 표는 앞뒤 빈 줄."""
+    위원마다 '## 위원' 칸. 줄 = 굵은 '번호. 제목' / 내용 / 기울임체 근거. 표는 앞뒤 빈 줄."""
     day = f'{today:%Y-%m-%d}'
     out = [f'# 콜로키움 회의 원고 {day}']
     if note:
-        out.append(f'<sub>{note}</sub>')
+        out.append(_it(note))
     c0 = picks.get('센터')
     if c0 and c0['종목']:
         out += ['', f"**오늘의 한 종목(퀀트센터)**: [{c0.get('표시') or '추천'}] {c0['종목']}" + (f" — {c0['근거']}" if c0['근거'] else '')]
@@ -600,7 +606,7 @@ def render_md(sections, today, picks, note=''):
             out.append(f'**{i}. {l.title}**  ')
             out.append(l.fact + ('  ' if l.why else ''))
             if l.why:
-                out.append(f'<sub>{l.why}</sub>')
+                out.append(_it('근거: ' + str(l.why)))
             out.append('')
         if extra:
             out += [extra, '']
