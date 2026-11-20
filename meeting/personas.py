@@ -403,13 +403,18 @@ def macro_table(c):
     if len(M):
         X = M.copy()
         X['_on'] = X['결과'] == '통과'
+        # 11/20 의장 '하나만 나와야지': 같은 블록·같은 지표의 문턱만 다른 공식(10년물 4.8%·5.0% 등)은 한 줄 — 켜진 것 중 가장 센 문턱
+        X['_k'] = X['블록'].astype(str) + X['방향'].astype(str) + X['공식'].astype(str).str.replace(r'[−+-]?[\d.]+', '#', regex=True)
+        X['_n'] = pd.to_numeric(X['공식'].astype(str).str.extract(r'([\d.]+)(?:[^\d.]*)$')[0], errors='coerce')   # 문턱 = 맨 끝 숫자(10Y의 10이 아님)
+        X['_s'] = X.apply(lambda r: (r['_n'] if '이상' in str(r['공식']) else -r['_n']) if pd.notna(r['_n']) else 0, axis=1)
+        X = X.sort_values(['_on', '_s'], ascending=[False, False]).drop_duplicates('_k')
         X = X.sort_values(['방향', '_on', '블록'], ascending=[True, False, True]).reset_index(drop=True)
         nb, no = (X['방향'] == '부담'), (X['방향'] == '기회')
         rows = ['| 번호 | 블록 | 질문 | 공식 | 쪽 | 오늘 |', '|---|---|---|---|---|---|']
         for i, r in X.iterrows():
             nm = _re.sub(r'\((기회|부담)\)', '', str(r['공식'])).strip()
             en_ = str(r['영문']) if ok(r.get('영문')) else ''
-            for k, v in (('HY spread', 'High Yield Spread'), ('UST 10Y yield', 'US Treasury 10-Year Yield'), ('HY ', 'High Yield Spread '),
+            for k, v in (('HY spread', 'High Yield Spread'), ('UST 10Y yield', 'US Treasury 10-Year Yield'), ('HY 스프레드', 'High Yield Spread'), ('HY ', 'High Yield Spread '), ('10Y−2Y', 'US Treasury 10-Year minus 2-Year'),
                          ('HMM bear-regime probability', 'Hidden Markov Model bear-regime probability'), ('HMM', 'Hidden Markov Model')):
                 en_, nm = en_.replace(k, v), nm.replace(k, v)   # 11/20 의장: 약자 금지
             rows.append(f"| {i + 1} | {r['블록']} | {r['질문']} | {(en_ + ' — ') if en_ else ''}{nm} | "
