@@ -142,7 +142,7 @@ def pick(T, spec, book):
     ref = book.get('_기준가', {})
     held = book.get('_지난주', set())
     x = pd.concat([x, add]).drop_duplicates('티커')
-    return x[[not (t in ref and t not in held and ref[t][1] > ref[t][0]) for t in x['티커']]]   # 의장 장기 후보: 기준가 위면 새로 담지 않음
+    return x[np.array([not (t in ref and t not in held and ref[t][1] > ref[t][0]) for t in x['티커']], dtype=bool)]   # 의장 장기 후보: 기준가 위면 새로 담지 않음
     return pd.concat([x, add]).drop_duplicates('티커')
 
 
