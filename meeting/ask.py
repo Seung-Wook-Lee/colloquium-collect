@@ -74,6 +74,31 @@ def sections(txt):
     return {k: v for k, v in sec.items() if v}
 
 
+def items(sec):
+    """위원 칸 → 항목 목록. 항목 = '번호. 제목' 줄 + 이어지는 들여쓴 줄(내용·└ 근거)."""
+    out = {}
+    for who, lines in sec.items():
+        its = []
+        for line in lines:
+            if re.match(r'^\d+\.\s', line) or not its:
+                its.append(line)
+            else:
+                its[-1] += '\n' + line
+        out[who] = its
+    return out
+
+
+def answer_items(pairs, why):
+    out, cur = [], None
+    for who, it in pairs:
+        if who != cur:
+            out.append(f'{who}:')
+            cur = who
+        out.append(it)
+    out.append(f'(오늘 회의원고 그대로 — {why})')
+    return '\n'.join(out)
+
+
 def _v(x):
     if x is None or (isinstance(x, float) and pd.isna(x)) or str(x) in ('', 'nan'):
         return None
@@ -133,10 +158,32 @@ def answer(q, d, R, date=None, session='국장전'):
     for who in sorted(sec, key=len, reverse=True):
         if who in q:
             return f'{who}:\n' + '\n'.join(sec[who]) + '\n(오늘 회의원고 그 위원 칸 그대로)', '위원 이름', who
-    # ③ 낱말
+    # ③ 낱말: 질문 낱말이 모두 한 위원 것이면 그 위원 칸 전체, 여러 위원에 걸치면 낱말을 모두 담은 원고 항목만
+    terms = {}
     for who, pat in A['위원낱말']:
-        if re.search(pat, q, re.I) and who in sec:
-            return f'{who}:\n' + '\n'.join(sec[who]) + f'\n(오늘 회의원고 그 위원 칸 그대로 — 질문 낱말 규칙 "{pat}")', '낱말', who
+        for w in pat.split('|'):
+            if w and re.search(re.escape(w), q, re.I):
+                terms.setdefault(w, who)
+    owners = set(terms.values())
+    if len(owners) == 1:
+        who = owners.pop()
+        if who in sec:
+            return f'{who}:\n' + '\n'.join(sec[who]) + f'\n(오늘 회의원고 그 위원 칸 그대로 — 질문 낱말 {", ".join(terms)})', '낱말', who
+    elif terms:
+        found = []
+        for who, its in items(sec).items():
+            for it in its:
+                low = it.lower()
+                found.append((sum(t.lower() in low for t in terms), who, it))
+        full = [(w, it) for k, w, it in found if k == len(terms)]
+        if full:
+            return answer_items(full[:A.get('항목최대', 8)], f'질문 낱말 {", ".join(terms)}을 모두 담은 원고 항목'), '낱말(항목)', ','.join(dict.fromkeys(w for w, _ in full))
+        best = max((k for k, _, _ in found), default=0)
+        miss = ', '.join(t for t in terms)
+        if best >= 2:
+            near = [(w, it) for k, w, it in found if k == best][:A.get('항목최대', 8)]
+            return ('룰 미정: 질문 낱말(' + miss + ')을 모두 다루는 규칙이 코드에 없습니다. 장부에 적었습니다.\n\n원고에 있는 관련 항목(참고):\n'
+                    + answer_items(near, '관련 항목')), '룰 미정', ''
     # ④ 룰 미정
     return '룰 미정: 이 질문에 답할 규칙이 코드에 없습니다. 질문을 장부에 적었고, 의장께서 기준을 정하시면 규칙으로 넣겠습니다.', '룰 미정', ''
 
