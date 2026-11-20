@@ -34,6 +34,9 @@ h1, h2, h3, h4, h5 {font-weight: 500 !important; letter-spacing: -0.2px;}
 .stMarkdown strong, .stMarkdown b, [data-testid="stMetricValue"] {font-weight: 500 !important;}
 .stMarkdown th {font-weight: 500;}
 .why {font-size: 13px; color: #888; line-height: 1.6;}
+.sec-t {font-size: 22px; font-weight: 500; line-height: 1.4; margin: 2px 0 10px; font-family: inherit; font-variant-numeric: lining-nums;}
+.big-t td, .big-t th {font-size: 18px !important; padding: 8px 14px !important;}
+.note {font-size: 12.5px; color: #8a8a8a; line-height: 1.6; margin-top: 6px;}
 </style>''', unsafe_allow_html=True)
 
 D_DATA = '콜로키움 수집데이터'
@@ -336,28 +339,21 @@ def bottom(day, name, title='바닥 근접도'):
         x = pd.to_numeric(v, errors='coerce')
         return '' if pd.isna(x) else (f'{x:+.1f}%' if sign else f'{x:.1f}%')
     with st.container(border=True):   # 11/20 의장: 평균·승률을 번갈아 두지 말고 각각, % 붙여서
-        st.subheader(title)
+        st.markdown(f'<div class="sec-t">{title}</div>', unsafe_allow_html=True)
         cols = st.columns(len(T))
         for col, (_, r) in zip(cols, T.iterrows()):
             with col:
                 pr = pd.to_numeric(r.get('보정확률'), errors='coerce')
                 st.metric(f"{NAME.get(r.get('기준지수'), r.get('기준지수'))}이 바닥 구간일 확률", '' if pd.isna(pr) else f'{pr * 100:.1f}%')
                 st.markdown(f"비슷한 점수였던 과거 {r.get('비슷한점수_주수', '')}주, 그 뒤 지수")
-                st.dataframe(pd.DataFrame({
-                    '': ['13주 뒤', '26주 뒤'],
-                    '평균 수익률': [pct(r.get('비슷한점수_뒤13주_평균'), True), pct(r.get('비슷한점수_뒤26주_평균'), True)],
-                    '승률': [pct(r.get('비슷한점수_뒤13주_승률')), pct(r.get('비슷한점수_뒤26주_승률'))],
-                }), hide_index=True, use_container_width=True)
-        st.markdown(
-            '**산출 방법**\n\n'
-            '바닥 구간은 그 주의 지수가 앞뒤 13주 최저점에서 3% 안에 있으면서 52주 고점보다 5% 넘게 빠진 주로 정했습니다. '
-            '정확한 바닥 하루가 아니라 바닥 즈음 1~2주를 맞히는 것이 목표입니다.\n\n'
-            '매주 블록 33개의 반응(종목 블록마다 통과한 종목 비율)과 시장 지표(VIX, MOVE, 하이일드 신용, 금융 스트레스, 금리, '
-            'CTA positioning, Vol-target exposure, AI÷방어 비율, 지정학 위험, 고점 대비 낙폭)를 모아 그 주의 모습으로 삼습니다. '
-            '과거 이 모습과 실제 바닥 구간을 짝지어 로지스틱 회귀로 학습하되, 해마다 그 전 자료로만 학습해 그해를 맞혀 보는 방식으로 검정했습니다. '
-            '나온 점수는 과거 실제 결과에 맞춰 아이소토닉 회귀로 눈금을 고쳐, 실제로 바닥 구간이었던 비율이 되도록 했습니다.\n\n'
-            '위 13주 뒤·26주 뒤 숫자는 과거에 오늘과 비슷한 점수가 나왔던 주들에서 지수가 그만큼 뒤에 낸 평균 수익률과 오른 주의 비율입니다. '
-            '코드는 quant_center/bottom.py이며 매일 다시 계산합니다.')
+                t13a, t26a = pct(r.get('비슷한점수_뒤13주_평균'), True), pct(r.get('비슷한점수_뒤26주_평균'), True)
+                t13w, t26w = pct(r.get('비슷한점수_뒤13주_승률')), pct(r.get('비슷한점수_뒤26주_승률'))
+                st.markdown('<table class="big-t" style="width:100%"><tr><th></th><th>평균 수익률</th><th>승률</th></tr>'
+                            f'<tr><td>13주 뒤</td><td>{t13a}</td><td>{t13w}</td></tr>'
+                            f'<tr><td>26주 뒤</td><td>{t26a}</td><td>{t26w}</td></tr></table>', unsafe_allow_html=True)
+        st.markdown('<div class="note">산출 방법: 바닥 구간은 앞뒤 13주 최저점에서 3% 안이고 52주 고점보다 5% 넘게 빠진 주. '
+                    '블록 33개 반응과 시장 지표로 로지스틱 회귀를 해마다 그 전 자료로만 학습해 맞히고, 과거 결과로 확률을 보정. '
+                    '13·26주 숫자는 과거 비슷한 점수 주들의 지수 평균 수익률과 승률(quant_center/bottom.py, 매일).</div>', unsafe_allow_html=True)
 
 
 if not LOCAL and not drive.ready():
@@ -383,5 +379,5 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
             bottom(day, name)
         for title, body in secs:
             with st.container(border=True):
-                st.subheader(title)
+                st.markdown(f'<div class="sec-t">{title}</div>', unsafe_allow_html=True)
                 render(body)
