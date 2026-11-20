@@ -48,10 +48,40 @@ def p(v, d=1, u='%'):
 GAL = {'눌림': '52주 고점에서 10% 넘게 떨어짐(눌림)', '주도': '52주 고점 10% 안(주도)'}
 
 
+SIGC = {'빨강': 'red', '주황': 'orange', '초록': 'green', '노랑': 'orange'}
+_CHG = _re.compile(r'^(.*?)\s*\(((?:[^()]|\([^()]*\))*?(?:1달|1주|YTD|전일|직전|전년|1개월|1주 전|20일)(?:[^()]|\([^()]*\))*)\)\s*(.*)$')
+
+
 class L:
-    """발언 한 줄: 제목, 사실, 이유(근거). 이유는 화면에서 작은 회색 글씨."""
-    def __init__(self, title, fact, why=''):
+    """발언 한 줄: 제목, 사실, 이유(근거). 이유는 화면에서 작은 회색 글씨.
+    11/20 의장 "엑셀처럼 표로": 화면은 [항목 | 값 | 변화 | 기준·신호 | 근거] 표. val·chg·crit·sig를 주지 않으면 fact·why에서 나눈다."""
+    def __init__(self, title, fact, why='', val=None, chg=None, crit=None, sig=None):
         self.title, self.fact, self.why = title, fact, why
+        self.val, self.chg, self.crit, self.sig = val, chg, crit, sig
+
+    def row(self):
+        fact, why = str(self.fact), str(self.why or '')
+        val, chg, crit, sig = self.val, self.chg, self.crit, self.sig
+        if val is None:
+            m = _CHG.match(fact)
+            if chg is None and m and len(m.group(1)) <= 40:
+                val, chg = (m.group(1) + (' ' + m.group(3) if m.group(3) else '')).strip(), m.group(2)
+            else:
+                val = fact
+        m = _re.match(r'^\[(빨강|주황|초록|노랑)\]\s*(.*)$', why)
+        if m and sig is None:
+            sig, why = SIGC[m.group(1)], m.group(2)
+        if crit is None:
+            m2 = _re.match(r'^(.*?)\s*\(([^()]*(?:\.csv|FRED|ICI|블룸버그|야후)[^()]*)\)$', why)
+            if sig and m2:
+                crit, why = m2.group(1), m2.group(2)
+            elif sig:
+                crit, why = why, ''
+            elif why.startswith('규칙:'):
+                crit, why = why[3:].strip(), ''
+            elif why.startswith(('의장 기준 신호 없음', '신호 없음')):
+                crit, why = '신호 없음', why.replace('의장 기준 신호 없음', '').replace('신호 없음', '').strip(' ()')
+        return {'항목': str(self.title), '값': str(val), '변화': str(chg or ''), '기준·신호': str(crit or ''), '근거': why, '신호': sig or ''}
 
 
 def _read(d, name):
@@ -188,7 +218,8 @@ class Ctx:
         if not len(M):
             return []
         X = M[(M['방향'] == side) & (M['결과'] == '통과')]
-        return [L(str(r['영문']) if ok(r.get('영문')) else r['공식'], _re.sub(r'\((기회|부담)\)', '', str(r['공식'])).strip(), f"{r['블록']} {r['질문']} · {side}")
+        return [L(str(r['영문']) if ok(r.get('영문')) else r['공식'], _re.sub(r'\((기회|부담)\)', '', str(r['공식'])).strip(), f"{r['블록']} {r['질문']}",
+                  crit=side, sig='green' if side == '기회' else 'orange')
                 for _, r in X.iterrows()]
 
     def regime(self, mk):
@@ -351,7 +382,11 @@ def rio(c):
         v = V.iloc[-1]
         out.append(L('지수 밸류', f"S&P500 선행 PER {n(v['선행PER'], 1, '배')}, 선행 EPS {n(v['선행EPS'], 1)}", f"{v['날짜']} {v['출처']}"))
     if c.m.get('KS_GAP50') is not None:
-        out.append(L('시장 이격', f"코스피 50일 이격 {c.m['KS_GAP50']:.1f}", '지수2년.csv 계산(125 과열 주의·130 과열)'))
+        g, MR = c.m['KS_GAP50'], c.R.get('미스터 마켓', {})
+        hot, warn = MR.get('코스피이격_과열', 130), MR.get('코스피이격_주의', 125)
+        out.append(L('시장 이격', f"코스피 50일 이격 {g:.1f}", '지수2년.csv 계산', val=f"코스피 50일 이격 {g:.1f}",
+                     crit=f"{warn} 과열 주의 · {hot} 과열" + (' → 과열' if g >= hot else (' → 과열 주의' if g >= warn else '')),
+                     sig='red' if g >= hot else ('orange' if g >= warn else '')))
     C = _read(c.d, '매크로체크리스트')
     if len(C):
         s = C[C['항목'] == '요약']
@@ -364,7 +399,8 @@ def rio(c):
     out += c.block_lines('부담') + c.block_lines('기회')
     dfn = any(c.m.get(f'DEF_{mk}') for mk in ('한국', '미국'))
     go = eval(c.R['리오']['여건_규칙'], {'__builtins__': {}}, {'기회': len(o), '부담': len(b), '방어': dfn})
-    out.append(L('현금 집행 여건', '됨' if go else '아님', f"규칙: {c.R['리오']['여건_규칙']} (기회 {len(o)}, 부담 {len(b)}, 방어 국면 {'예' if dfn else '아니오'})"))
+    out.append(L('현금 집행 여건', '됨' if go else '아님', f"기회 {len(o)}, 부담 {len(b)}, 방어 국면 {'예' if dfn else '아니오'}",
+                 crit=f"규칙: {c.R['리오']['여건_규칙']}", sig='green' if go else 'orange'))
     return out, []
 
 
@@ -850,7 +886,7 @@ def render_json(sections, today, note=''):
     mem, sub = [], None
     for sec, who, role, lines, charts, extra in sections:
         ls = [f'{i}. **{l.title}**: {l.fact}' + (f'  \n:small[:gray[{l.why}]]' if l.why else '') for i, l in enumerate(lines, 1)]
-        item = {'name': who, 'role': role, 'lines': ls, 'charts': charts}
+        item = {'name': who, 'role': role, 'lines': ls, 'charts': charts, 'rows': [l.row() for l in lines]}
         if sec.startswith('5-2'):
             if sub is None:
                 sub = {'name': '섹터 데스크', 'role': '담당 종목', 'lines': [], 'sub': []}

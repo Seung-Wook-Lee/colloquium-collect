@@ -1082,7 +1082,10 @@ with t1:
             nx = nx.assign(종가=num(nx['yfinance 티커'].map(cl)))
             ok = nx[(num(nx['일_RSI']) <= 30) & (num(nx['일_50일_이격도']) <= 90) & (nx['종가'] < num(nx['월_5개월선']))]
             st.markdown(f'**바닥 기준 세 조건 충족 (일봉 RSI ≤ 30 · 50일 이격 ≤ 90 · 월봉 5개월선 아래) · {len(ok)}종목**')
-            st.dataframe(ok[['정식 종목명', '일_RSI', '일_50일_이격도']], hide_index=True, width='stretch') if len(ok) else st.caption('없음')
+            if len(ok):   # 11/20: 식 한 줄(… if … else …)은 streamlit magic이 도움말을 그려서 두 줄로
+                st.dataframe(ok[['정식 종목명', '일_RSI', '일_50일_이격도']], hide_index=True, width='stretch')
+            else:
+                st.caption('없음')
         yd = csv(DAY, '역도산')
         if len(yd) and '60주 이격' in yd:
             near = yd[(yd['구분'] == '종목') & (num(yd['60주 이격']).between(97, 103))]
