@@ -23,7 +23,8 @@ except Exception:
 import drive  # noqa: E402
 
 st.set_page_config(page_title='콜로키움 회의', page_icon='📊', layout='wide')
-st.markdown('''<style>
+st.markdown('''<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
 .block-container {max-width: 1100px; padding-top: 2rem;}
 .stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th {font-size: 16px; line-height: 1.9;}
 .stMarkdown table {width: 100%; border-collapse: collapse;}
@@ -38,7 +39,13 @@ h1, h2, h3, h4, h5 {font-weight: 500 !important; letter-spacing: -0.2px;}
 .big-t td, .big-t th {font-size: 18px !important; padding: 8px 14px !important;}
 .who {font-size: 14px; font-weight: 500; color: #4a4a4a; margin-left: 10px; letter-spacing: 0.2px;}
 .box-t {font-size: 17px; font-weight: 500; color: #333; margin-bottom: 4px;}
-.note {font-size: 12.5px; color: #8a8a8a; line-height: 1.6; margin-top: 6px;}
+.note {font-size: 12px; color: #8a8a8a; line-height: 1.6; margin-top: 10px;}
+.sub {font-size: 13px; color: #888; line-height: 1.7;}
+.num-t {width: 100%; border-collapse: collapse; margin-top: 4px;}
+.num-t th {font-size: 12.5px !important; font-weight: 400 !important; color: #999; text-align: right; padding: 4px 10px !important; border: none !important; border-bottom: 1px solid #eee !important;}
+.num-t td {font-size: 24px !important; font-weight: 400; color: #222; text-align: right; padding: 6px 10px !important; border: none !important; font-variant-numeric: tabular-nums;}
+.num-t td.lab {font-size: 13px !important; color: #888; text-align: left;}
+html, body, [class*='css'], .stMarkdown, .stMetric, button, input {font-family: 'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif !important;}
 </style>''', unsafe_allow_html=True)
 
 D_DATA = '콜로키움 수집데이터'
@@ -444,38 +451,44 @@ def read_csv(day, fname):
     return pd.read_csv(io.BytesIO(b), encoding='utf-8-sig') if b else None
 
 
+@st.cache_data(ttl=3 * 3600, show_spinner='바닥 확률 계산 중…')
+def bottom_prob():
+    """11/21 의장: 연구된 모형으로. Lunde & Timmermann(2004) 위험률 모형(quant_center/lt_bottom.py, 하락 구간은 R bbdetection 필터 그대로)"""
+    sys.path.insert(0, str(ROOT / 'quant_center'))
+    import lt_bottom as LB
+    return LB.hazard_today()
+
+
 def bottom(day, name, title='바닥 근접도'):
-    """바닥 근접도(quant_center/bottom.py 출력)를 그대로 표시. 보정확률 = 실제로 바닥 구간일 확률."""
-    pre = '미장전_' if name.startswith('미장전') else ''
-    rows = []
-    for f in ('바닥근접도_나스닥100.csv', '바닥근접도.csv'):
-        d = read_csv(day, pre + f)
-        if d is not None and len(d):
-            rows.append(d.iloc[-1])
-    if not rows:
+    """이번 하락에서 지금이 바닥(최종 저점 3% 안)일 확률. 지수 종가·VIX·금리로 화면에서 바로 계산."""
+    try:
+        T = bottom_prob()
+    except Exception as e:   # noqa: BLE001
+        st.caption(f'바닥 확률 계산 실패: {e}')
         return
-    T = pd.DataFrame(rows)
     NAME = {'^NDX': '나스닥100', '^GSPC': 'S&P500'}
 
     def pct(v, sign=False):
         x = pd.to_numeric(v, errors='coerce')
         return '' if pd.isna(x) else (f'{x:+.1f}%' if sign else f'{x:.1f}%')
-    with st.container(border=True):   # 11/20 의장: 평균·승률을 번갈아 두지 말고 각각, % 붙여서
+    with st.container(border=True):
         st.markdown(sec_title(title), unsafe_allow_html=True)
         cols = st.columns(len(T))
         for col, (_, r) in zip(cols, T.iterrows()):
+            nm = NAME.get(r.get('기준지수'), r.get('기준지수'))
             with col:
-                pr = pd.to_numeric(r.get('보정확률'), errors='coerce')
-                st.metric(f"{NAME.get(r.get('기준지수'), r.get('기준지수'))}이 바닥 구간일 확률", '' if pd.isna(pr) else f'{pr * 100:.1f}%')
-                st.markdown(f"비슷한 점수였던 과거 {r.get('비슷한점수_주수', '')}주, 그 뒤 지수")
-                t13a, t26a = pct(r.get('비슷한점수_뒤13주_평균'), True), pct(r.get('비슷한점수_뒤26주_평균'), True)
-                t13w, t26w = pct(r.get('비슷한점수_뒤13주_승률')), pct(r.get('비슷한점수_뒤26주_승률'))
-                st.markdown('<table class="big-t" style="width:100%"><tr><th></th><th>평균 수익률</th><th>승률</th></tr>'
-                            f'<tr><td>13주 뒤</td><td>{t13a}</td><td>{t13w}</td></tr>'
-                            f'<tr><td>26주 뒤</td><td>{t26a}</td><td>{t26w}</td></tr></table>', unsafe_allow_html=True)
-        st.markdown('<div class="note">산출 방법: 바닥 구간은 앞뒤 13주 최저점에서 3% 안이고 52주 고점보다 5% 넘게 빠진 주. '
-                    '블록 33개 반응과 시장 지표로 로지스틱 회귀를 해마다 그 전 자료로만 학습해 맞히고, 과거 결과로 확률을 보정. '
-                    '13·26주 숫자는 과거 비슷한 점수 주들의 지수 평균 수익률과 승률(quant_center/bottom.py, 매일).</div>', unsafe_allow_html=True)
+                if not r.get('하락중'):
+                    st.metric(f'{nm}', '하락 구간 아님'); continue
+                st.metric(f'{nm}이 지금 이번 하락의 바닥일 확률', pct(r.get('확률')))
+                st.markdown(f'<div class="sub">고점 대비 {pct(r.get("지금낙폭"))} · {int(r.get("주수"))}주째 · VIX {r.get("VIX"):.1f} · RSI {r.get("RSI"):.0f}</div>'
+                            f'<div class="sub">확률이 비슷했던 과거 {int(r.get("비슷한확률_주수"))}주, 그 뒤 지수</div>', unsafe_allow_html=True)
+                st.markdown('<table class="num-t"><tr><th></th><th>평균 수익률</th><th>승률</th></tr>'
+                            f'<tr><td class="lab">13주 뒤</td><td>{pct(r.get("뒤13주_평균"), True)}</td><td>{pct(r.get("뒤13주_승률"))}</td></tr>'
+                            f'<tr><td class="lab">26주 뒤</td><td>{pct(r.get("뒤26주_평균"), True)}</td><td>{pct(r.get("뒤26주_승률"))}</td></tr></table>', unsafe_allow_html=True)
+        tt = '; '.join(f"{NAME.get(r['기준지수'])} AUC {r['검정_AUC']:.2f}" for _, r in T.iterrows())
+        st.markdown('<div class="note">산출 방법: Lunde &amp; Timmermann(2004) 위험률 모형. 하락 구간(고점 −5%에서 시작, 저점 +10%에서 끝, R bbdetection 판정) 안에서 '
+                    '낙폭·기간·VIX·금리·RSI·200일선 이격으로 "최종 저점 3% 안일 확률"을 계산. '
+                    f'2000년부터 해마다 그 전 자료로만 학습해 검정({tt}).</div>', unsafe_allow_html=True)
 
 
 if not LOCAL and not drive.ready():

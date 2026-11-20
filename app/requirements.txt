@@ -4,3 +4,4 @@ requests
 altair
 plotly
 yfinance
+scikit-learn
