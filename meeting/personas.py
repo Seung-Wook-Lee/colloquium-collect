@@ -193,14 +193,14 @@ class Ctx:
         if R.get('결론') and R['결론'].get('시장관문', True):   # 11/20 의장 블록 정비 1번: 결론이 '사지 않는다'인 시장은 종목 추천 → 바닥 대기
             try:
                 _, ST, _ = _buy_state(self)
-                for mk, v in ST.items():
-                    if not v['buy'] and v['act'] != '엔진 포트폴리오대로':
-                        mask = (self.T['시장'] == mk) & (self.T['추천'] == '추천')
-                        self.gate[mk] = (int(mask.sum()), v['act'])
-                        self.T.loc[mask, '추천'] = '바닥 대기'
-                        S.loc[(S['시장'] == mk) & (S['추천'] == '추천'), '추천'] = '바닥 대기'   # 판정표에도
-            except Exception as e:   # noqa: BLE001
-                self.gate['오류'] = (0, str(e)[:80])
+                closed = {mk: v['act'] for mk, v in ST.items() if not v['gate']}
+            except Exception as e:   # noqa: BLE001  11/21 의장: 판정 실패 = 닫힘(추천을 그냥 내보내지 않는다)
+                closed = {mk: f'시장 판정 실패 → 닫힘: {str(e)[:60]}' for mk in ('미국', '한국')}
+            for mk, act in closed.items():
+                mask = (self.T['시장'] == mk) & (self.T['추천'] == '추천')
+                self.gate[mk] = (int(mask.sum()), act)
+                self.T.loc[mask, '추천'] = '바닥 대기'
+                S.loc[(S['시장'] == mk) & (S['추천'] == '추천'), '추천'] = '바닥 대기'   # 판정표에도(포트폴리오가 읽음)
         self.top, self.drops = top7(self.T, RC)
         bd = R.get('엘피스_200일선') or {}   # 11/20 의장: 현재가 ÷ 200일선이 하단~상단 = '안', 하단 아래 = '추세 무너짐', 상단 위 = '위'
         x = pd.to_numeric(self.T['px_ma200'], errors='coerce') if 'px_ma200' in self.T else pd.Series(np.nan, index=self.T.index)
@@ -797,12 +797,32 @@ def _buy_state(c):
         elif mk == '한국' and kdd is not None and kthr is not None and kdd <= kthr:
             act, why = f"산다 — {R['나눔']}번 나눠 1번째(많이 빠짐)", f"코스피 사상 최고 대비 {kdd:+.1f}% ≤ {kdesc}"
         elif dfn:
-            why = (f"방어 국면, 나스닥100이 이번 하락의 바닥일 확률 {p(nd * 100 if nd is not None else None, 0)} < 준비 {R['바닥_준비']:.0%}" if mk == '미국'
+            why = (f"방어 국면, 나스닥100이 이번 하락의 바닥일 확률 {(f'{nd:.0%}' if nd is not None else '자료 없음')} < 준비 {R['바닥_준비']:.0%}" if mk == '미국'
                    else f"방어 국면, 코스피 사상 최고 대비 {p(kdd)} > {kdesc}")
             act = '아직 사지 않는다(약세장, 바닥 신호 없음)'
         else:
             act, why = '엔진 포트폴리오대로', '평상 국면'
-        ST[mk] = dict(act=act, why=why, buy=act.startswith('산다'), dfn=dfn, g=g)
+        buy = act.startswith('산다')
+        gate_ok = buy
+        if act == '엔진 포트폴리오대로':
+            # 11/21 의장("여기서 고쳐", 하루 1억 손실): 평상 국면도 관문 — 지수 추세가 꺾였으면 '추천'을 내지 않는다. 규칙 없거나 자료 없으면 닫힘
+            okq, need = R.get('평상_통과_4국면'), R.get('평상_추세신호_최소')
+            idx4 = g[3] if g else None
+            bad = []
+            if not okq:
+                bad.append('평상 관문 규칙 없음')
+            elif idx4 not in okq:
+                bad.append(f"지수 4국면 {idx4 or '자료 없음'}(통과: {', '.join(okq)})")
+            if mk == '미국':
+                tn = num(qg.get('추세 신호 매수 수(21·63·100일)'))
+                if need is None:
+                    bad.append('추세 신호 규칙 없음')
+                elif tn is None or tn < need:
+                    bad.append(f"S&P 추세 신호 매수 {'자료 없음' if tn is None else f'{int(tn)}/3'}(필요 {need}/3)")
+            gate_ok = not bad
+            if bad:
+                act, why = '아직 사지 않는다(평상 국면, 지수 추세 꺾임)', '평상 국면이지만 ' + ', '.join(bad)
+        ST[mk] = dict(act=act, why=why, buy=buy, gate=gate_ok, dfn=dfn, g=g)
     return out, ST, dict(cnear=cnear, nd=nd, bp=bp, WB=WB, crisis=crisis, conf_on=conf_on, conf_txt=conf_txt, B=B)
 
 
