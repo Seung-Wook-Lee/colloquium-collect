@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title='콜로키움 · 유튜브', page_icon='🎬', layout='wide')
+st.set_page_config(page_title='스튜디오 톰앤수 · 유튜브', page_icon='🎬', layout='wide')
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))

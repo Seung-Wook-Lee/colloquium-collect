@@ -946,7 +946,7 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
 
 def render_txt(sections, today, picks, note=''):
     day = f'{today:%Y-%m-%d}'
-    out = [f'콜로키움 회의 원고 {day}',
+    out = [f'스튜디오 톰앤수 회의 원고 {day}',
            '만든 방식: 코드 자동 생성(colloquium-collect meeting/personas.py + meeting/rules.yaml, 엔진 block33/blocks.yaml). AI가 쓰거나 고르지 않음.',
            '숫자는 07시 수집 파일·엔진 결과 그대로. "└ 근거"는 그 줄의 출처·규칙.']
     if note:
@@ -977,7 +977,7 @@ def render_md(sections, today, picks, note=''):
     """회의실(채팅)에 그대로 붙이는 원고(11/20 의장 'txt 파일 같다, 가독성 없다').
     위원마다 '## 위원' 칸. 줄 = 굵은 '번호. 제목' / 내용 / 기울임체 근거. 표는 앞뒤 빈 줄."""
     day = f'{today:%Y-%m-%d}'
-    out = [f'# 콜로키움 회의 원고 {day}']
+    out = [f'# 스튜디오 톰앤수 회의 원고 {day}']
     if note:
         out.append(_it(note))
     for sec, who, role, lines, _, extra in sections:
