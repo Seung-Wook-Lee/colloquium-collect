@@ -1,0 +1,49 @@
+name: 블록 1 data
+
+# 11/20 의장 블록 1~5 재편: 자료를 한곳('콜로키움 수집데이터/1_data/')에 모으고, 그 자료로 결측·이상치를 검사하고 고친다.
+# 하위 블록 1-1 가격 · 1-2 미국 재무(SEC) · 1-3 한국 재무(DART) · 1-4 과거 PER·EPS · 1-5 수급 · 1-6 정제 · 1-7 유니버스 · 1-8 층 · 1-9 자료 품질
+# 켜기·숫자 = 비공개 Team_Q colloquium_private/data.yaml
+on:
+  schedule:
+    - cron: '0 18 * * 6'      # UTC 토 18:00 = 한국 일 03:00, 매주 한 번
+  workflow_dispatch:
+    inputs:
+      only:
+        description: '일부 하위 블록만(예: 1-6,1-8). 비우면 켜진 것 전부'
+        required: false
+        default: ''
+
+concurrency: data
+
+jobs:
+  data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - name: 비공개 설정 받기(team_q colloquium_private, TEAMQ_TOKEN 필요)
+        uses: actions/checkout@v5
+        with:
+          repository: Seung-Wook-Lee/team_q
+          ref: main
+          path: team_q_private
+          sparse-checkout: colloquium_private
+          token: ${{ secrets.TEAMQ_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt pyyaml pyarrow
+      - name: 블록 1 실행
+        env:
+          TZ: Asia/Seoul
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+          TEAMQ_DRIVE_URL: ${{ secrets.TEAMQ_DRIVE_URL }}
+          TEAMQ_DRIVE_TOKEN: ${{ secrets.TEAMQ_DRIVE_TOKEN }}
+          QC_PRIVATE: ${{ github.workspace }}/team_q_private/colloquium_private
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.only }}" ]; then ARGS="--only ${{ github.event.inputs.only }}"; fi
+          python -m data.run $ARGS

@@ -1,0 +1,19 @@
+"""1-1 가격: 유니버스 전 종목 + 지수 10년 일별 시가·고가·저가·종가·거래량(야후, 배당·분할 보정 종가)."""
+import pandas as pd
+
+from .common import universe, write
+
+NAME = '가격'
+IDX = ['^GSPC', '^NDX', '^KS11', '^KQ11', '^VIX']
+
+
+def run(ctx, c):
+    import yfinance as yf
+    U = universe(ctx)
+    t = sorted(set(U['yfinance 티커'].dropna()) | set(c.get('추가', [])) | set(IDX))
+    D = yf.download(t, period=f"{c.get('년', 10)}y", auto_adjust=True, progress=False, threads=True)
+    for k, f in (('Close', '종가'), ('Open', '시가'), ('High', '고가'), ('Low', '저가'), ('Volume', '거래량')):
+        write(ctx, f'가격10년_{f}.csv.gz', D[k], index=True)
+    ctx['P_raw'] = D['Close']
+    ctx['V_raw'] = D['Volume']
+    return {'종목': D['Close'].shape[1], '시작': str(D.index.min().date()), '끝': str(D.index.max().date())}
