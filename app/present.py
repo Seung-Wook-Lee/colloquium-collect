@@ -185,10 +185,59 @@ def member(day, m, nm):
             st.markdown(FG_GUIDE)
 
 
+TABLE_CSS = """<style>
+.qt{width:100%;border-collapse:collapse;font-size:15px;line-height:1.6;margin:4px 0 18px}
+.qt th{background:#eef3ea;color:#2b3a2b;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #c9d6c3;white-space:nowrap}
+.qt td{padding:11px 12px;border-bottom:1px solid #e3e6e8;vertical-align:top}
+.qt td.n{color:#8a8f94;width:2.2em;text-align:right}
+.qt td.k{font-weight:600;white-space:nowrap}
+.qt td.v{font-weight:600;font-size:16px}
+.qt td.c{color:#444;white-space:nowrap}
+.qt td.w{color:#8a8f94;font-size:13px}
+.qt td.red{background:#fde4e4;color:#a51d1d;font-weight:600}
+.qt td.orange{background:#fff1dc;color:#9a5a00;font-weight:600}
+.qt td.green{background:#e4f4e6;color:#1d6b2c;font-weight:600}
+@media (prefers-color-scheme: dark){.qt th{background:#26302a;color:#dfe8dc;border-color:#3b4a3e}.qt td{border-color:#333}.qt td.c{color:#ccc}
+.qt td.red{background:#4a1f1f;color:#ffb3b3}.qt td.orange{background:#4a3517;color:#ffd08a}.qt td.green{background:#1f3d25;color:#a8e6b4}}
+</style>"""
+
+
+def _h(x):
+    import html
+    import re
+    return re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', html.escape(str(x or '')))
+
+
+def rows_table(rows):
+    """11/20 의장 "엑셀처럼, 줄 간격 넓게, 글자 덜 촘촘하게": [항목 | 값 | 변화 | 기준·신호 | 근거], 신호는 칸 색."""
+    has_c = any(r.get('변화') for r in rows); has_k = any(r.get('기준·신호') for r in rows)
+    cols = ['', '항목', '값'] + (['변화(1주·1달)'] if has_c else []) + (['기준·신호'] if has_k else []) + ['근거']
+    out = [TABLE_CSS, '<table class="qt"><thead><tr>' + ''.join(f'<th>{c}</th>' for c in cols) + '</tr></thead><tbody>']
+    for i, r in enumerate(rows, 1):
+        tds = [f'<td class="n">{i}</td>', f'<td class="k">{_h(r.get("항목"))}</td>', f'<td class="v">{_h(r.get("값"))}</td>']
+        if has_c:
+            tds.append(f'<td class="c">{_h(r.get("변화"))}</td>')
+        if has_k:
+            tds.append(f'<td class="{r.get("신호") or ""}">{_h(r.get("기준·신호"))}</td>')
+        tds.append(f'<td class="w">{_h(r.get("근거"))}</td>')
+        out.append('<tr>' + ''.join(tds) + '</tr>')
+    return ''.join(out) + '</tbody></table>'
+
+
 def _member(day, m, nm):
     head = ' · '.join(x for x in [m.get('name'), m.get('role')] if x)
     if head:
         st.subheader(head)
+    if m.get('rows'):   # 11/20 의장: 번호 나열 대신 표, 표·그래프는 아래에 두 칸
+        st.markdown(rows_table(m['rows']), unsafe_allow_html=True)
+        charts = list(m.get('charts', []))
+        for i in range(0, len(charts), 2):
+            cs = st.columns(2)
+            for col, c in zip(cs, charts[i:i + 2]):
+                with col:
+                    with st.container(border=True):
+                        _safe_draw(day, c, nm)
+        return
     # 2026-11-13: 표·그래프(dict)가 lines에 잘못 들어와도 화면이 멈추지 않게 charts로 옮긴다
     raw = m.get('lines') or []
     lines = [x for x in raw if isinstance(x, str)]
