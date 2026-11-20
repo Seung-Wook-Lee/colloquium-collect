@@ -252,9 +252,24 @@ def mover_news(c, name):
     return f" · 기사: {hd.iloc[0]['출처']} \"{hd.iloc[0]['제목']}\"" if len(hd) else ''
 
 
+def _gmd(g):
+    """grid → 회의 원고(md) 표."""
+    return (f"**{g['title']}**\n\n" if g.get('title') else '') + '| ' + ' | '.join(g['columns']) + ' |\n|' + '---|' * len(g['columns']) + '\n' + \
+        '\n'.join('| ' + ' | '.join(str(x) for x in r) + ' |' for r in g['rows']) + (f"\n\n_출처: {g['source']}_" if g.get('source') else '')
+
+
+def _etf_short(r):
+    """미국 ETF = 티커(짧은 한글), 11/20 의장. 한국 ETF = 이름 그대로."""
+    if r.get('시장') != '미국':
+        return str(r['이름'])
+    t = _re.sub(r'^미국\s+', '', str(r.get('섹터/테마') or '')).replace(' 지수', '').replace(' 섹터', '').strip()
+    return f"{r['코드']}({t})" if t else str(r['코드'])
+
+
 def miss_citadel(c):
+    """11/20 의장 "안 보이니까 표로": 긴 나열은 표(grid), 줄은 요약만."""
     R = c.R['미스 시타델']; k = R['상위']
-    out = []
+    out, G = [], []
     F = _read(c.d, '국내수급')
     F = F[~F['종목'].map(banned)] if len(F) else F
     if len(F):
@@ -262,11 +277,14 @@ def miss_citadel(c):
             F[col] = pd.to_numeric(F[col], errors='coerce')
         s5 = F['외국인 5일(억원)'].sum()
         top = F.nlargest(k, '외국인 5일(억원)'); bot = F.nsmallest(k, '외국인 5일(억원)')
-        out.append(L('외국인 순매수', f"한국 개별주 {len(F)}종목 외국인 5일 합계 {p(s5, 0, '억')} — 순매수 상위 " +
-                     ', '.join(f"{r['종목']} {p(r['외국인 5일(억원)'], 0, '억')}" for _, r in top.iterrows()) +
-                     ' / 순매도 상위 ' + ', '.join(f"{r['종목']} {p(r['외국인 5일(억원)'], 0, '억')}" for _, r in bot.iterrows()),
-                     f"기준일 {F['기준일'].iloc[0]}, 07시 국내수급.csv"))
-        out.append(L('기관·개인', f"기관 5일 합계 {p(F['기관 5일(억원)'].sum(), 0, '억')}, 개인 5일 합계 {p(F['개인 5일(억원)'].sum(), 0, '억')}", '같은 표'))
+        out.append(L('외국인 순매수', f"한국 개별주 {len(F)}종목 외국인 5일 합계 {p(s5, 0, '억')} (상위·하위 종목은 아래 표)", f"기준일 {F['기준일'].iloc[0]}, 07시 국내수급.csv"))
+        G.append({'type': 'grid', 'title': f'외국인 5일 순매수 상위·순매도 상위 {k}종목',
+                  'columns': ['구분', '종목', '외국인 5일(억원)', '외국인 20일(억원)'],
+                  'rows': [['순매수', r['종목'], p(r['외국인 5일(억원)'], 0, ''), p(r['외국인 20일(억원)'], 0, '')] for _, r in top.iterrows()] +
+                          [['순매도', r['종목'], p(r['외국인 5일(억원)'], 0, ''), p(r['외국인 20일(억원)'], 0, '')] for _, r in bot.iterrows()],
+                  'source': f"국내수급.csv, 기준일 {F['기준일'].iloc[0]}"})
+        G.append({'type': 'grid', 'title': f'주체별 5일 순매수 합계(한국 개별주 {len(F)}종목)', 'columns': ['주체', '5일 합계(억원)'],
+                  'rows': [[w, p(F[f'{w} 5일(억원)'].sum(), 0, '')] for w in ('외국인', '기관', '개인')], 'source': '국내수급.csv'})
         turn = F[F['표시'].astype(str).str.contains('매수 전환')]
         if len(turn):
             out.append(L('외국인 매수 전환', ', '.join(turn['종목'].head(5)), "국내수급.csv '표시' 칸"))
@@ -274,24 +292,33 @@ def miss_citadel(c):
     A = A[~A['이름'].map(banned)] if len(A) else A
     if len(A):
         A['유입_5일'] = pd.to_numeric(A['유입_5일'], errors='coerce')
-        for mk, unit in (('한국', '억'), ('미국', '백만달러')):
+        for mk, unit, div in (('한국', '억원', 1), ('미국', '억 달러', 100)):   # 미국 원자료 백만달러 → 억 달러
             X = A[A['시장'] == mk].dropna(subset=['유입_5일'])
             if len(X):
-                out.append(L(f'{mk} ETF 자금(5일)', '유입 ' + ', '.join(f"{r['이름']} {p(r['유입_5일'], 0, unit)}" for _, r in X.nlargest(k, '유입_5일').iterrows()) +
-                             ' / 유출 ' + ', '.join(f"{r['이름']} {p(r['유입_5일'], 0, unit)}" for _, r in X.nsmallest(k, '유입_5일').iterrows()), '07시 ETF자금.csv(좌수 변화 × NAV)'))
+                fmt = (lambda v: p(v, 0, '')) if div == 1 else (lambda v: p(v / div, 1, ''))
+                G.append({'type': 'grid', 'title': f'{mk} ETF 자금 5일 유입·유출 상위 {k}', 'columns': ['구분', 'ETF', f'5일 유입({unit})'],
+                          'rows': [['유입', _etf_short(r), fmt(r['유입_5일'])] for _, r in X.nlargest(k, '유입_5일').iterrows()] +
+                                  [['유출', _etf_short(r), fmt(r['유입_5일'])] for _, r in X.nsmallest(k, '유입_5일').iterrows()],
+                          'source': 'ETF자금.csv(좌수 변화 × NAV)'})
     Q = _read(c.d, '수급포지셔닝')
     if len(Q):
         g = dict(zip(Q['항목'], Q['값'])); w = dict(zip(Q['항목'], Q['1주 전']))
+        rows = []
         cta = num(g.get('CTA σ(근사)'))
         if cta is not None:
             zone = '수급 바닥 구간' if cta <= R['CTA_바닥'] else ('수급 고점 구간' if cta >= R['CTA_고점'] else '중간 구간')
-            out.append(L('CTA positioning', f"{cta:+.2f}σ(1주 전 {n(w.get('CTA σ(근사)'), 2)}σ) — {zone}", f"수급포지셔닝.csv 읽는 법: −4σ 아래 바닥, +4σ 뒤 1.5σ 꺾이면 고점"))
+            rows.append(['CTA positioning', f"{cta:+.2f}σ", f"{n(w.get('CTA σ(근사)'), 2)}σ", zone,
+                         f"추세추종 펀드 포지션. {R['CTA_바닥']}σ 아래 바닥, +4σ 뒤 1.5σ 꺾이면 고점"])
         ve = num(g.get('변동성타기팅 노출(배)'))
         vz = R.get('볼타깃_많이팜', 0.6)
-        vread = f" — {vz}배 아래: 이미 많이 팜(시장 블록 기회)" if ve is not None and ve < vz else ''
-        out.append(L('Vol-target exposure', f"{n(ve, 2)}배(1주 전 {n(w.get('변동성타기팅 노출(배)'), 2)}배){vread}",
-                     f"읽는 법(11/20 의장): 변동성 목표 펀드의 주식 보유 배수 = 목표변동성 10% ÷ 실현변동성(상한 1.5). 1배 = 목표만큼 보유, {vz}배 아래 = 변동성이 커져 이미 많이 팔아 더 팔 물량이 적음, 변동성이 잦아들면 다시 사는 쪽. "
-                     f"VIX 1년 백분위 {n(g.get('VIX 1년 백분위(%)'), 0)}%, VXN 1년 백분위 {n(g.get('VXN 1년 백분위(%)'), 0)}%"))
+        if ve is not None:
+            rows.append(['Vol-target exposure', f"{n(ve, 2)}배", f"{n(w.get('변동성타기팅 노출(배)'), 2)}배",
+                         '이미 많이 팜(기회)' if ve < vz else '보통',
+                         f"변동성 목표 펀드 보유 배수 = 목표 변동성 10% ÷ 실현 변동성(상한 1.5). {vz}배 아래 = 기계적 매도가 이미 많이 나옴"])
+        if rows:
+            out.append(L('포지셔닝', ', '.join(f"{r[0]} {r[1]}({r[3]})" for r in rows),
+                         f"VIX 1년 백분위 {n(g.get('VIX 1년 백분위(%)'), 0)}%, VXN 1년 백분위 {n(g.get('VXN 1년 백분위(%)'), 0)}%"))
+            G.append({'type': 'grid', 'title': '포지셔닝', 'columns': ['지표', '오늘', '1주 전', '구간', '읽는 법'], 'rows': rows, 'source': '수급포지셔닝.csv'})
     MM = _read(c.d, 'MMF')
     if len(MM):
         r = MM.iloc[0]
@@ -299,7 +326,7 @@ def miss_citadel(c):
     rule = c.R['한종목']['미스 시타델']
     r, cnt = pick(c.T, rule)
     out.append(c.pick_line('미스 시타델', rule, r, cnt, lambda r: f"외국인 5일 {n(r['f5'], 0, '억')}, 20일 {n(r['f20'], 0, '억')}, 엔진 {r['추천']}(블록 예 {n(r['블록예비율'], 2)})"))
-    return out, []
+    return out, G, '\n\n'.join(_gmd(g) for g in G)
 
 
 def rio(c):
@@ -741,7 +768,7 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
         except Exception as e:   # noqa: BLE001
             sections.append(('0 결론', '센터', '지금 살 때인가', [L('결론', '계산 실패', str(e)[:120])], [], ''))
     a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', a, g, tbl))
-    a, g = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, ''))
+    a, g, tbl = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, tbl))
     a, g = rio(c); sections.append(('3 리스크', '리오', '리스크', a, g, ''))
     a, g, tbl = phobos(c)
     sections.append(('4 공포와 탐욕', '포보스', '공포와 탐욕', a, g, tbl))
