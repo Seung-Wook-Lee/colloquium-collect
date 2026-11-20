@@ -413,7 +413,7 @@ def main():
             log(f'[3-30] 실패: {str(e)[:160]}')
     head = ' | '.join(note)
     txt = PER.render_txt(sec, tday, c.picks, head)
-    js = PER.render_json(sec, tday, head)
+    js = PER.render_json(sec, tday, head, getattr(c, 'state', None))
     md = PER.render_md(sec, tday, c.picks, head)
     pk = PER.picks_csv(c.picks)
     outs = {f'{PFX}회의원고.txt': txt.encode('utf-8'), f'{PFX}회의원고.md': md.encode('utf-8'), f'{PFX}발표.json': js.encode('utf-8'),
