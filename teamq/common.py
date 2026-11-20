@@ -22,7 +22,7 @@ KEY = {k: (os.environ.get(k) or '').strip() for k in
        ['KIS_APP_KEY', 'KIS_APP_SECRET', 'FRED_KEY', 'DART_KEY', 'SEC_EMAIL', 'ECOS_KEY', 'EDINET_KEY',
         'KRX_ID', 'KRX_PW', 'TEAMQ_DRIVE_URL', 'TEAMQ_DRIVE_TOKEN', 'DRIVE_URL', 'DRIVE_TOKEN']}
 
-U = pd.read_csv(os.path.join(HERE, 'universe_20261031.csv'), dtype=str)
+U = pd.read_csv(os.path.join(HERE, 'universe_20261120.csv'), dtype=str)
 U = U.rename(columns={'번호': 'id', '정식 종목명': 'name', '시장': 'country', '거래소': 'exchange', '구분': 'kind',
                       '섹터/테마': 'sector', '코드': 'code', 'yfinance 티커': 'yticker'})[
     ['id', 'name', 'country', 'exchange', 'kind', 'sector', 'code', 'yticker']]
