@@ -123,7 +123,10 @@ try:
     NT_C = pd.DataFrame(nt_pick, columns=NT_X.columns)
     NT_C['프로그램추천'] = [1 if i < TOP_N else 0 for i in range(len(NT_C))]
     NT_C.insert(0, '순위', range(1, len(NT_C) + 1))
-    nt_cols = ['순위', '구분', '시각(한국)', '판정', '긍정', '부정', '종목', '등락률(%)', '제목', '요약', '출처', '링크', '점수', '발생신호', '발생대상']
+    import ko_translate   # 11/20 의장: 모든 문장은 한글로
+    NT_C['제목(한글)'] = ko_translate.translate(NT_C['제목'].tolist(), log=log)
+    NT_C['요약(한글)'] = ko_translate.translate(NT_C['요약'].tolist(), log=log)
+    nt_cols = ['순위', '구분', '시각(한국)', '판정', '긍정', '부정', '종목', '등락률(%)', '제목(한글)', '제목', '요약(한글)', '요약', '출처', '링크', '점수', '발생신호', '발생대상']
     NT_C[nt_cols + ['프로그램추천']].to_csv(f'{DAY}/{TODAY}_주가뉴스후보.csv', index=False, encoding='utf-8-sig')
     NT_P = NT_C[NT_C['프로그램추천'] == 1][nt_cols]
     NT_P.to_csv(f'{DAY}/{TODAY}_주가뉴스.csv', index=False, encoding='utf-8-sig')

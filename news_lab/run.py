@@ -324,6 +324,10 @@ def main():
                      '제미나이추천': a.get('추천', ''), '중요도': a.get('중요도', ''), '제미나이이유': a.get('이유', ''),
                      '보강건수': len(sup), '보강': ' / '.join(f"{s['매체']}: {s['제목']}" for s in sup),
                      '보강링크': ' '.join(s['링크'] for s in sup), '링크': x['링크'], '의장판정': '', '의장이유': ''})
+    import ko_translate   # 11/20 의장: 모든 문장은 한글로
+    for col in ('제목', '요약'):
+        for r, t in zip(rows, ko_translate.translate([r[col] for r in rows], log=log)):
+            r[f'{col}(한글)'] = t
     rows.sort(key=lambda r: (r['제미나이추천'] != '쓸 것', -(int(r['중요도']) if str(r['중요도']).isdigit() else 0)))
     for k, r in enumerate(rows, 1):
         r['번호'] = k

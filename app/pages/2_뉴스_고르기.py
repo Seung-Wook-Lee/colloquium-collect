@@ -77,9 +77,15 @@ st.caption('기사마다 제목과 내용을 먼저 보고, 맨 아래 칸에서
 picks, reasons = [], []
 for i, r in cand.reset_index(drop=True).iterrows():
     with st.container(border=True):
-        st.markdown(f"**{r['제목']}**" + (f"  [원문]({r['링크']})" if str(r.get('링크', '')).startswith('http') else ''))
+        ko_t = str(r.get('제목(한글)', '') or '').strip()
+        st.markdown(f"**{ko_t or r['제목']}**" + (f"  [원문]({r['링크']})" if str(r.get('링크', '')).startswith('http') else ''))
+        ko_s = str(r.get('요약(한글)', '') or '').strip()
+        if ko_s:
+            st.write(ko_s)
         if r.get('제미나이이유'):
             st.write(r['제미나이이유'])
+        if ko_t:
+            st.caption(f"원제목: {r['제목']}")
         if r.get('보강'):
             st.caption(f"같은 사건 다른 보도: {r['보강']}")
         st.caption(f"{r['매체']} · {r['시각']} · {r['분류']} · 중요도 {r['중요도']} · 제미나이 {r['제미나이추천'] or '—'}")
