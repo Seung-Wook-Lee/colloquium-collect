@@ -309,6 +309,8 @@ def main():
             os.symlink(target, lp)
     R = yaml.safe_load(open(f'{HERE}/rules.yaml', encoding='utf-8'))
     B = QCC.load_blocks()
+    if B.get('결론'):   # 11/20 의장 결론 칸 규칙 숫자는 비공개 blocks.yaml에만(공개 저장소에 매수 규칙 숫자를 두지 않음)
+        R['결론'] = B['결론']
     carry_up = []
     if use_drive:
         if not pull_day(today, IN):
