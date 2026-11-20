@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'block33'))   # qc_config(블록33 설정 읽기)
 import qc_config as QCC  # noqa: E402
 
 UA = f"colloquium-research {os.environ.get('SEC_EMAIL') or 'admin@example.org'}"   # SEC 요구: 수집기 이름 + 연락처(GitHub Secrets SEC_EMAIL)

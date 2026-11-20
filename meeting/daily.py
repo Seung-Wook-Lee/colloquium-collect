@@ -23,8 +23,11 @@ import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-QC = os.path.join(REPO, 'quant_center')
-sys.path[:0] = [REPO, QC, HERE]
+DATA = os.path.join(REPO, 'data')      # 블록 1 데이터 수집
+MKT = os.path.join(REPO, 'market')     # 블록 2 마켓 센터
+QC = os.path.join(REPO, 'block33')     # 블록 3 블록33
+PYPATH = os.pathsep.join([REPO, QC, MKT])
+sys.path[:0] = [REPO, MKT, QC, HERE]
 import qc_config as QCC  # noqa: E402  비공개 설정(blocks.yaml·종목 목록·판단 코드) 위치
 import events as EVT      # noqa: E402
 import personas as PER    # noqa: E402
@@ -172,7 +175,7 @@ def fetch(W, IN):
                 bak = f'{IN}/{out}.bak'
                 if os.path.exists(f'{IN}/{out}'):
                     shutil.copy(f'{IN}/{out}', bak)
-                r = subprocess.run([sys.executable, f'{QC}/{script}'], cwd=W, capture_output=True, text=True, timeout=900)
+                r = subprocess.run([sys.executable, f'{DATA}/{script}'], cwd=W, capture_output=True, text=True, timeout=900, env={**os.environ, 'PYTHONPATH': PYPATH})
                 if r.returncode != 0:
                     if os.path.exists(bak):
                         shutil.move(bak, f'{IN}/{out}')
@@ -216,7 +219,7 @@ def judge(W, S):
     for x in glob.glob(f'{W}/추천포트폴리오_Ver.*'):
         os.remove(x)
     r = subprocess.run([sys.executable, p], cwd=W, capture_output=True, text=True, timeout=600,
-                       env={**os.environ, 'PYTHONPATH': QC, 'QC_PRIVATE': QCC.private_dir()})
+                       env={**os.environ, 'PYTHONPATH': PYPATH, 'QC_PRIVATE': QCC.private_dir()})
     if r.returncode != 0:
         log('[판단] 실패: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:160]); return {}
     out = {os.path.basename(x): open(x, 'rb').read() for x in glob.glob(f'{W}/추천포트폴리오_Ver.*')}
@@ -225,7 +228,7 @@ def judge(W, S):
 
 
 def backtest(W, IN, use_drive, tday, B, S):
-    """11/19 의장: 블록 성적표·조합 시험(quant_center/backtest.py). 금요일(성적표.요일)만. 지난 계산(블록점수이력.csv)은 드라이브에 이어 써서 새 날짜만 계산."""
+    """11/19 의장: 블록 성적표·조합 시험(block33/backtest.py). 금요일(성적표.요일)만. 지난 계산(블록점수이력.csv)은 드라이브에 이어 써서 새 날짜만 계산."""
     cache = f'{W}/블록점수이력.csv'
     S.to_csv(f'{W}/out_판정표.csv', index=False, encoding='utf-8-sig')   # 오늘 후보는 엔진 '후보'만
     try:
@@ -234,10 +237,10 @@ def backtest(W, IN, use_drive, tday, B, S):
             raw = drive.get(f'{CARRY}/블록점수이력.csv')
             if raw:
                 open(cache, 'wb').write(raw)
-        r = subprocess.run([sys.executable, f'{QC}/fetch_long.py', IN], cwd=W, capture_output=True, text=True, timeout=900)
+        r = subprocess.run([sys.executable, f'{DATA}/fetch_long.py', IN], cwd=W, capture_output=True, text=True, timeout=900, env={**os.environ, 'PYTHONPATH': PYPATH})
         if r.returncode != 0:
             raise RuntimeError('긴 가격 실패: ' + (r.stderr.strip().splitlines() or ['?'])[-1])
-        r = subprocess.run([sys.executable, '-W', 'ignore', f'{QC}/backtest.py', IN], cwd=W, capture_output=True, text=True, timeout=5400)
+        r = subprocess.run([sys.executable, '-W', 'ignore', f'{QC}/backtest.py', IN], cwd=W, capture_output=True, text=True, timeout=5400, env={**os.environ, 'PYTHONPATH': PYPATH})
         if r.returncode != 0:
             raise RuntimeError((r.stderr.strip().splitlines() or ['?'])[-1])
         log('[성적표] ' + ' | '.join(r.stdout.strip().splitlines()[:2]))
@@ -252,25 +255,20 @@ def backtest(W, IN, use_drive, tday, B, S):
 
 
 def bottom(W, use_drive, B, S):
-    """11/19 의장: 바닥 근접도(quant_center/bottom.py) 매일. 블록33 지문으로 미국 지수가 바닥 즈음인지, 그 점수일 때 13·26주 뒤 지수 수익률."""
-    cache = f'{W}/블록점수이력.csv'
+    """하위 블록 2-12 바닥 확률(11/21 의장: 연구된 모형으로) — Lunde & Timmermann(2004) 위험률 모형(market/lt_bottom.py,
+    하락 구간 판정은 R bbdetection 필터 그대로). 출력 바닥확률.csv(나스닥100·S&P500 한 줄씩). 2-13 조정 단계표는 그대로."""
     try:
-        if not os.path.exists(cache) and use_drive:
-            import drive
-            raw = drive.get(f'{CARRY}/블록점수이력.csv')
-            if raw:
-                open(cache, 'wb').write(raw)
-        if not os.path.exists(cache):
-            log('[바닥] 블록점수이력 없음 → 건너뜀'); return {}
-        import bottom as BOT
-        X = set(B.get('_꺼짐', []))   # 하위 블록 2-12 바닥 근접도 · 2-13 조정 단계
-        for idx in (B.get('바닥') or {}).get('지수', ['^GSPC', '^NDX']):   # S&P500·나스닥100 둘 다
-            if '2-12' not in X:
-                one, test, _ = BOT.run(W, S, B.get('바닥'), idx)
-                r = one.iloc[0]
-                log(f"[바닥] {idx} 근접도 {r['원점수']} (과거 {r['과거백분위']}백분위, 경보 {r['경보']}) · 검정 AUC {test.iloc[0]['AUC']}")
-            if '2-13' in X:
-                continue
+        X = set(B.get('_꺼짐', []))   # 하위 블록 2-12 바닥 확률 · 2-13 조정 단계
+        if '2-12' not in X:
+            try:
+                import lt_bottom as LB
+                T = LB.hazard_today(cfg=(B.get('바닥') or {}).get('하락구간'))
+                T.to_csv(f'{W}/바닥확률.csv', index=False, encoding='utf-8-sig')
+                for _, r in T.iterrows():
+                    log(f"[바닥] {r['기준지수']} 이번 하락의 바닥일 확률 {r.get('확률')}% (낙폭 {r.get('지금낙폭')}%, {r.get('주수')}주) · 검정 AUC {r.get('검정_AUC')}")
+            except Exception as e:   # noqa: BLE001
+                log(f'[바닥] 실패: {str(e)[:160]}')
+        for idx in (('^GSPC', '^NDX') if '2-13' not in X else ()):
             try:   # 11/20 의장: 조정 단계표(5·10·15·20·30%, 1년 횟수, 다음 단계 확률, 처음 닿은 날 사면 수익률)
                 import correction as COR
                 COR.run(W, idx, (B.get('바닥') or {}).get('조정'))
@@ -282,7 +280,7 @@ def bottom(W, use_drive, B, S):
                 COR.run(W, idx, {**((B.get('바닥') or {}).get('조정') or {}), '한국_배수_년': (B.get('결론') or {}).get('한국_배수_년')})
             except Exception as e:   # noqa: BLE001
                 log(f'[조정단계] {idx} 실패: {str(e)[:120]}')
-        return {os.path.basename(k): open(k, 'rb').read() for k in glob.glob(f'{W}/바닥근접도*.csv') + glob.glob(f'{W}/조정*.csv')}
+        return {os.path.basename(k): open(k, 'rb').read() for k in glob.glob(f'{W}/바닥확률*.csv') + glob.glob(f'{W}/조정*.csv')}
     except Exception as e:
         log(f'[바닥] 실패 → 건너뜀: {str(e)[:160]}')
         return {}
@@ -396,7 +394,7 @@ def main():
     # 11/20 의장 블록 1~5 재편: 블록 2 phase(국면.csv) · 블록 3 Analysis(종목점수.csv) 출력 — 다음 블록은 이 파일만 읽는다
     BLK = {}
     try:
-        import phase.run as PH
+        import market.run as PH
         G2, ex2 = PH.build(IN, W, B, m, M, c)
         BLK['2_phase/국면.csv'] = G2
         BLK.update({f'2_phase/{k}': v for k, v in ex2.items()})
@@ -404,14 +402,14 @@ def main():
     except Exception as e:   # noqa: BLE001
         log(f'[블록2] 실패: {str(e)[:160]}')
     try:
-        from analysis import b3_scores as B3
+        from block33 import b3_scores as B3
         BLK['3_analysis/종목점수.csv'] = B3.build(S, B)
         log(f"[블록3] 종목점수 {len(BLK['3_analysis/종목점수.csv'])}종목")
     except Exception as e:   # noqa: BLE001
         log(f'[블록3] 실패: {str(e)[:160]}')
     if '3-30' not in B.get('_꺼짐', []):   # 11/20 의장 '따로 집계': 바닥 기법은 종목점수에 섞지 않고 갈래별 한 표 집계만
         try:
-            from analysis import b3_30_votes as B330
+            from block33 import b3_30_votes as B330
             T30 = B330.today(pd.read_csv(f'{IN}/유니버스.csv', dtype=str, encoding='utf-8-sig'))
             if T30 is not None and len(T30):
                 BLK['3_analysis/바닥신호집계.csv'] = T30

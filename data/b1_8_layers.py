@@ -1,7 +1,7 @@
 """1-8 층 L1~L5: 정제 가격(1-6)으로 연 변동성(최근 N년, 제외 구간 뺌) → 종류별 문턱 → 의장 지정 우선."""
 import pandas as pd
 
-import universe_layers as UL
+from data import universe_layers as UL
 from .common import need, write
 
 

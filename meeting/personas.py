@@ -138,7 +138,7 @@ def pick(T, rule, extra=None):
 
 
 def top7(T, RC):
-    """오늘의 추천 종목 7: quant_center/gen7.py와 같은 규칙(blocks.yaml 추천 설정, 손 목록 없음)."""
+    """오늘의 추천 종목 7: 옛 gen7.py와 같은 규칙(blocks.yaml 추천 설정, 손 목록 없음)."""
     nk, nu, vmax = RC.get('국내수', 5), RC.get('미국ETF수', 2), RC.get('변동성상한', 60)
     A = T.copy()
     A['미국ETF'] = (A['시장'] == '한국') & (A['구분'] != '개별주') & A['종목'].astype(str).str.contains('미국')
@@ -760,9 +760,10 @@ def _buy_state(c):
     out.append(L('회사채(신용)', f"{st}: 하이일드 {n(hyv, 2, '%')}(20일 {p(h20, 2, '%p')}), CCC 이하 {n(cv, 2, '%')}(수집 최고 {n(chi, 2, '%')})",
                  f"규칙: 하이일드 {R['신용위기_하이일드']}% 이상 또는 20일 +{R['신용위기_하이일드20일']}%p 이상 = 위기(사지 않음), "
                  f"CCC가 수집 최고의 {R['신용주의_CCC_수집최고비']:.0%} 이상 = 주의 (리스크.csv)"))
-    B = _read2(c.d, '바닥근접도_나스닥100')
-    nd = num(B.iloc[0]['원점수']) if len(B) else None
-    WB = _read2(c.d, '바닥근접도_무엇을살까_나스닥100')
+    B = _read2(c.d, '바닥확률')   # 11/21 의장: 하위 블록 2-12 = Lunde & Timmermann 위험률 모형(이번 하락의 바닥일 확률)
+    bp = {r['기준지수']: num(r.get('확률')) for _, r in B.iterrows()} if len(B) and '확률' in B else {}
+    nd = bp['^NDX'] / 100 if bp.get('^NDX') is not None else None
+    WB = pd.DataFrame()
     kr = c.mac_row('코스피')
     kdd = num(kr.get('최고 대비(%)')) if kr is not None else None
     KC = _read2(c.d, '조정단계_오늘_코스피')   # 11/20 의장: 한국 '산다' 문턱 = 미국 correction(−10%) × 코스피 변동성 비율(매일)
@@ -776,19 +777,19 @@ def _buy_state(c):
         if crisis:
             act, why = '사지 않는다', '신용 위기 규칙'
         elif mk == '미국' and nd is not None and nd >= R['바닥_경보']:
-            act, why = '산다(바닥 경보)', f"나스닥100 바닥 근접도 {nd:.3f} ≥ 경보 {R['바닥_경보']}"
+            act, why = '산다(바닥 경보)', f"나스닥100이 이번 하락의 바닥일 확률 {nd:.0%} ≥ 경보 {R['바닥_경보']:.0%}"
         elif mk == '미국' and nd is not None and nd >= R['바닥_준비']:
-            act, why = f"산다 — {R['나눔']}번 나눠 1번째(바닥 준비)", f"나스닥100 바닥 근접도 {nd:.3f} ≥ 준비 {R['바닥_준비']}(경보 {R['바닥_경보']})"
+            act, why = f"산다 — {R['나눔']}번 나눠 1번째(바닥 준비)", f"나스닥100이 이번 하락의 바닥일 확률 {nd:.0%} ≥ 준비 {R['바닥_준비']:.0%}(경보 {R['바닥_경보']:.0%})"
         elif mk == '한국' and kdd is not None and kthr is not None and kdd <= kthr:
             act, why = f"산다 — {R['나눔']}번 나눠 1번째(많이 빠짐)", f"코스피 사상 최고 대비 {kdd:+.1f}% ≤ {kdesc}"
         elif dfn:
-            why = (f"방어 국면, 나스닥100 바닥 근접도 {n(nd, 3)} < 준비 {R['바닥_준비']}" if mk == '미국'
+            why = (f"방어 국면, 나스닥100이 이번 하락의 바닥일 확률 {p(nd * 100 if nd is not None else None, 0)} < 준비 {R['바닥_준비']:.0%}" if mk == '미국'
                    else f"방어 국면, 코스피 사상 최고 대비 {p(kdd)} > {kdesc}")
             act = '아직 사지 않는다(약세장, 바닥 신호 없음)'
         else:
             act, why = '엔진 포트폴리오대로', '평상 국면'
         ST[mk] = dict(act=act, why=why, buy=act.startswith('산다'), dfn=dfn, g=g)
-    return out, ST, dict(cnear=cnear, nd=nd, WB=WB, crisis=crisis)
+    return out, ST, dict(cnear=cnear, nd=nd, bp=bp, WB=WB, crisis=crisis)
 
 
 def conclusion(c):
@@ -807,8 +808,10 @@ def conclusion(c):
             continue
         st = '약세' if g[0] == '방어' else '강세'
         num_ = [f"국면 {g[0]}", f"지수 4국면 {g[3] or '자료 없음'}"]
-        if mk == '미국' and nd is not None:
-            num_.append(f"나스닥100 바닥 근접도 {nd:.2f}")
+        if mk == '미국':
+            for ix, nm_ in (('^NDX', '나스닥100'), ('^GSPC', 'S&P500')):
+                if V['bp'].get(ix) is not None:
+                    num_.append(f"{nm_}이 이번 하락의 바닥일 확률 {V['bp'][ix]:.0f}%")
         kr = c.mac_row('S&P500' if mk == '미국' else '코스피')
         if kr is not None:
             num_.append(f"{'S&P500' if mk == '미국' else '코스피'} 사상 최고 대비 {p(num(kr.get('최고 대비(%)')))}")
@@ -944,7 +947,7 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
 def render_txt(sections, today, picks, note=''):
     day = f'{today:%Y-%m-%d}'
     out = [f'콜로키움 회의 원고 {day}',
-           '만든 방식: 코드 자동 생성(colloquium-collect meeting/personas.py + meeting/rules.yaml, 엔진 quant_center/blocks.yaml). AI가 쓰거나 고르지 않음.',
+           '만든 방식: 코드 자동 생성(colloquium-collect meeting/personas.py + meeting/rules.yaml, 엔진 block33/blocks.yaml). AI가 쓰거나 고르지 않음.',
            '숫자는 07시 수집 파일·엔진 결과 그대로. "└ 근거"는 그 줄의 출처·규칙.']
     if note:
         out.append(note)

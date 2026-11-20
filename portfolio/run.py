@@ -23,9 +23,9 @@ import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-sys.path[:0] = [REPO, os.path.join(REPO, 'quant_center')]
+sys.path[:0] = [REPO, os.path.join(REPO, 'block33')]
 import qc_config as QCC          # noqa: E402
-import universe_layers as UL     # noqa: E402
+from data import universe_layers as UL     # noqa: E402
 from portfolio import optimize as O  # noqa: E402
 
 KST = dt.timezone(dt.timedelta(hours=9))
@@ -327,7 +327,7 @@ def main():
     T = T.rename(columns={'_점수': '점수'})
     T['점수'] = pd.to_numeric(T['점수'], errors='coerce')
     try:   # 11/20 재편: 블록 3 기간별 점수(단기·중기·장기)를 포트폴리오가 받는다(portfolio.yaml '점수기간')
-        from analysis import b3_scores as B3
+        from block33 import b3_scores as B3
         PS = B3.build(S.rename(columns={'_점수': '순위점수'}), BLK).set_index('번호')
         for k in ('단기', '중기', '장기'):
             T[f'{k} 점수'] = pd.to_numeric(T['번호'].map(PS[f'{k} 점수']), errors='coerce')
