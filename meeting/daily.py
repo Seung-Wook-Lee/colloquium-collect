@@ -383,7 +383,14 @@ def main():
     PFX = f'{today}_' if a.session == '국장전' else f'{today}_미장전_'
     if a.session == '미장전':
         Q = premarket_quotes(R)
-        sec.insert(0, ('0 미장전 시황', '미스터 마켓', '미장전 시황', PER.premarket(c, Q, tday), [], ''))
+        # 11/20 23:39 의장: 미스터 마켓은 1번(0번 칸 없앰) — 미장전 시세를 '1 시장' 칸 맨 앞에 붙인다
+        pm = PER.premarket(c, Q, tday)
+        i1 = next((i for i, x in enumerate(sec) if x[0] == '1 시장'), None)
+        if i1 is None:
+            sec.insert(0, ('1 시장', '미스터 마켓', '시장', pm, [], ''))
+        else:
+            t, w, r, ls, g, tb = sec[i1]
+            sec[i1] = (t, w, r, pm + ls, g, tb)
         note.insert(0, '미장전 회의(22:00) — 07시 파일 + 야후 가격(오늘 한국 종가까지)·RSS 다시 받아 엔진 다시 실행')
         Q.to_csv(f'{IN}/미장전시세.csv', index=False, encoding='utf-8-sig')
     # 11/20 의장 블록 1~5 재편: 블록 2 phase(국면.csv) · 블록 3 Analysis(종목점수.csv) 출력 — 다음 블록은 이 파일만 읽는다
@@ -411,7 +418,8 @@ def main():
                 log(f"[3-30] 바닥 신호 집계 {len(T30)}종목, 최다 표 {T30['바닥 신호(표)'].max()}")
         except Exception as e:   # noqa: BLE001
             log(f'[3-30] 실패: {str(e)[:160]}')
-    head = ' | '.join(note)
+    log('[원고 만든 자료] ' + ' | '.join(note))   # 11/20 23:39 의장: 원고 첫 줄 자료 메모는 회의에 필요 없음 → 로그에만
+    head = ''
     txt = PER.render_txt(sec, tday, c.picks, head)
     js = PER.render_json(sec, tday, head, getattr(c, 'state', None))
     md = PER.render_md(sec, tday, c.picks, head)
