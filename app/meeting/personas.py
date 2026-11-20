@@ -852,6 +852,17 @@ def conclusion(c):
         mood.append(L(f'{mk} 시장', st, ' · '.join(num_)))
     if credit is not None:
         mood.append(L('회사채(신용)', credit.fact, f"위기 기준: 하이일드 {R['신용위기_하이일드']}% 이상 또는 20일 +{R['신용위기_하이일드20일']}%p 이상 · 주의 기준: CCC가 수집 최고의 {R['신용주의_CCC_수집최고비']:.0%} 이상"))
+    try:   # 11/21 의장: "회의 결론에서 공포와 탐욕, 빅스에 대해 말이 있어야지" — 블록 2-5·2-2, 말은 market/fear_greed.py(종목 진단과 같은 규칙)
+        import fear_greed as FGM
+        import qc_config as QCC
+        F = QCC.load_blocks(switches=False).get('진단_공포탐욕') or {}
+        term = num(c.m.get('VIX_VIX3M')) if isinstance(c.m, dict) else None
+        fs = FGM.say(FGM.from_csv(_read(c.d, '공포탐욕')), F, term)
+        mood.append(L('공포탐욕', fs.get('구간') or '자료 없음', fs['말'] + (' 시장 신호: 극단 공포·신용 버팀 → 살 때가 가까움 켜짐.' if fs.get('가까움') else '')))
+        if fs.get('VIX말'):
+            mood.append(L('VIX', fs['VIX말'].split(' — ')[0], fs['VIX말']))
+    except Exception as e:   # noqa: BLE001
+        mood.append(L('공포탐욕', '읽기 실패', str(e)[:80]))
     T = c.T
     cand_all = T[(T.get('원칙', pd.Series(index=T.index, dtype=str)) == '떨어진 우량주') & T['추천'].isin(['추천', '관찰', '바닥 대기'])]
     beta = _betas(c, pd.concat([cand_all, T[T['종목'].isin([r['종목'] for r in c.top])]]).drop_duplicates('번호'))

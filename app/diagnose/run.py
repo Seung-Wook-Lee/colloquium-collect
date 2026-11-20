@@ -29,56 +29,33 @@ import qc_config as QCC  # noqa: E402
 NAMES = {'GOOGL': '알파벳(구글)', 'MSFT': '마이크로소프트', 'MRVL': '마벨 테크놀로지', 'JNJ': '존슨앤존슨', 'JPM': 'JP모건'}
 
 
-FGK = {  # CNN 키 / 07시 공포탐욕.csv 지표 이름 → 한글
-    'market_momentum_sp500': '모멘텀(S&P 125일선)', 'stock_price_strength': '신고가 강도', 'stock_price_breadth': '거래량 폭',
-    'put_call_options': '풋콜 비율', 'market_volatility_vix': '변동성(VIX)', 'safe_haven_demand': '안전자산 선호',
-    'junk_bond_demand': '정크본드(신용)'}
-FGN = dict(zip(['1. Market Momentum', '2. Stock Price Strength', '3. Stock Price Breadth', '4. Put and Call Options',
-                '5. Market Volatility', '6. Safe Haven Demand', '7. Junk Bond Demand'], FGK.values()))
-
-
 def fear_greed(csv=None):
-    """공포탐욕 종합과 7개 지표 점수. csv(07시 수집 파일)가 있으면 그걸, 없으면 CNN에서 바로."""
+    """공포탐욕: ① --fg-csv ② CNN 실시간 ③ 드라이브 07시 수집 파일(오늘~3일 전) 순서."""
+    import fear_greed as FGM
+    if csv:
+        return FGM.from_csv(pd.read_csv(csv))
     try:
-        if csv:
-            G = pd.read_csv(csv)
-            tot = G[G['구분'] == '종합'].iloc[0]
-            return dict(종합=float(tot['점수']), 전일=float(tot['전일']), 주전=float(tot['1주 전']), 시각=str(tot.get('CNN 갱신시각', '')),
-                        지표={FGN.get(n, n): float(v) for n, v in zip(G.loc[G['구분'] == '지표', '지표'], G.loc[G['구분'] == '지표', '점수'])})
         import requests
-        j = requests.get('https://production.dataviz.cnn.io/index/fearandgreed/graphdata', timeout=20,
-                         headers={'User-Agent': 'Mozilla/5.0'}).json()
-        f = j['fear_and_greed']
-        return dict(종합=float(f['score']), 전일=float(f['previous_close']), 주전=float(f['previous_1_week']), 시각=str(f.get('timestamp', '')),
-                    지표={v: float(j[k]['score']) for k, v in FGK.items() if k in j})
+        r = requests.get('https://production.dataviz.cnn.io/index/fearandgreed/graphdata', timeout=20,
+                         headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+                                  'Referer': 'https://edition.cnn.com/', 'Origin': 'https://edition.cnn.com'})
+        return FGM.from_cnn(r.json())
     except Exception as e:   # noqa: BLE001
-        print('공포탐욕 읽기 실패:', e)
-        return {}
-
-
-def fg_read(fg, F):
-    """공포탐욕 → 판정과 말(규칙표: 비공개 '진단_공포탐욕')."""
-    if not fg:
-        return dict(가까움=False, 말='공포탐욕 자료를 못 읽었습니다(판정에서 빠짐).')
-    v = fg['종합']
-    if v <= F['극단공포']:
-        zone, judge = '극단 공포', '살 때가 가까워졌습니다'
-    elif v <= F['공포']:
-        zone, judge = '공포', '살 준비를 할 때입니다'
-    elif v >= F['탐욕']:
-        zone, judge = '탐욕', '사람들이 들떠 있어 사기에 부담스러운 때입니다'
-    else:
-        zone, judge = '보통', '공포탐욕으로는 특별한 신호가 없습니다'
-    low = sorted([(n, x) for n, x in fg['지표'].items() if x <= F['지표_바닥']], key=lambda t: t[1])
-    t = f"공포탐욕 {v:.0f}(전날 {fg['전일']:.0f}, 1주 전 {fg['주전']:.0f}) — {zone}. {judge}."
-    if low:
-        t += ' 이번 공포를 만든 건 ' + ', '.join(f'{n} {x:.0f}' for n, x in low) + '입니다.'
-    junk = fg['지표'].get('정크본드(신용)')
-    if junk is not None and v <= F['공포']:
-        t += (f" 정크본드(신용)는 {junk:.0f}로 아직 버팁니다. 가격과 심리가 무너진 공포이고, 돈줄이 막힌 공포는 아닙니다."
-              if junk > F['신용_버팀'] else f" 정크본드(신용)도 {junk:.0f}로 무너졌습니다. 돈줄이 막히는 공포라 바닥이 더 멀 수 있습니다.")
-    credit_bad = junk is not None and junk <= F['신용_버팀']
-    return dict(가까움=v <= F['극단공포'] and not credit_bad, 말=t, 종합=v, 구간=zone)
+        print('CNN 공포탐욕 실패:', e)
+    try:
+        import io
+        sys.path.insert(0, os.path.join(os.path.dirname(APP), 'collect'))
+        import drive
+        now = dt.datetime.now(dt.timezone(dt.timedelta(hours=9)))
+        for k in range(4):
+            d = (now - dt.timedelta(days=k)).strftime('%Y%m%d')
+            b = drive.get(f'콜로키움 수집데이터/{d}/{d}_공포탐욕.csv') if drive.ready() else None
+            if b:
+                print('공포탐욕: 드라이브', d)
+                return FGM.from_csv(pd.read_csv(io.BytesIO(b), encoding='utf-8-sig'))
+    except Exception as e:   # noqa: BLE001
+        print('드라이브 공포탐욕 실패:', e)
+    return {}
 
 
 def cfg():
@@ -187,8 +164,8 @@ def move(s, b):
     """고점 이후 하락을 시장 탓(베타×기준지수 하락)과 회사 탓(나머지)으로 나눈다."""
     w = s.iloc[-252:]
     hi = w.idxmax()
-    rs, rb = s.pct_change().iloc[-756:], b.pct_change().iloc[-756:]
-    beta = rs.cov(rb) / rb.var()
+    ws, wb = s.resample('W-FRI').last().pct_change().iloc[-104:], b.resample('W-FRI').last().pct_change().iloc[-104:]
+    beta = ws.cov(wb) / wb.var()   # 최근 2년 주간 수익률(일간은 하루 튐에 흔들림)
     d = s.iloc[-1] / s[hi] - 1
     db = b.iloc[-1] / b.loc[hi] - 1
     m1, b1 = s.iloc[-1] / s.iloc[-22] - 1, b.iloc[-1] / b.iloc[-22] - 1
@@ -209,10 +186,11 @@ def story(r):
     m, f, u, st, mk = r['이동'], r['실적'], r['사용'], r['상태'], r['시장']
     T = []
     T.append(f"**무슨 일이 있었나.** {m['고점일']} 고점 {m['고점']:,.2f}에서 {m['주']}주 만에 {m['낙폭']:.1f}% 빠졌습니다. "
-             f"같은 기간 {BMN.get(r['기준지수'], r['기준지수'])}는 {m['지수낙폭']:.1f}%였습니다. 이 회사는 평소 지수가 1% 움직일 때 {m['베타']:.2f}% 움직이므로, "
+             f"같은 기간 {BMN.get(r['기준지수'], r['기준지수'])}는 {m['지수낙폭']:.1f}%였습니다. 이 회사는 최근 2년 지수가 1% 움직일 때 평균 {m['베타']:.2f}% 움직였으므로, "
              f"시장 때문에 빠진 몫이 약 {m['시장탓']:.1f}%이고 회사 자체 이유로 빠진 몫이 약 {m['회사탓']:+.1f}%입니다. "
-             + ('대부분 시장 탓입니다.' if abs(m['회사탓']) < abs(m['시장탓']) / 2 else
-                ('회사 자체 이유가 더 큽니다.' if m['회사탓'] < m['시장탓'] else '시장보다 덜 빠졌습니다. 회사 쪽은 오히려 버티고 있습니다.'))
+             + ('시장 민감도에 비해 덜 빠졌습니다. 회사 쪽은 오히려 버티고 있습니다.' if m['회사탓'] >= 0 else
+                '대부분 시장 탓입니다.' if abs(m['회사탓']) < abs(m['시장탓']) / 2 else
+                '회사 자체 이유가 더 큽니다.' if abs(m['회사탓']) > abs(m['시장탓']) else '시장 탓과 회사 탓이 비슷합니다.')
              + f" 최근 한 달만 보면 {m['한달']:+.1f}%(지수 {m['지수한달']:+.1f}%)입니다.")
     if f:
         x = []
@@ -231,20 +209,29 @@ def story(r):
         T.append(t)
     if st.get('TTM PER') is not None:
         p = st['PER 백분위(2015~)']
-        T.append(f"**값은 어떤가.** 지난 1년 이익 기준 PER {st['TTM PER']}배로, 2015년 이후 이 회사가 거래된 날 중 {p}%보다 쌉니다. "
+        T.append(f"**값은 어떤가.** 지난 1년 이익 기준 PER {st['TTM PER']}배입니다. 2015년 이후 이 회사가 거래된 날 중 {p}%는 지금보다 쌌습니다. "
                  + ('역사적으로 싼 자리입니다.' if p <= r['C']['서사_PER싸다'] else '비싼 편입니다.' if p >= r['C']['비쌈_PER백분위'] else '중간쯤입니다.'))
     if u.get('날수'):
         T.append(f"**과거엔 어땠나.** 2015년 이후 이 회사가 지금과 비슷했던 때({u['조건'].lstrip('+ ')})가 {u['사건수']}번 있었습니다. 그때 샀다면 "
                  f"반년(26주) 뒤 절반은 {u['중앙26']:+.1f}% 넘게 올랐고 이익 날 확률은 {u['승률26']:.0f}%, "
                  f"1년(52주) 뒤 절반은 {u['중앙52']:+.1f}% 넘게 올랐고 이익 날 확률은 {u['승률52']:.0f}%였습니다. "
                  f"다만 산 뒤 반년 안에 보통 {u['추가하락중앙']:.1f}% 더 빠졌고, 나쁠 때는 {u['추가하락하위25']:.1f}%까지 빠졌습니다.")
-    t = '**시장은.** ' + r['공포탐욕'].get('말', '')
+    g = r.get('공포줄')
+    if g and g.get('날수'):
+        T.append(f"**공포탐욕이 지금만큼 낮았을 때는.** 2011년 이후 {g['조건'].split('(')[0]}이 {g['사건수']}번({g['날수']}일) 있었습니다. 그날 이 종목을 샀다면 "
+                 f"반년 뒤 중간 {g['중앙26']:+.1f}%(이익 확률 {g['승률26']:.0f}%), 1년 뒤 중간 {g['중앙52']:+.1f}%(이익 확률 {g['승률52']:.0f}%)였고, "
+                 f"산 뒤 보통 {g['추가하락중앙']:.1f}%, 나쁠 때 {g['추가하락하위25']:.1f}% 더 빠졌습니다."
+                 + (' 공포 때 사서 1년 들고 가기에는 맞지 않았던 종목이라 판정을 한 단계 내립니다.' if r.get('공포반영') == '내림' else
+                    ' 공포 때 사서 1년 들고 가면 좋았던 종목이라 판정을 한 단계 올립니다.' if r.get('공포반영') == '올림' else
+                    '' if g.get('충분') else ' 다만 표본이 적어 판정에는 쓰지 않습니다.'))
+    t = '**시장은.** ' + r['공포탐욕'].get('말', '') + (' ' + r['공포탐욕']['VIX말'] if r['공포탐욕'].get('VIX말') else '')
     if mk:
         t += f" {BMN.get(r['시장지수'], r['시장지수'])}는 고점 대비 {mk.get('지금낙폭')}%이고, 이번 하락이 바닥일 확률은 {mk.get('확률')}%입니다(VIX {st.get('VIX')})."
     sig = r['시장신호'].split()
     t += (' 시장 신호(' + '·'.join(sig) + ')가 켜져 있어 시장 쪽은 살 때가 가까운 것으로 판정합니다.') if sig else ' 시장 신호(공포탐욕 극단 공포, 바닥 확률)가 아직 켜지지 않았습니다.'
     T.append(t)
-    T.append(f"**그래서.** {VOICE.get(r['판정'], r['판정'])}")
+    T.append(f"**그래서.** {VOICE.get(r['판정'], r['판정'])}" + (' 공포탐욕이 이만큼 낮았던 날 이 종목의 1년 성적이 나빴기 때문에 한 단계 낮춘 판정입니다.' if r.get('공포반영') == '내림' else
+                                                              ' 공포탐욕이 이만큼 낮았던 날 이 종목의 1년 성적이 좋았기 때문에 한 단계 올린 판정입니다.' if r.get('공포반영') == '올림' else ''))
     return T
 
 
@@ -269,9 +256,21 @@ def diagnose(tk, P, MKT, C, FGR):
             analog(H, near, f'52주 고점 대비 {now.dd52 * 100:.0f}% ±{C["낙폭_폭"]}%p', (C['최소사건'], C['최소날수'])),
             analog(H, near & same200, f'+ 200일선 {"아래" if now.x200 < 0 else "위"}', (C['최소사건'], C['최소날수'])),
             analog(H, near & same200 & samemom, f'+ 12-1개월 모멘텀 {"마이너스" if now.mom < 0 else "플러스"}', (C['최소사건'], C['최소날수']))]
+    # 11/21 의장 "공포탐욕 11일 때를 기준으로도 계산": 지금 공포 구간이면 '공포탐욕이 지금만큼 낮았던 날'(2011~) 따로 한 줄
+    fgv, FH = FGR.get('종합'), FGR.get('이력')
+    fgrow = None
+    if fgv is not None and FH is not None and len(FH) and fgv <= C['공포탐욕']['공포']:
+        lim = round(fgv)
+        days = FH.index[FH <= lim]
+        Hf = D.loc[:s.index[-1] - pd.Timedelta(days=366)]
+        m_ = pd.Series(Hf.index.isin(days), index=Hf.index)
+        fgrow = analog(Hf, m_, f'공포탐욕 {lim} 이하였던 날(2011~)', (C['최소사건'], C['최소날수']))
+        rows.append(fgrow)
     # 가장 좁으면서 사건이 충분한 조건을 판정에 쓴다
-    use = next((r for r in reversed(rows[1:]) if r.get('충분')), None)
+    use = next((r for r in reversed(rows[1:4]) if r.get('충분')), None)
     thin = use is None
+    if thin and fgrow and fgrow.get('충분'):   # 종목 자기 과거가 얇으면 '공포탐욕이 지금만큼 낮았던 날'로 판정
+        use, thin = fgrow, False
     if thin:   # 비슷했던 때가 모자라면 판정을 보류하고 가장 넓은 조건을 보여 준다
         use = rows[1] if rows[1].get('날수') and pd.notna(rows[1].get('승률52')) else rows[0]
     # 판정
@@ -295,6 +294,15 @@ def diagnose(tk, P, MKT, C, FGR):
         verdict = '아직 더 떨어질 수 있다 — 나눠서 천천히'
     else:
         verdict = '아직 더 떨어질 수 있다 — 기다린다'
+    # 공포탐욕 줄이 충분하면 판정에 반영: 1년 뒤가 나쁨 문턱이면 한 단계 내림, 좋음이면 '기다린다'를 '나눠서 천천히'로 올림
+    LAD = ['사지 않는다', '아직 더 떨어질 수 있다 — 기다린다', '아직 더 떨어질 수 있다 — 나눠서 천천히', '지금 사도 좋다(나눠서)']
+    fgnote = ''
+    if fgrow and fgrow.get('충분') and verdict in LAD and use is not fgrow:
+        i = LAD.index(verdict)
+        if fgrow['승률52'] < C['나쁨_52주승률'] or fgrow['중앙52'] < C['나쁨_52주중앙']:
+            verdict = LAD[max(0, i - 1)]; fgnote = '내림'
+        elif fgrow['승률52'] >= C['좋음_52주승률'] and fgrow['중앙52'] >= C['좋음_52주중앙'] and verdict == LAD[1]:
+            verdict = LAD[2]; fgnote = '올림'
     why = []
     why.append(f"과거 비슷했던 때({use['조건']}, {use['사건수']}번·{use['날수']}일): 52주 뒤 중앙 {use['중앙52']:+.1f}%·승률 {use['승률52']:.0f}%, "
                f"26주 뒤 중앙 {use['중앙26']:+.1f}%·승률 {use['승률26']:.0f}%")
@@ -309,7 +317,7 @@ def diagnose(tk, P, MKT, C, FGR):
           'TTM PER': round(now.pe, 1) if pd.notna(now.pe) else None, 'PER 백분위(2015~)': round(pep) if pd.notna(pep) else None}
     st['VIX'] = round(now.vix, 1)
     r = dict(종목=tk, 이름=NAMES.get(tk) or info.get('shortName') or tk, 기준지수=bm, 판정=verdict, 근거=why, 상태=st, 비슷한때=rows,
-             사용=use, 이동=move(s, b), 실적=fundamentals(tk), 시장=mk if mk.get('하락중') else {}, 시장지수=mbm, 공포탐욕=FGR,
+             사용=use, 공포줄=fgrow, 공포반영=fgnote, 이동=move(s, b), 실적=fundamentals(tk), 시장=mk if mk.get('하락중') else {}, 시장지수=mbm, 공포탐욕=FGR,
              시장신호=('공포탐욕' if FGR.get('가까움') else '') + (' 바닥확률' if mk.get('하락중') and prob_ok else ''), C=C)
     r['서사'] = story(r)
     return r
@@ -332,7 +340,7 @@ def render(res, day):
         for a in r['비슷한때']:
             if not a.get('날수'):
                 L.append(f"| {a['조건']} | 0 | | | | | | |"); continue
-            L.append(f"| {a['조건']} | {a['사건수']} | {a['중앙26']:+.1f}% | {a['승률26']:.0f}% | {a['중앙52']:+.1f}% | {a['승률52']:.0f}% | {a['추가하락중앙']:.1f}% | {a['추가하락하위25']:.1f}% |")
+            L.append(f"| {a['조건']} | {a['사건수'] if a['조건'] != '모든 날(기준)' else '-'} | {a['중앙26']:+.1f}% | {a['승률26']:.0f}% | {a['중앙52']:+.1f}% | {a['승률52']:.0f}% | {a['추가하락중앙']:.1f}% | {a['추가하락하위25']:.1f}% |")
         L += ['', '</details>', '']
     return '\n'.join(L)
 
@@ -347,9 +355,11 @@ def main():
     import yfinance as yf
     C = cfg()
     bms = ['^NDX', '^GSPC', 'SOXX', '^VIX']
-    P = yf.download(a.tickers + bms, start='2013-01-01', auto_adjust=True, progress=False)['Close'].ffill()
+    P = yf.download(a.tickers + bms, start='2010-06-01', auto_adjust=True, progress=False)['Close'].ffill()
     MKT = market(bms)
-    FGR = fg_read(fear_greed(a.fg_csv), C['공포탐욕']) if C['공포탐욕'] else dict(가까움=False, 말='')
+    import fear_greed as FGM
+    FGR = FGM.say(fear_greed(a.fg_csv), C['공포탐욕'])
+    FGR['이력'] = FGM.history()
     res = [diagnose(t, P, MKT, C, FGR) for t in a.tickers]
     day = dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime('%Y%m%d')
     os.makedirs(a.out, exist_ok=True)
