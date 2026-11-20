@@ -40,7 +40,7 @@ def get(path):
 
 
 MIME = {'.csv': 'text/csv', '.txt': 'text/plain', '.pdf': 'application/pdf', '.html': 'text/html',
-        '.json': 'application/json', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
+        '.json': 'application/json', '.md': 'text/markdown', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
 
 
 def put(path, data):

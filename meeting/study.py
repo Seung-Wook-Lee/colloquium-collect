@@ -63,6 +63,8 @@ def write_csv(rel, df):
     d = _drive()
     if d:
         d.put(f'{DRIVE}/{rel}', b)
+    else:   # 11/20: 드라이브 창구 없이 만든 후보는 스트림릿 승인 화면에 안 보인다
+        print(f'[주의] 드라이브 창구 없음 → {rel} 은 로컬에만 저장(승인 화면은 드라이브를 읽음)')
 
 
 # ------------------------------------------------------------------ ① 모으기
@@ -84,6 +86,11 @@ def seen_links():
     """이미 후보에 오른 링크(승인·거절 모두) — 같은 자료를 두 번 묻지 않는다."""
     acc = read_csv('승인누적.csv')
     s = set(acc.get('링크', []))
+    d = _drive()
+    if d:
+        for f in d.ls(f'{DRIVE}/후보'):
+            if f['name'].endswith('_공부후보.csv'):
+                s |= set(read_csv(f"후보/{f['name']}").get('링크', []))
     if os.path.isdir(os.path.join(LOCAL, '후보')):
         for f in os.listdir(os.path.join(LOCAL, '후보')):
             if f.endswith('_공부후보.csv'):
@@ -171,6 +178,9 @@ def shelf(acc=None):
             open(os.path.join(LOCAL, rel), 'w', encoding='utf-8').write(card(r))
         except OSError:
             pass
+        d = _drive()
+        if d:   # 서재 카드도 드라이브에(스트림릿 승인 → 다음 회의 준비 때 카드가 쌓임)
+            d.put(f'{DRIVE}/{rel}', card(r).encode('utf-8'))
     write_csv('서재/색인.csv', ok.reindex(columns=['후보날짜', '번호', '위원', '분야', '종류', '제목(한글)', '원제목', '출처', '날짜', '링크', '쓰일칸', '의장이유']))
     print(f'서재 카드 {len(ok)}장')
 

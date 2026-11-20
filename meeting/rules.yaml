@@ -5,8 +5,7 @@
 회의순서:   # 콜로키움_룰.txt 3장 순서 + 지침의 위원(닉스 팀·미스 밸류·섹터 데스크·국장)
   - 미스터 마켓
   - 미스 시타델
-  - 리오
-  - 포보스
+  - 미스 리스크   # 11/20 리오·포보스 합침
   - 뚜지
   - 미스 차트
   - 클로토
@@ -75,10 +74,9 @@
       코스피이격: true
   코스피이격_주의: 125       # 코스피 50일 이격(의장 기준)
   코스피이격_과열: 130
-리오:
+미스 리스크:   # 11/20 의장: 리오(여건)·포보스(공포탐욕)를 합친 위원
   # 투입 여건: 엔진 시장 블록(out_시장블록.csv)의 '기회' 통과 공식 수가 '부담' 통과 공식 수보다 많고, 두 시장 모두 방어 국면이 아니면 '됨'
   여건_규칙: "기회 > 부담 and not 방어"
-포보스:
   구간: [[0, 24, Extreme Fear], [25, 44, Fear], [45, 55, Neutral], [56, 75, Greed], [76, 100, Extreme Greed]]
 미스 시타델:
   상위: 3
@@ -133,8 +131,7 @@ RSS:   # 승인 매체(콜로키움_룰.txt 4장)만. 실패한 주소는 건너
     - [아트로포스, "매도|팔아|팔까|과열|차익|익절"]
     - [클로토, "바닥|저점|물타|진입 시점"]
     - [미스 시타델, "수급|외국인|기관|개인|순매수|순매도|CTA|ETF 자금|포지션"]
-    - [포보스, "공포|탐욕|VIX|심리|Fear|Greed"]
-    - [리오, "리스크|금리|국채|CPI|PCE|인플레|하이일드|스프레드|현금|투입|이격"]
+    - [미스 리스크, "공포|탐욕|VIX|심리|Fear|Greed|리스크|금리|국채|CPI|PCE|인플레|하이일드|스프레드|현금|투입|이격"]
     - [미스 밸류, "PER|PBR|밸류|싼가|비싼|저평가|고평가"]
     - [미스 차트, "차트|RSI|MACD|이평|이동평균|지지|저항|추세선"]
     - [뚜지, "추천|퀀트|블록|엔진|포트폴리오|7종목"]
@@ -180,8 +177,7 @@ RSS:   # 승인 매체(콜로키움_룰.txt 4장)만. 실패한 주소는 건너
   지난일: 14                 # 이보다 오래된 기사는 후보에서 뺀다(논문은 예외)
   논문: "http://export.arxiv.org/api/query?search_query={q}&sortBy=submittedDate&max_results=20"
   위원:
-    리오:       {분야: 신용·경기·지수 밸류, 낱말: "credit spread|high yield|junk bond|excess bond premium|recession|하이일드|회사채|신용 스프레드", 논문: "all:%22credit spread%22 AND all:recession", 쓰일칸: 3 리스크·결론 신용 점검}
-    포보스:     {분야: 공포 극단·투매, 낱말: "VIX|put/call|capitulation|panic|fear gauge|공포지수|투매", 논문: "all:capitulation AND all:market", 쓰일칸: 4 공포와 탐욕}
+    미스리스크: {분야: 신용·공포 극단·투매, 낱말: "credit spread|high yield|junk bond|excess bond premium|recession|하이일드|회사채|신용 스프레드|VIX|put/call|capitulation|panic|fear gauge|공포지수|투매", 논문: "all:%22credit spread%22 AND all:recession", 쓰일칸: 3 리스크·결론 신용 점검}
     미스시타델: {분야: 시스템 자금·수급, 낱말: "CTA|systematic|vol-control|volatility-target|trend-follow|fund flows|외국인 순매수", 논문: "all:%22volatility targeting%22", 쓰일칸: 2 수급}
     엘피스:     {분야: 바닥 확인 신호, 낱말: "breadth thrust|bottoming|rebound|oversold|bear market bottom|바닥", 논문: "all:%22market trough%22", 쓰일칸: 6 긍정 요인}
     뚜지:       {분야: 블록 공식 근거(요인 연구), 낱말: "quality factor|momentum crash|value factor|factor investing", 논문: "all:%22momentum crash%22 OR all:%22quality minus junk%22", 쓰일칸: 엔진 블록 근거}
