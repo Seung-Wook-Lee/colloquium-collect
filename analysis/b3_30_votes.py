@@ -122,8 +122,11 @@ def history(data, uni, out):
     return A, B
 
 
-def today(U, years=4):
-    """오늘 종목별 바닥 신호 집계. U = 유니버스 DataFrame. 가격은 블록 1 1-1·1-6 코드 그대로(최근 years년)."""
+def today(U, years=10):
+    """오늘 종목별 바닥 신호 집계. U = 유니버스 DataFrame. 가격은 블록 1 1-1·1-6 코드 그대로(최근 years년).
+    11/20 의장 "더 디테일" → 로지스틱 확률(Cox 1958, b3_30_score 비교에서 뒤 3년 가장 좋음)도 함께.
+    무게는 이번 달 1일 전까지 자료로 맞춘다(한 달에 한 번 바뀜)."""
+    from . import b3_30_score as SC
     C3 = cfg()
     if not C3:
         return None
@@ -141,6 +144,7 @@ def today(U, years=4):
     raw = rd('가격10년_종가.csv.gz')
     cal = {'미국': raw['^GSPC'].notna(), '한국': raw['^KS11'].notna()}
     name = U.set_index('yfinance 티커')['정식 종목명'].to_dict()
+    T = C3.get('시험') or {}
     rows = []
     for nm in ('미국', '한국'):
         techs = on_list(C3, nm)
@@ -148,15 +152,33 @@ def today(U, years=4):
             continue
         G = groups(techs)
         tick = [t for t in U.loc[U['시장'] == nm, 'yfinance 티커'].dropna() if t in C.columns]
-        for t, (c, sig) in ticker_signals(C, O, H, L, V, tick, cal[nm]).items():
+        SIG = ticker_signals(C, O, H, L, V, tick, cal[nm])
+        lr = None
+        if T:
+            F = SC.frame(SIG, techs, win, T)
+            m0 = pd.Timestamp.today().normalize().replace(day=1)
+            tr = F[(F.index < m0) & F['z'].notna()]
+            if len(tr) and tr['z'].nunique() == 2:
+                from sklearn.linear_model import LogisticRegression
+                lr = LogisticRegression(C=1.0, max_iter=2000).fit(tr[techs].values, tr['z'].values.astype(int))
+        for t, (c, sig) in SIG.items():
             n, D = votes(sig, G, win)
-            fired = [LIB.META.at[k, '기법'] for k in techs if sig[k].iloc[-win:].any()]
-            rows.append({'시장': nm, '종목': name.get(t, t), 'ticker': t, '기준일': str(c.index[-1].date()),
-                         '바닥 신호(표)': int(n.iloc[-1]), '갈래 수': len(G),
-                         '켜진 갈래': ', '.join(g for g in D.columns if D[g].iloc[-1]),
-                         '켜진 기법': ', '.join(fired)})
+            on = [k for k in techs if sig[k].iloc[-win:].any()]
+            row = {'시장': nm, '종목': name.get(t, t), 'ticker': t, '기준일': str(c.index[-1].date()),
+                   '바닥 신호(표)': int(n.iloc[-1]), '갈래 수': len(G),
+                   '켜진 갈래': ', '.join(g for g in D.columns if D[g].iloc[-1]),
+                   '켜진 기법': ', '.join(LIB.META.at[k, '기법'] for k in on)}
+            if lr is not None:
+                x = np.array([[int(k in on) for k in techs]])
+                row['바닥즈음 확률(%)'] = round(float(lr.predict_proba(x)[0, 1]) * 100, 1)
+                co = dict(zip(techs, lr.coef_[0]))
+                row['무게 큰 켜진 기법'] = ', '.join(LIB.META.at[k, '기법'] for k in sorted(on, key=lambda k: -co[k])[:3] if co[k] > 0)
+            rows.append(row)
     out = pd.DataFrame(rows)
-    return out.sort_values(['시장', '바닥 신호(표)'], ascending=[True, False]) if len(out) else out
+    if not len(out):
+        return out
+    key = '바닥즈음 확률(%)' if '바닥즈음 확률(%)' in out else '바닥 신호(표)'
+    return out.sort_values(['시장', key], ascending=[True, False])
 
 
 def main():
