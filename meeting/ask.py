@@ -120,7 +120,7 @@ def stock_answer(names, S, X, cols):
                 continue
             i += 1
             out.append(f'{i}. {c}: {v}')
-        out.append('(근거: 오늘 판정표 — 퀀트센터 엔진 blocks.yaml 결과 그대로)')
+        out.append('(근거: 오늘 판정표 블록 계산 결과 그대로)')
     if len(names) > 1:
         T = S.loc[names, [c for c in ('추천', '블록예비율', '싼가', '점수', '갈래', '매도신호') if c in S.columns]]
         T = T.sort_values([c for c in ('블록예비율', '싼가', '점수') if c in T.columns], ascending=False)
