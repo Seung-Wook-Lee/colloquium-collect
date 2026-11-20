@@ -57,16 +57,23 @@ def sections(md):
 
 
 ITEM = re.compile(r'^\*\*(\d+)\.\s*(.+?)\*\*\s*$')
-STOCK = re.compile(r'([^,()]+?)\(52주 고점 대비 (-?[\d.]+)%, 베타 ([\d.]+), 싼가 ([\d.]+)\)')
+STOCK = re.compile(r'([^,()/]+?)\(52주 고점 대비 (-?[\d.]+)%,?\s*([^)]*)\)')
 STAT = re.compile(r'([A-Za-z가-힣][A-Za-z가-힣0-9()/ ]*?) ([+-][\d.]+)%\(승률 (\d+)%\)')
 GROUP = re.compile(r'평균 ([+-][\d.]+)%, 승률 ([\d.]+)%\(전체 주 ([+-][\d.]+)%, ([\d.]+)%\)')
 RED, BLUE = '#c8372d', '#2b6cb0'
 
 
+CHEAP = re.compile(r'(,\s*)?\+?\s*싼가\s*[\d.]+( 이상)?|(,\s*)?싼가(?!\s*[\d.])[^,·)]*')
+
+
+def clean(t):
+    return CHEAP.sub('', t)
+
+
 def blocks(body):
     """빈 줄로 나눈 덩어리: ('item', 번호, 제목, 내용, 근거) / ('table', md) / ('text', md)"""
     out = []
-    for b in re.split(r'\n\s*\n', body.strip()):
+    for b in re.split(r'\n\s*\n', clean(body).strip()):
         lines = [l.rstrip() for l in b.split('\n') if l.strip()]
         if not lines:
             continue
@@ -86,11 +93,9 @@ def blocks(body):
 
 
 def stock_chart(rows):
-    df = pd.DataFrame(rows, columns=['종목', '고점 대비(%)', '베타', '싼가']).astype({'고점 대비(%)': float, '베타': float, '싼가': float})
-    st.dataframe(df, hide_index=True, use_container_width=True, column_config={
-        '고점 대비(%)': st.column_config.ProgressColumn(format='%.1f%%', min_value=-100, max_value=0),
-        '싼가': st.column_config.ProgressColumn(format='%.2f', min_value=0, max_value=1),
-        '베타': st.column_config.NumberColumn(format='%.2f')})
+    df = pd.DataFrame(rows, columns=['종목', '52주 고점 대비(%)', '그 밖의 숫자'])
+    df['종목'] = df['종목'].str.strip()
+    st.dataframe(df, hide_index=True, use_container_width=True)
 
 
 def stat_chart(why):
@@ -247,6 +252,47 @@ def render(body):
                 st.markdown(f'<div class="why">{re.sub(r"[(]?[^ (]*[.]csv[^)]*[)]?|07시 ", "", w)}</div>', unsafe_allow_html=True)
 
 
+def read_csv(day, fname):
+    import io
+    rel = f'{day}/{day}_{fname}'
+    if LOCAL:
+        p = Path(LOCAL) / rel
+        return pd.read_csv(p, encoding='utf-8-sig') if p.exists() else None
+    b = drive.get(f'{D_DATA}/{rel}')
+    return pd.read_csv(io.BytesIO(b), encoding='utf-8-sig') if b else None
+
+
+def bottom(day, name):
+    """바닥 근접도(quant_center/bottom.py 출력)를 그대로 표시. 보정확률 = 실제로 바닥 구간일 확률."""
+    pre = '미장전_' if name.startswith('미장전') else ''
+    rows = []
+    for f in ('바닥근접도_나스닥100.csv', '바닥근접도.csv'):
+        d = read_csv(day, pre + f)
+        if d is not None and len(d):
+            rows.append(d.iloc[-1])
+    if not rows:
+        return
+    T = pd.DataFrame(rows)
+    show = pd.DataFrame({
+        '지수': T['기준지수'].replace({'^NDX': '나스닥100', '^GSPC': 'S&P500'}),
+        '보정확률(%)': (pd.to_numeric(T['보정확률'], errors='coerce') * 100).round(1),
+        '원점수': pd.to_numeric(T['원점수'], errors='coerce').round(3),
+        '과거 백분위': T['과거백분위'],
+        '비슷한 주 수': T.get('비슷한점수_주수'),
+        '뒤 13주 평균(%)': T.get('비슷한점수_뒤13주_평균'),
+        '뒤 13주 승률(%)': T.get('비슷한점수_뒤13주_승률'),
+        '뒤 26주 평균(%)': T.get('비슷한점수_뒤26주_평균'),
+        '뒤 26주 승률(%)': T.get('비슷한점수_뒤26주_승률'),
+    })
+    with st.container(border=True):
+        st.subheader('바닥 근접도')
+        st.caption('보정확률 = 지금이 바닥 구간(앞뒤 13주 최저 3% 안)일 확률. 출처: quant_center/bottom.py 매일 출력')
+        st.dataframe(show, hide_index=True, use_container_width=True)
+        if '바닥쪽_블록' in T:
+            for _, r in T.iterrows():
+                st.caption(f"{r['기준지수']} · 바닥 쪽 블록: {r.get('바닥쪽_블록', '')} · 반대 쪽 블록: {r.get('반대쪽_블록', '')}")
+
+
 if not LOCAL and not drive.ready():
     st.error('드라이브 창구 비밀값(DRIVE_URL·DRIVE_TOKEN)이 없습니다.')
     st.stop()
@@ -262,7 +308,8 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
             continue
         head, secs = sections(md)
         if head:
-            st.markdown(head)
+            st.markdown(clean(head))
+        bottom(day, name)
         for title, body in secs:
             with st.container(border=True):
                 st.subheader(title)
