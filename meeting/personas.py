@@ -840,10 +840,10 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     a, g = rio(c); sections.append(('3 리스크', '리오', '리스크', a, g, ''))
     a, g, tbl = phobos(c)
     sections.append(('4 공포와 탐욕', '포보스', '공포와 탐욕', a, g, tbl))
-    a, g = ttuji(c); sections.append(('5 기술·퀀트', '뚜지', '퀀트센터 블록 결과·오늘의 추천 종목', a, g, ''))
-    a, g = miss_chart(c); sections.append(('5 기술·퀀트', '미스 차트', '추천 종목 기술 지표', a, g, ''))
+    a, g = ttuji(c); sections.append(('5 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·오늘의 추천 종목', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
+    a, g = miss_chart(c); sections.append(('5 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
-        a, g = nyx(c, who); sections.append(('5 기술·퀀트 — 닉스 팀', who, role, a, g, ''))
+        a, g = nyx(c, who); sections.append(('5 퀀트센터 — 닉스 팀', who, role, a, g, ''))
     dk, has = desks(c)
     a, g = miss_value(c, has); sections.append(('5-1 밸류에이션', '미스 밸류', '밸류에이션', a, g, ''))
     for desk in DESKS:
