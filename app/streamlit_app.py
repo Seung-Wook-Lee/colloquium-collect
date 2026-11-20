@@ -390,5 +390,6 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
             bottom(day, name)
         for title, body in secs:
             with st.container(border=True):
+                title = title.replace('수급·포지셔닝', 'Flows & Positioning')   # 11/20 의장: 수급·포지셔닝은 영어로
                 st.markdown(f'<div class="sec-t">{title}</div>', unsafe_allow_html=True)
                 render(body)
