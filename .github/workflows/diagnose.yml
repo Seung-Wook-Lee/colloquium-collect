@@ -9,7 +9,7 @@ on:
       tickers:
         description: '종목 티커(띄어쓰기로)'
         required: true
-        default: 'GOOGL MSFT MRVL JNJ JPM'
+        default: 'GOOGL MSFT JNJ JPM'
 
 jobs:
   diagnose:

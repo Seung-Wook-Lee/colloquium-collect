@@ -9,7 +9,7 @@
              26주·52주 뒤 수익률(평균·중앙·승률)과 그 사이 추가로 더 빠진 폭(중앙·하위 25%)
   4 판정   : 비공개 blocks.yaml '진단' 문턱으로 '지금 사도 좋다 / 아직 더 떨어질 수 있다 / 사지 않는다' 중 하나와 근거
   5 서사   : 위 숫자를 사람 말로 — 무슨 일이 있었나(시장 탓·회사 탓 나눔) → 회사 실적 → 값 → 과거엔 → 그래서(11/21 의장 "서사가 없냐")
-쓰기: python app/diagnose/run.py GOOGL MSFT MRVL JNJ JPM [--out 폴더] [--fg-csv YYYYMMDD_공포탐욕.csv]
+쓰기: python app/diagnose/run.py GOOGL MSFT JNJ JPM [--out 폴더] [--fg-csv YYYYMMDD_공포탐욕.csv]
       (--fg-csv 없으면 CNN에서 바로 받음)
 출력: 화면 + <out>/진단_YYYYMMDD.md·.csv
 """
@@ -26,7 +26,7 @@ APP = os.path.dirname(HERE)
 sys.path[:0] = [APP, os.path.join(APP, 'block33'), os.path.join(APP, 'market')]
 import qc_config as QCC  # noqa: E402
 
-NAMES = {'GOOGL': '알파벳(구글)', 'MSFT': '마이크로소프트', 'MRVL': '마벨 테크놀로지', 'JNJ': '존슨앤존슨', 'JPM': 'JP모건'}
+NAMES = {'GOOGL': '알파벳(구글)', 'MSFT': '마이크로소프트', 'JNJ': '존슨앤존슨', 'JPM': 'JP모건'}
 
 
 def fear_greed(csv=None):
