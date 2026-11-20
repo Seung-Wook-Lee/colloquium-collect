@@ -203,9 +203,10 @@ def table_chart(md):
             with col:
                 st.markdown(f'<div class="item-t">{g}</div>', unsafe_allow_html=True)
                 hbar(x.reindex(x['_v'].abs().sort_values(ascending=False).index), '_l', '_v', unit='')
-        if grp:
-            st.caption(numc[0])
-        st.dataframe(df, hide_index=True, use_container_width=True)
+                if grp:   # 11/20 의장: 왼쪽 = 순매수(유입) 그래프와 표, 오른쪽 = 순매도(유출) 그래프와 표
+                    st.dataframe(x[[c for c in df.columns if c != grp]], hide_index=True, use_container_width=True)
+        if not grp:
+            st.dataframe(df, hide_index=True, use_container_width=True)
     else:
         st.dataframe(df, hide_index=True, use_container_width=True)
 
