@@ -861,18 +861,23 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     EV = EV if EV is not None else _read(d, '사건상태')
     CAL = CAL if CAL is not None else _read(d, '변수달력')
     sections = []   # (번호 제목, 위원, 역할, 줄, 그래프, 덧붙일 글)
-    if c.R.get('결론'):   # 11/20 의장: 맨 앞에 '지금 살 때인가 · 오래 가져갈 것 무엇'
+    # 11/20 의장 "그냥 미스터 마켓이 얘기하면 안 됨?": 결론 칸을 따로 두지 않는다. 시장 판정(지금 살 때인가·신용·시장 관문)은 미스터 마켓,
+    # 종목 목록(오래 가져갈 것·때가 오면 살 것, 검정 통계 포함)·의장 기준가 도달은 뚜지(엔진 블록 센터) 칸.
+    mood, picks_ = [], []
+    if c.R.get('결론'):
         try:
-            a, g = conclusion(c); sections.append(('0 결론', '센터', '지금 살 때인가 · 무엇을 오래 가져갈 것인가', a, g, ''))
+            a, _ = conclusion(c)
+            for l in a:
+                (mood if (l.title.endswith(('지금 살 때인가', '시장 관문')) or l.title.startswith('회사채')) else picks_).append(l)
         except Exception as e:   # noqa: BLE001
-            sections.append(('0 결론', '센터', '지금 살 때인가', [L('결론', '계산 실패', str(e)[:120])], [], ''))
-    a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', a, g, tbl))
+            mood.append(L('지금 살 때인가', '계산 실패', str(e)[:120]))
+    a, g, tbl = mr_market(c); sections.append(('1 시장', '미스터 마켓', '간밤 미국 시장' if session == '국장전' else '한국 시장', mood + a, g, tbl))
     a, g, tbl = miss_citadel(c); sections.append(('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝', a, g, tbl))
     # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)는 겹치니 '미스 리스크' 한 위원으로 합친다
     a1, g1 = rio(c)
     a2, g2, tbl = phobos(c)
     sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, tbl))
-    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·오늘의 추천 종목', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
+    a, g = ttuji(c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과·오늘의 추천 종목', picks_ + a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
     a, g = miss_chart(c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
         a, g = nyx(c, who); sections.append(('4 퀀트센터 — 닉스 팀', who, role, a, g, ''))
@@ -946,6 +951,9 @@ def render_md(sections, today, picks, note=''):
         out += ['', f"**오늘의 한 종목(퀀트센터)**: [{c0.get('표시') or '추천'}] {c0['종목']}" + (f" — {c0['근거']}" if c0['근거'] else '')]
     for sec, who, role, lines, _, extra in sections:   # 11/20 의장 "한 판에 넣어야 보지": 칸마다 표 한 장
         out += ['', f'## {sec} | {who}', '']
+        if extra and who == '미스터 마켓':   # 시세 한 장 표 먼저, 아래 시장 분위기
+            out += [extra, '']
+            extra = ''
         if lines:
             out += ['| 항목 | 내용 | 근거 |', '|---|---|---|']
             out += [f'| {_cell(l.title)} | {_cell(l.fact)} | {_cell(clean_why(l.why))} |' for l in lines]
