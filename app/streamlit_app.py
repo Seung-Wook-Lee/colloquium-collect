@@ -8,6 +8,8 @@
 import os, re, sys, datetime as dt
 from pathlib import Path
 
+import altair as alt
+import pandas as pd
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parent.parent
