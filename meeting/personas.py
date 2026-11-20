@@ -650,6 +650,31 @@ def conclusion(c):
     return out, []
 
 
+# ---------------------------------------------------------------- 반대 의견 (11/20 의장)
+def objections(c):
+    """11/20 의장: 오늘의 한 종목에 문제(이익 추정치 하향 등)가 있으면 다른 위원이 반대한다. 규칙은 rules.yaml '반대'."""
+    R = c.R.get('반대') or {}
+    keys, out, seen = R.get('빠지는이유', []), [], {}
+    for who, pk in c.picks.items():
+        if pk.get('표시') not in ('추천', '관찰') or not ok(pk.get('번호')) or who == '센터':
+            continue
+        x = c.T[c.T['번호'] == pk['번호']]
+        if not len(x):
+            continue
+        r = x.iloc[0]
+        why = [k for k in keys if k in str(r.get('빠지는 이유') or '')]
+        if R.get('매도신호') and ok(r.get('매도신호')):
+            why.append(f"매도 신호: {r['매도신호']}")
+        if why:
+            seen.setdefault(pk['종목'], [[], why])[0].append(who)
+    for name, (whos, why) in seen.items():
+        out.append(L(f"{name} 반대 ({', '.join(whos)} 선정)", ' / '.join(why),
+                     f"규칙: 오늘의 한 종목에 '{', '.join(keys)}' 또는 매도 신호가 있으면 반대(판정표 칸)"))
+    if not out:
+        out.append(L('반대 의견', '없음', '오늘의 한 종목 중 반대 규칙에 걸린 종목 없음'))
+    return out, []
+
+
 # ---------------------------------------------------------------- 묶기
 def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     c = Ctx(d, S, M, m, f, R, RC, today)
@@ -677,6 +702,8 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
         sections.append(('5-2 섹터 데스크', desk, '섹터 데스크', dk[desk], [], ''))
     a, g = elpis(c); sections.append(('6 긍정 요인', '엘피스', '긍정 요인', a, g, ''))
     a, g = gukjang(c, EV, CAL); sections.append(('7 기타', '국장', '일정·승인 매체 기사·사건', a, g, ''))
+    if c.R.get('반대'):   # 11/20 의장: 회의니까 다른 위원이 반대한다
+        a, g = objections(c); sections.append(('8 반대 의견', c.R['반대'].get('위원', '리오'), '오늘의 한 종목 반대', a, g, ''))
     return c, sections
 
 
