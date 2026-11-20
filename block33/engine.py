@@ -196,7 +196,7 @@ def layers_l(d, f, B, P):
     if os.path.exists(cache):
         L = pd.read_csv(cache, encoding='utf-8-sig', dtype={'번호': str})
     else:
-        import universe_layers as UL
+        from data import universe_layers as UL
         U = pd.read_csv(f'{d}/유니버스.csv', encoding='utf-8-sig', dtype=str)
         try:
             L = UL.classify(U, cfg)

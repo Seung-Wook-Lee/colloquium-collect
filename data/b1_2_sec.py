@@ -5,7 +5,7 @@ from .common import universe, write
 
 
 def run(ctx, c):
-    import sec_fund
+    from data import sec_fund
     U = universe(ctx)
     p = os.path.join(ctx['tmp'], '_u.csv'); U.to_csv(p, index=False, encoding='utf-8-sig')
     D = sec_fund.run(ctx['tmp'], p, sp500=c.get('S&P500', True))

@@ -2,7 +2,7 @@
 
 표준: Sullivan·Timmermann·White(1999) 데이터 뒤지기 검사, Aronson(2006) 증거 기반 기술적 분석.
 - 바닥즈음(정답) = 종가가 앞뒤 13주(65거래일) 최저 종가의 허용폭(3%, 1%) 안 + 52주 최고 종가보다 5% 이상 아래
-  (quant_center/bottom.py 정답 규칙을 일봉에 그대로).
+  (옛 바닥 근접도 정답 규칙을 일봉에 그대로).
 - 맞힘 비율 = 신호 가운데 바닥즈음에서 나온 비율. 기준 비율 = 아무 날이나 바닥즈음일 비율. 배율 = 맞힘 ÷ 기준.
 - 잡은 비율 = 바닥즈음 구간(연속된 날) 가운데 신호가 한 번이라도 나온 비율.
 - 보조: 4·12·26·52주 뒤 수익, 같은 종목 아무 날 대비 초과.
@@ -29,7 +29,7 @@ HZ = {'4주': 20, '12주': 60, '26주': 126, '52주': 252}
 
 def private_cfg():
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'quant_center'))
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
         import qc_config as QCC
         y = yaml.safe_load(open(QCC.blocks_path(), encoding='utf-8')) or {}
         return y.get('3-30', {}) or {}

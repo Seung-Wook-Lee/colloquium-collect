@@ -65,7 +65,7 @@ def read(day, name):
 
 
 EN = [   # 11/20 의장: 사람·센터 이름은 영어로, 작게
-    ('엔진 블록 센터', 'Engine Block Center'), ('퀀트센터', 'Quant Center'), ('닉스 팀', 'Team Nyx'),
+    ('마켓 센터', 'Market Center'), ('엔진 블록 센터', 'Engine Block Center'), ('퀀트센터', 'Quant Center'), ('닉스 팀', 'Team Nyx'),
     ('미스터 마켓', 'Mr. Market'), ('미스 시타델', 'Miss Citadel'), ('미스 리스크', 'Miss Risk'), ('미스 차트', 'Miss Chart'),
     ('미스 밸류', 'Miss Value'), ('미스 세마이', 'Miss Semi'), ('미스터 빅스', 'Mr. Bix'), ('미스터 로보', 'Mr. Robo'),
     ('미스 파이낸스', 'Miss Finance'), ('마담헤비', 'Madame Heavy'), ('일라이 존슨', 'Eli Johnson'), ('엘피스', 'Elpis'),
@@ -453,19 +453,22 @@ def read_csv(day, fname):
 
 @st.cache_data(ttl=3 * 3600, show_spinner='바닥 확률 계산 중…')
 def bottom_prob():
-    """11/21 의장: 연구된 모형으로. Lunde & Timmermann(2004) 위험률 모형(quant_center/lt_bottom.py, 하락 구간은 R bbdetection 필터 그대로)"""
-    sys.path.insert(0, str(ROOT / 'quant_center'))
+    """11/21 의장: 연구된 모형으로. Lunde & Timmermann(2004) 위험률 모형(market/lt_bottom.py, 하락 구간은 R bbdetection 필터 그대로)"""
+    sys.path.insert(0, str(ROOT / 'market'))
     import lt_bottom as LB
     return LB.hazard_today()
 
 
 def bottom(day, name, title='바닥 근접도'):
     """이번 하락에서 지금이 바닥(최종 저점 3% 안)일 확률. 지수 종가·VIX·금리로 화면에서 바로 계산."""
-    try:
-        T = bottom_prob()
-    except Exception as e:   # noqa: BLE001
-        st.caption(f'바닥 확률 계산 실패: {e}')
-        return
+    pre = '미장전_' if name.startswith('미장전') else ''
+    T = read_csv(day, pre + '바닥확률.csv')   # 엔진(daily.py, 하위 블록 2-12)이 만든 파일을 먼저 읽는다
+    if T is None or not len(T) or '확률' not in T:
+        try:   # 그 날 파일이 아직 없으면 같은 코드로 바로 계산
+            T = bottom_prob()
+        except Exception as e:   # noqa: BLE001
+            st.caption(f'바닥 확률 계산 실패: {e}')
+            return
     NAME = {'^NDX': '나스닥100', '^GSPC': 'S&P500'}
 
     def pct(v, sign=False):
@@ -477,7 +480,7 @@ def bottom(day, name, title='바닥 근접도'):
         for col, (_, r) in zip(cols, T.iterrows()):
             nm = NAME.get(r.get('기준지수'), r.get('기준지수'))
             with col:
-                if not r.get('하락중'):
+                if str(r.get('하락중')) not in ('True', '1', '1.0'):
                     st.metric(f'{nm}', '하락 구간 아님'); continue
                 st.metric(f'{nm}이 지금 이번 하락의 바닥일 확률', pct(r.get('확률')))
                 st.markdown(f'<div class="sub">고점 대비 {pct(r.get("지금낙폭"))} · {int(r.get("주수"))}주째 · VIX {r.get("VIX"):.1f} · RSI {r.get("RSI"):.0f}</div>'
@@ -506,7 +509,7 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
             continue
         head, secs = sections(md)
         if name.startswith('미장전'):   # 11/20 의장: 원고 첫 줄 자료 메모·한 종목 머리말은 보이지 않음, 순서 1 바닥 근접도 · 2 미장전 시황
-            bottom(day, name, '1 바닥 근접도 | 엔진 블록 센터')
+            bottom(day, name, '1 바닥 근접도 | 마켓 센터')
             secs = order_premarket(secs)
         else:   # 11/21 의장: 머리말(팀Q 자료 메모·오늘의 한 종목)은 국장전도 보이지 않음
             bottom(day, name)

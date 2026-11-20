@@ -10,7 +10,7 @@
      층은 '재분류: 월'이면 지난달 마지막 거래일까지의 가격으로만 계산한다. 그래서 한 달 동안 층이 바뀌지 않고
      매월 첫 거래일에 한 번만 이동한다(지수 정기 변경과 같은 기준일 방식). 새로 들어온 종목도 같은 기준일로 나눈다.
 출력: 층 표(csv)와 층별 표(마크다운: 미국 | 한국 | 미국ETF | 한국ETF, 괄호에 연 변동성).
-실행: python quant_center/universe_layers.py <유니버스.csv> <출력폴더>
+실행: python data/universe_layers.py <유니버스.csv> <출력폴더>
 """
 import itertools
 import os
@@ -19,7 +19,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'block33'))   # qc_config(블록33 설정 읽기)
 from qc_config import load_blocks
 
 KINDS = ['미국 기업', '한국 기업', '미국ETF', '한국ETF']
