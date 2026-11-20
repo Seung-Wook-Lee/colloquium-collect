@@ -189,6 +189,18 @@ class Ctx:
             self.px = self.px[~self.px['정식 종목명'].map(banned)]
         self.news = _read(d, '뉴스')
         self.picks = {}
+        self.gate = {}
+        if R.get('결론') and R['결론'].get('시장관문', True):   # 11/20 의장 블록 정비 1번: 결론이 '사지 않는다'인 시장은 종목 추천 → 바닥 대기
+            try:
+                _, ST, _ = _buy_state(self)
+                for mk, v in ST.items():
+                    if not v['buy'] and v['act'] != '엔진 포트폴리오대로':
+                        mask = (self.T['시장'] == mk) & (self.T['추천'] == '추천')
+                        self.gate[mk] = (int(mask.sum()), v['act'])
+                        self.T.loc[mask, '추천'] = '바닥 대기'
+                        S.loc[(S['시장'] == mk) & (S['추천'] == '추천'), '추천'] = '바닥 대기'   # 판정표에도
+            except Exception as e:   # noqa: BLE001
+                self.gate['오류'] = (0, str(e)[:80])
         self.top, self.drops = top7(self.T, RC)
         bd = R.get('엘피스_200일선') or {}   # 11/20 의장: 현재가 ÷ 200일선이 하단~상단 = '안', 하단 아래 = '추세 무너짐', 상단 위 = '위'
         x = pd.to_numeric(self.T['px_ma200'], errors='coerce') if 'px_ma200' in self.T else pd.Series(np.nan, index=self.T.index)
@@ -660,10 +672,8 @@ def _betas(c, rows):
     return out
 
 
-def conclusion(c):
-    """11/20 의장: "지금 살 때인가, 살 거면 오래 가져갈 것을 무엇을 살 것인가". 장기 보유할 것을 싸게 산다.
-    ① 신용 위기 → 사지 않는다 ② 바닥 근처(나스닥 바닥 근접도·코스피 최고 대비) → 산다(나눠서) ③ 방어 국면·바닥 아님 → 아직 사지 않는다
-    ④ 평상 → 엔진 포트폴리오대로. 살 것 = 엔진 원칙 '떨어진 우량주'(추천·관찰) 중 싼가·베타 기준 통과, 순위점수 순."""
+def _buy_state(c):
+    """11/20 의장 '지금 살 때인가'(결론 칸과 시장 관문이 함께 씀). 돌려주는 값: (신용 줄 목록, 시장별 {act, why, buy, dfn, g}, 공용 값)"""
     R = c.R['결론']; out = []
     K = _read(c.d, '리스크')
 
@@ -694,9 +704,7 @@ def conclusion(c):
     kthr = -R['한국_산다_미국단계'] * kmul if (kmul is not None and R.get('한국_산다_미국단계')) else None
     kdesc = (f"미국 −{R['한국_산다_미국단계']:g}% correction × 코스피 배수 {kmul:.2f}(최근 {n(KC.iloc[0].get('배수_년'), 0)}년 주간 변동성 ÷ S&P500) = {kthr:.1f}%"
              if kthr is not None else '한국 문턱 자료 없음(조정단계_오늘_코스피.csv 단계배수)')
-    T = c.T
-    cand_all = T[(T.get('원칙', pd.Series(index=T.index, dtype=str)) == '떨어진 우량주') & T['추천'].isin(['추천', '관찰'])]
-    beta = _betas(c, pd.concat([cand_all, T[T['종목'].isin([r['종목'] for r in c.top])]]).drop_duplicates('번호'))
+    ST = {}
     for mk in ('미국', '한국'):
         g = c.regime(mk); dfn = bool(g and g[0] == '방어')
         if crisis:
@@ -713,10 +721,29 @@ def conclusion(c):
             act = '아직 사지 않는다(약세장, 바닥 신호 없음)'
         else:
             act, why = '엔진 포트폴리오대로', '평상 국면'
+        ST[mk] = dict(act=act, why=why, buy=act.startswith('산다'), dfn=dfn, g=g)
+    return out, ST, dict(cnear=cnear, nd=nd, WB=WB, crisis=crisis)
+
+
+def conclusion(c):
+    """11/20 의장: "지금 살 때인가, 살 거면 오래 가져갈 것을 무엇을 살 것인가". 장기 보유할 것을 싸게 산다.
+    ① 신용 위기 → 사지 않는다 ② 바닥 근처(나스닥 바닥 근접도·코스피 최고 대비) → 산다(나눠서) ③ 방어 국면·바닥 아님 → 아직 사지 않는다
+    ④ 평상 → 엔진 포트폴리오대로. 살 것 = 엔진 원칙 '떨어진 우량주'(추천·관찰) 중 싼가·베타 기준 통과, 순위점수 순."""
+    R = c.R['결론']
+    out, ST, V = _buy_state(c)
+    cnear, nd, WB = V['cnear'], V['nd'], V['WB']
+    T = c.T
+    cand_all = T[(T.get('원칙', pd.Series(index=T.index, dtype=str)) == '떨어진 우량주') & T['추천'].isin(['추천', '관찰', '바닥 대기'])]
+    beta = _betas(c, pd.concat([cand_all, T[T['종목'].isin([r['종목'] for r in c.top])]]).drop_duplicates('번호'))
+    for mk in ('미국', '한국'):
+        act, why, dfn, g = ST[mk]['act'], ST[mk]['why'], ST[mk]['dfn'], ST[mk]['g']
         buy = act.startswith('산다')
         if buy and cnear:
             act += ' · CCC 최고치 부근이라 1번째까지만'
         out.append(L(f'{mk}: 지금 살 때인가', act, f"{why} · 국면 {g[0] if g else '자료 없음'}"))
+        if mk in c.gate:   # 시장 관문
+            out.append(L(f'{mk}: 시장 관문', f"종목 추천 {c.gate[mk][0]}개 → 바닥 대기", "규칙: 결론이 '사지 않는다'인 시장은 종목 '추천'을 '바닥 대기'로(11/20 의장 블록 정비 1번)",
+                         crit='사지 않는다', sig='orange'))
         X = cand_all[cand_all['시장'] == mk].copy()
         X['베타'] = X['번호'].map(beta)
         X = X[(X['싼가'].fillna(0) >= R['싼가_최소']) & (X['베타'].fillna(0) >= R['베타_최소'])]
