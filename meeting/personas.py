@@ -267,7 +267,11 @@ def miss_citadel(c):
         if cta is not None:
             zone = '수급 바닥 구간' if cta <= R['CTA_바닥'] else ('수급 고점 구간' if cta >= R['CTA_고점'] else '중간 구간')
             out.append(L('CTA positioning', f"{cta:+.2f}σ(1주 전 {n(w.get('CTA σ(근사)'), 2)}σ) — {zone}", f"수급포지셔닝.csv 읽는 법: −4σ 아래 바닥, +4σ 뒤 1.5σ 꺾이면 고점"))
-        out.append(L('Vol-target exposure', f"{n(g.get('변동성타기팅 노출(배)'), 2)}배(1주 전 {n(w.get('변동성타기팅 노출(배)'), 2)}배)",
+        ve = num(g.get('변동성타기팅 노출(배)'))
+        vz = R.get('볼타깃_많이팜', 0.6)
+        vread = f" — {vz}배 아래: 이미 많이 팜(시장 블록 기회)" if ve is not None and ve < vz else ''
+        out.append(L('Vol-target exposure', f"{n(ve, 2)}배(1주 전 {n(w.get('변동성타기팅 노출(배)'), 2)}배){vread}",
+                     f"읽는 법(11/20 의장): 변동성 목표 펀드의 주식 보유 배수 = 목표변동성 10% ÷ 실현변동성(상한 1.5). 1배 = 목표만큼 보유, {vz}배 아래 = 변동성이 커져 이미 많이 팔아 더 팔 물량이 적음, 변동성이 잦아들면 다시 사는 쪽. "
                      f"VIX 1년 백분위 {n(g.get('VIX 1년 백분위(%)'), 0)}%, VXN 1년 백분위 {n(g.get('VXN 1년 백분위(%)'), 0)}%"))
     MM = _read(c.d, 'MMF')
     if len(MM):
