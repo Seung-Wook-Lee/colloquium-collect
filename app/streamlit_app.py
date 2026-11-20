@@ -148,19 +148,22 @@ NUM = re.compile(r'^[+-]?[\d,]+(?:\.\d+)?')
 
 
 def hbar(df, label, val, fmt='+,.1f', unit='', height=None):
-    """양수 파랑·음수 빨강 가로 막대 + 값 글자"""
+    """양수 파랑·음수 빨강 가로 막대 + 막대 끝 값 글자(글자 들어갈 여백을 둔다)"""
     df = df.copy()
     df['_t'] = df[val].map(lambda v: (f'{v:+,.2f}' if abs(v) < 100 else f'{v:+,.0f}') + unit)
-    base = alt.Chart(df).encode(y=alt.Y(f'{label}:N', sort=None, title=None, axis=alt.Axis(labelFontSize=14, labelLimit=260)))
-    bars = base.mark_bar(cornerRadiusEnd=3, height=18).encode(
-        x=alt.X(f'{val}:Q', title=None, axis=alt.Axis(labelFontSize=11)),
-        color=alt.condition(f'datum["{val}"] >= 0', alt.value(BLUE), alt.value(RED)))
-    df['_z'] = 0.0
-    base = alt.Chart(df).encode(y=alt.Y(f'{label}:N', sort=None, title=None, axis=alt.Axis(labelFontSize=14, labelLimit=260)))
-    txt = base.mark_text(align='left', dx=4, fontSize=13).encode(x=alt.X(f'{val}:Q'), text='_t:N')
-    neg = base.mark_text(align='left', dx=4, fontSize=13, color=RED).encode(x=alt.X('_z:Q'), text='_t:N')
-    layer = bars + txt.transform_filter(f'datum["{val}"] >= 0') + neg.transform_filter(f'datum["{val}"] < 0')
-    st.altair_chart(layer.properties(height=height or 32 * len(df) + 20), use_container_width=True)
+    lo, hi = min(0.0, df[val].min()), max(0.0, df[val].max())
+    pad = (hi - lo or 1) * 0.28
+    dom = [lo - (pad if lo < 0 else 0), hi + (pad if hi > 0 else 0)]
+    y = alt.Y(f'{label}:N', sort=None, title=None, axis=alt.Axis(labelFontSize=14, labelLimit=260, domain=False, ticks=False))
+    x = alt.X(f'{val}:Q', title=None, scale=alt.Scale(domain=dom, nice=False),
+              axis=alt.Axis(labelFontSize=11, labelColor='#999', grid=True, gridColor='#f0f0f0', domain=False, ticks=False, format='~s'))
+    base = alt.Chart(df).encode(y=y)
+    bars = base.mark_bar(cornerRadiusEnd=3, height=16).encode(
+        x=x, color=alt.condition(f'datum["{val}"] >= 0', alt.value(BLUE), alt.value(RED)))
+    pos = base.mark_text(align='left', dx=5, fontSize=13, color='#333').encode(x=alt.X(f'{val}:Q'), text='_t:N').transform_filter(f'datum["{val}"] >= 0')
+    neg = base.mark_text(align='right', dx=-5, fontSize=13, color=RED).encode(x=alt.X(f'{val}:Q'), text='_t:N').transform_filter(f'datum["{val}"] < 0')
+    st.altair_chart((bars + pos + neg).properties(height=height or 30 * len(df) + 24).configure_view(strokeWidth=0),
+                    use_container_width=True)
 
 
 def num(x):
@@ -187,16 +190,22 @@ def table_chart(md):
     numc = [c for c in df.columns if c not in lab and signed(c) and re.search(r'%|억|달러', c + ''.join(df[c].astype(str)))]
     if '종가' in df.columns:   # 11/20 의장: 지수 종가·전일 대비는 위 시세 그래프와 겹침 → 남는 칸만
         return
-    if lab and numc and len(df) >= 2:
+    if lab and numc and len(df) >= 2:   # 11/20 의장: 순매수·순매도(유입·유출) 그래프는 따로, 그래프 묶음과 표 묶음도 따로
         d = df.copy()
-        key = lab[1] if len(lab) > 1 and df[lab[0]].nunique() < len(df) else lab[0]
-        d['_l'] = (df[lab[0]] + ' · ' + df[key]) if key != lab[0] else df[key]
-        d['_v'] = df[numc[0]].map(num)
-        c1, c2 = st.columns([1, 1])
-        with c1:
+        grp = lab[0] if len(lab) > 1 and df[lab[0]].nunique() <= 3 else None
+        key = lab[1] if grp else lab[0]
+        d['_l'] = d[key]
+        d['_v'] = d[numc[0]].map(num)
+        d = d.dropna(subset=['_v'])
+        parts = [(g, d[d[grp] == g]) for g in d[grp].drop_duplicates()] if grp else [(numc[0], d)]
+        cols = st.columns(len(parts))
+        for col, (g, x) in zip(cols, parts):
+            with col:
+                st.markdown(f'<div class="item-t">{g}</div>', unsafe_allow_html=True)
+                hbar(x.reindex(x['_v'].abs().sort_values(ascending=False).index), '_l', '_v', unit='')
+        if grp:
             st.caption(numc[0])
-            hbar(d.dropna(subset=['_v']), '_l', '_v')
-        c2.dataframe(df, hide_index=True, use_container_width=True)
+        st.dataframe(df, hide_index=True, use_container_width=True)
     else:
         st.dataframe(df, hide_index=True, use_container_width=True)
 
