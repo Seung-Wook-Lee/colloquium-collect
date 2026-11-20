@@ -516,8 +516,10 @@ def gukjang(c, EV, CAL):
         T = T[~T['제목'].astype(str).str.contains('(?<![A-Za-z])' + BAN.pattern.replace('^', ''))]
         for _, x in T.iterrows():
             stock = f" · {x['종목']} 전일 {p(x['등락률(%)'], 2)}" if ok(x.get('종목')) and str(x['종목']) else ''
-            out.append(L(f"[{x['판정']}] {x.get('구분', '')} {x['시각(한국)']} {x['출처']}", str(x['제목']) + stock,
-                         f"FinBERT 긍정 {n(x['긍정'], 2)} · 부정 {n(x['부정'], 2)}(07시 주가뉴스.csv)"))
+            ko = str(x.get('제목(한글)', '') or '').strip()
+            ko = '' if ko.lower() == 'nan' else ko
+            out.append(L(f"[{x['판정']}] {x.get('구분', '')} {x['시각(한국)']} {x['출처']}", (ko or str(x['제목'])) + stock,
+                         (f"원제목: {x['제목']} · " if ko else '') + f"FinBERT 긍정 {n(x['긍정'], 2)} · 부정 {n(x['부정'], 2)}(07시 주가뉴스.csv)"))
     elif len(N):
         ok_src = R['승인매체']
         X = N[N['출처'].astype(str).map(lambda x: any(m in x for m in ok_src)) & ~N['제목'].astype(str).str.contains('(?<![A-Za-z])' + BAN.pattern.replace('^', ''))].head(R['기사수'])

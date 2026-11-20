@@ -136,7 +136,7 @@ def _rss(url, src, who='', params=None):
         if t < since:
             continue
         out.append({'시각(한국)': t.strftime('%m-%d %H:%M'), '제목': _text(it.findtext('title')),
-                    '요약': _text(it.findtext('description'))[:160], '링크': (it.findtext('link') or '').strip(),
+                    '요약': _text(it.findtext('description'))[:500], '링크': (it.findtext('link') or '').strip(),
                     '출처': src, '종목': who})
     return sorted(out, key=lambda x: x['시각(한국)'], reverse=True)
 

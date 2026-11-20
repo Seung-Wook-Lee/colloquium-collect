@@ -71,9 +71,15 @@ cand = cand.reset_index(drop=True)
 sel, why = [], []
 for i, r in cand.iterrows():
     with st.container(border=True):
-        st.markdown(f"**{r['제목']}**" + (f"  [원문]({r['링크']})" if str(r.get('링크', '')).startswith('http') else ''))
-        if pd.notna(r.get('요약')) and str(r.get('요약')).strip():
-            st.write(str(r['요약']))
+        ko_t = str(r.get('제목(한글)', '') or '').strip()
+        ko_t = '' if ko_t.lower() == 'nan' else ko_t
+        st.markdown(f"**{ko_t or r['제목']}**" + (f"  [원문]({r['링크']})" if str(r.get('링크', '')).startswith('http') else ''))
+        ko_s = str(r.get('요약(한글)', '') or '').strip()
+        ko_s = '' if ko_s.lower() == 'nan' else ko_s
+        if ko_s or (pd.notna(r.get('요약')) and str(r.get('요약')).strip()):
+            st.write(ko_s or str(r['요약']))
+        if ko_t:
+            st.caption(f"원제목: {r['제목']}")
         bits = [str(r.get('출처', '')), str(r.get('구분', ''))]
         if pd.notna(r.get('종목')) and str(r.get('종목')).strip():
             bits.append(f"{r['종목']} {r['등락률(%)']}%" if pd.notna(r.get('등락률(%)')) and str(r.get('등락률(%)')).strip() else str(r['종목']))
@@ -99,7 +105,7 @@ if st.button('저장', type='primary'):
     out['의장선택'] = edited['의장선택'].astype(int).values
     out['의장이유'] = edited['의장이유'].values
     out['날짜'] = day
-    keep = ['날짜', '구분', '출처', '종목', '등락률(%)', '긍정', '부정', '발생신호', '제목', '요약', '의장선택', '의장이유', '프로그램추천', '링크']
+    keep = ['날짜', '구분', '출처', '종목', '등락률(%)', '긍정', '부정', '발생신호', '제목(한글)', '제목', '요약(한글)', '요약', '의장선택', '의장이유', '프로그램추천', '링크']
     out = out.reindex(columns=keep)
     acc = out if acc is None else pd.concat([acc[acc['날짜'].astype(str) != day].reindex(columns=keep), out])
     drive.put(news_pick.LABEL_PATH, acc.sort_values('날짜').to_csv(index=False).encode('utf-8-sig'))
