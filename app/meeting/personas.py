@@ -258,53 +258,67 @@ class Ctx:
         return L('오늘의 한 종목', f"[{mark}] {r['종목']} — {why}", f"규칙: {rule.get('설명', '')} (맞는 종목 {cnt}개 중 1위)")
 
 
+YF = {'S&P500': '^GSPC', '나스닥': '^IXIC', '다우': '^DJI', '필라델피아 반도체(SOX)': '^SOX', '코스피': '^KS11', '코스닥': '^KQ11'}
+
+
+def _milestones(name, x, gap):
+    """기사에 쓰는 사실만(통계 등급 없음): ① 올해 상승분 반납/회복(연초 대비 부호가 바뀐 날) ② 연초 대비 %
+    ③ 'D 이후 가장 큰 하루 하락(상승)' ④ 'D 이후 가장 낮은(높은) 종가'. ③④는 D가 gap 거래일보다 앞일 때만."""
+    x = x.dropna()
+    if len(x) < 30:
+        return [], []
+    nm = _re.sub(r'\(.*\)', '', name).strip()
+    last, prev = x.iloc[-1], x.iloc[-2]
+    d = (last / prev - 1) * 100
+    y0 = x[x.index.year < x.index[-1].year]
+    head, why = [], []
+    if len(y0):
+        base = y0.iloc[-1]; ytd = (last / base - 1) * 100; ytd0 = (prev / base - 1) * 100
+        if ytd < 0 <= ytd0:
+            head.append(f"{nm} 올해 오른 것 모두 반납(연초 대비 {ytd:+.1f}%)")
+        elif ytd >= 0 > ytd0:
+            head.append(f"{nm} 올해 하락분 모두 회복(연초 대비 {ytd:+.1f}%)")
+        why.append(f"{nm} 연초 대비 {ytd:+.1f}%(전날 {ytd0:+.1f}%)")
+    r = x.pct_change() * 100
+    past = r.iloc[:-1]
+    big = past[past <= d] if d < 0 else past[past >= d]
+    if len(big):
+        when = big.index[-1]
+        if (r.index[-1] - when).days >= gap * 7 / 5:
+            head.append(f"{nm} {d:+.1f}%, {when.year}년 {when.month}월 {when.day}일 이후 가장 큰 하루 {'하락' if d < 0 else '상승'}")
+    lvl = x.iloc[:-1]
+    lv = lvl[lvl <= last] if d < 0 else lvl[lvl >= last]
+    if len(lv):
+        when = lv.index[-1]
+        if (x.index[-1] - when).days >= gap * 7 / 5:
+            head.append(f"{nm} {when.year}년 {when.month}월 이후 가장 {'낮은' if d < 0 else '높은'} 종가")
+    return head, why
+
+
 def _one_line(c, cfg, rows, moves):
-    """11/21 의장 "요것만 딱 보면 알 수 있게, 나열은 인간에게 의미가 없어": 지수 나열 대신
-    ① 얼마나 큰 하루인가(기준 지수 하루 변화 ÷ 최근 1년 하루 표준편차, 최근 2년 중 몇 번째) ② 무엇이 끌어내렸나(올렸나) ③ 덜 움직인 쪽.
-    문턱은 비공개 blocks.yaml 시황_한줄."""
+    """11/21 의장 "나스닥이 올해 오른 것을 모두 반납했다 — 이게 나와야지. 평범·큰편 같은 자의적 통계가 무슨 의미가 있냐":
+    지수 나열 대신 기사에 쓰는 사실(올해 상승분 반납·○월 이후 최저·○년 이후 가장 큰 하루 하락)만. 숫자는 표.
+    'D 이후'는 D가 시황_한줄.최소_거래일보다 앞일 때만(비공개 blocks.yaml)."""
     try:
         import qc_config as QCC
         T = QCC.load_blocks(switches=False).get('시황_한줄') or {}
     except Exception:   # noqa: BLE001
         T = {}
-    T = {'평범': 1.0, '큰편': 2.0, '드묾': 3.0, '주도_배수': 1.5, '덜_배수': 0.6, **T}
-    base = cfg['지수'][0]
-    b = moves.get(base)
-    if b is None:
-        return L(cfg['지수제목'], ', '.join(f"{a} {x}({y})" for a, x, y, _ in rows), '07시 매크로.csv')
-    down = b < 0
-    word = '하락' if down else '상승'
-    size, why = '', []
-    tk = {'미국': '^GSPC', '한국': '^KS11'}.get('미국' if base == 'S&P500' else '한국')
+    gap = T.get('최소_거래일', 20)
+    head, why = [], []
     try:
-        I = pd.read_csv(f'{c.d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)[tk].dropna()
-        r = I.pct_change().dropna() * 100
-        sd = r.tail(252).std()
-        z = abs(b) / sd
-        jump = '급락' if down else '급등'
-        size = f'평범한 {word}' if z < T['평범'] else f'큰 편의 {word}' if z < T['큰편'] else f'드문 {jump}' if z < T['드묾'] else f'충격적인 {jump}'
-        rk = int(((r < 0) & (r <= b)).sum()) if down else int(((r > 0) & (r >= b)).sum())
-        why.append(f"{base} {b:+.2f}%는 평소 하루 움직임(최근 1년 표준편차 {sd:.2f}%)의 {z:.1f}배, 최근 2년 중 {rk}번째로 큰 {word}")
-    except Exception:   # noqa: BLE001
-        size = word
-    lead, calm = [], []
-    for k, v in moves.items():
-        if k == base or v is None:
-            continue
-        if (v < 0) == down and abs(v) >= abs(b) * T['주도_배수']:
-            lead.append((abs(v), k, v))
-        elif abs(v) <= abs(b) * T['덜_배수'] or (v < 0) != down:
-            calm.append((k, v))
-    parts = []
-    if lead:
-        _, k, v = max(lead)
-        parts.append(f"{_re.sub(r'\(.*\)', '', k).strip()} {v:+.1f}%가 끌어" + ('내렸습니다' if down else '올렸습니다'))
-        why.append(f"{k} {v:+.2f}% = {base}의 {abs(v) / abs(b):.1f}배")
-    if calm:
-        k, v = calm[0]
-        parts.append(f"{_re.sub(r'\(.*\)', '', k).strip()}는 {v:+.1f}%로 덜 " + ('빠졌습니다' if down else '올랐습니다'))
-    head = f"{size}" + (' — ' + ', '.join(parts) if parts else '')
-    return L(cfg['지수제목'], head, ' · '.join(why) + ' · 지수별 숫자는 표')
+        import yfinance as yf
+        tk = [YF[k] for k in cfg['지수'] if k in YF]
+        P = yf.download(tk, start='1990-01-01', auto_adjust=True, progress=False)['Close']
+        for k in cfg['지수']:
+            if YF.get(k) in P:
+                h, w = _milestones(k, P[YF[k]], gap)
+                head += h; why += w
+    except Exception as e:   # noqa: BLE001
+        why.append(f'긴 시세 못 받음: {type(e).__name__}')
+    if not head:
+        head = ['눈에 띄는 기록 없음']
+    return L(cfg['지수제목'], ' · '.join(head), ' · '.join(why) + ' · 지수별 숫자는 표(야후 종가)')
 
 
 def mr_market(c):
