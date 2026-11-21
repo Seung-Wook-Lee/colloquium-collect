@@ -261,64 +261,54 @@ class Ctx:
 YF = {'S&P500': '^GSPC', '나스닥': '^IXIC', '다우': '^DJI', '필라델피아 반도체(SOX)': '^SOX', '코스피': '^KS11', '코스닥': '^KQ11'}
 
 
-def _milestones(name, x, gap):
-    """기사에 쓰는 사실만(통계 등급 없음): ① 올해 상승분 반납/회복(연초 대비 부호가 바뀐 날) ② 연초 대비 %
-    ③ 'D 이후 가장 큰 하루 하락(상승)' ④ 'D 이후 가장 낮은(높은) 종가'. ③④는 D가 gap 거래일보다 앞일 때만."""
+def _milestones(x, gap):
+    """한 지수의 기사식 기록(통계 등급 없음): 연초 대비 %, 기록 = ① 올해 상승분 모두 반납/하락분 모두 회복(연초 대비 부호가 바뀐 날)
+    ② 'D 이후 가장 낮은(높은) 종가' ③ 'D 이후 가장 큰 하루 하락(상승)'. ②③은 D가 gap 거래일보다 앞일 때만."""
     x = x.dropna()
     if len(x) < 30:
-        return [], []
-    nm = _re.sub(r'\(.*\)', '', name).strip()
+        return None, []
     last, prev = x.iloc[-1], x.iloc[-2]
     d = (last / prev - 1) * 100
     y0 = x[x.index.year < x.index[-1].year]
-    head, why = [], []
+    rec, ytd = [], None
     if len(y0):
         base = y0.iloc[-1]; ytd = (last / base - 1) * 100; ytd0 = (prev / base - 1) * 100
         if ytd < 0 <= ytd0:
-            head.append(f"{nm} 올해 오른 것 모두 반납(연초 대비 {ytd:+.1f}%)")
+            rec.append('올해 상승분 모두 반납')
         elif ytd >= 0 > ytd0:
-            head.append(f"{nm} 올해 하락분 모두 회복(연초 대비 {ytd:+.1f}%)")
-        why.append(f"{nm} 연초 대비 {ytd:+.1f}%(전날 {ytd0:+.1f}%)")
-    r = x.pct_change() * 100
-    past = r.iloc[:-1]
-    big = past[past <= d] if d < 0 else past[past >= d]
-    if len(big):
-        when = big.index[-1]
-        if (r.index[-1] - when).days >= gap * 7 / 5:
-            head.append(f"{nm} {d:+.1f}%, {when.year}년 {when.month}월 {when.day}일 이후 가장 큰 하루 {'하락' if d < 0 else '상승'}")
-    lvl = x.iloc[:-1]
-    lv = lvl[lvl <= last] if d < 0 else lvl[lvl >= last]
-    if len(lv):
-        when = lv.index[-1]
-        if (x.index[-1] - when).days >= gap * 7 / 5:
-            head.append(f"{nm} {when.year}년 {when.month}월 이후 가장 {'낮은' if d < 0 else '높은'} 종가")
-    return head, why
+            rec.append('올해 하락분 모두 회복')
+    far = lambda when: (x.index[-1] - when).days >= gap * 7 / 5   # noqa: E731
+    lv = x.iloc[:-1]
+    lv = lv[lv <= last] if d < 0 else lv[lv >= last]
+    if len(lv) and far(lv.index[-1]):
+        w = lv.index[-1]
+        rec.append(f"{w.year}년 {w.month}월 이후 가장 {'낮은' if d < 0 else '높은'} 종가")
+    r = (x.pct_change() * 100).iloc[:-1]
+    big = r[r <= d] if d < 0 else r[r >= d]
+    if len(big) and far(big.index[-1]):
+        w = big.index[-1]
+        rec.append(f"{w.year}년 {w.month}월 이후 가장 큰 하루 {'하락' if d < 0 else '상승'}")
+    return ytd, rec
 
 
-def _one_line(c, cfg, rows, moves):
-    """11/21 의장 "나스닥이 올해 오른 것을 모두 반납했다 — 이게 나와야지. 평범·큰편 같은 자의적 통계가 무슨 의미가 있냐":
-    지수 나열 대신 기사에 쓰는 사실(올해 상승분 반납·○월 이후 최저·○년 이후 가장 큰 하루 하락)만. 숫자는 표.
-    'D 이후'는 D가 시황_한줄.최소_거래일보다 앞일 때만(비공개 blocks.yaml)."""
+def _records(cfg):
+    """11/21 의장 "지수 줄, 표로 만들라고": 지수별 (연초 대비, 기록). 시세는 야후 종가. 최소 거래일은 비공개 blocks.yaml 시황_한줄."""
     try:
         import qc_config as QCC
-        T = QCC.load_blocks(switches=False).get('시황_한줄') or {}
+        gap = (QCC.load_blocks(switches=False).get('시황_한줄') or {}).get('최소_거래일', 20)
     except Exception:   # noqa: BLE001
-        T = {}
-    gap = T.get('최소_거래일', 20)
-    head, why = [], []
+        gap = 20
+    out = {}
     try:
         import yfinance as yf
         tk = [YF[k] for k in cfg['지수'] if k in YF]
         P = yf.download(tk, start='1990-01-01', auto_adjust=True, progress=False)['Close']
         for k in cfg['지수']:
             if YF.get(k) in P:
-                h, w = _milestones(k, P[YF[k]], gap)
-                head += h; why += w
+                out[k] = _milestones(P[YF[k]], gap)
     except Exception as e:   # noqa: BLE001
-        why.append(f'긴 시세 못 받음: {type(e).__name__}')
-    if not head:
-        head = ['눈에 띄는 기록 없음']
-    return L(cfg['지수제목'], ' · '.join(head), ' · '.join(why) + ' · 지수별 숫자는 표(야후 종가)')
+        print(f'[지수 기록] 야후 실패: {e}')
+    return out
 
 
 def mr_market(c):
@@ -333,7 +323,7 @@ def mr_market(c):
             st, G, M_, idx = g
             out.append(L(f'{mk} 국면', f"{st} 국면 · 지수 4국면 {idx or '자료 없음'}",
                          f"AI(S1~S3)÷금융·방어(S5~S6) 비율 50일 이격 {p(G, 2)}, 20일 변화 {p(M_, 2)} — 진입 −2%·−3%(5일 중 3일+당일), 둘 다 0 이상이면 해제"))
-    rows, moves = [], {}
+    rows = []
     for it in cfg['지수']:
         r = c.mac_row(it)
         if r is None:
@@ -341,11 +331,15 @@ def mr_market(c):
         v, pv = num(r['값']), num(r.get('전일 값'))
         d1 = (v / pv - 1) * 100 if v and pv else None
         rows.append([it, n(v, 2), p(d1, 2), p(num(r.get('최고 대비(%)')))])
-        moves[it] = d1
     tbl = ''
     if rows:
-        out.append(_one_line(c, cfg, rows, moves))
-        tbl = '| 지수 | 종가 | 전일 대비 | 사상 최고 대비 |\n|---|---|---|---|\n' + '\n'.join('| ' + ' | '.join(x) + ' |' for x in rows)
+        # 11/21 의장 "지수 줄, 표로 만들라고": 문장 없이 표 한 장(연초 대비·기록 칸)
+        RC = _records(cfg)
+        body = []
+        for x in rows:
+            ytd, rec = RC.get(x[0], (None, []))
+            body.append(x[:3] + [p(ytd), x[3], ', '.join(rec) or '-'])
+        tbl = '| 지수 | 종가 | 전일 대비 | 연초 대비 | 사상 최고 대비 | 기록 |\n|---|---|---|---|---|---|\n' + '\n'.join('| ' + ' | '.join(x) + ' |' for x in body)
     if cfg.get('코스피이격'):
         kg = c.m.get('KS_GAP50')
         if kg is not None:
