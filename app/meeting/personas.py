@@ -686,7 +686,9 @@ def desks(c):
         for _, x in SE.iterrows():
             dd = pd.to_datetime(str(x['실적 받은날']), errors='coerce')
             if not pd.isna(dd) and dd >= lim and ok(x.get('기준일(최근 분기 끝)')):
-                recent.setdefault(x['번호'], f"분기 끝 {x['기준일(최근 분기 끝)']} 매출 TTM {n(x['매출 TTM(백만$)'], 0, '백만$')}, 영업이익 TTM {n(x['영업이익 TTM(백만$)'], 0, '백만$')}, PER TTM {n(x['PER TTM(주가÷EPS)'], 1, '배')}(SEC)")
+                # 11/21 의장 "내용 하나당 한 줄": 백만$ → 억 달러('$'는 화면에서 수식으로 깨짐)
+                eok = lambda v: n(num(v) / 100 if num(v) is not None else None, 0, '억 달러')
+                recent.setdefault(x['번호'], f"{str(x['기준일(최근 분기 끝)'])[:7]} 분기 · 1년 매출 {eok(x['매출 TTM(백만$)'])} · 1년 영업이익 {eok(x['영업이익 TTM(백만$)'])} · PER {n(x['PER TTM(주가÷EPS)'], 1, '배')}")
     res, has = {}, False
     for desk in DESKS:
         G = T[T['데스크'] == desk]
@@ -694,8 +696,12 @@ def desks(c):
         for _, r in G.iterrows():
             mv = px.get(r['번호'])
             if mv is not None and not math.isnan(mv) and abs(mv) >= D['보고문턱_등락(%)']:
-                out.append(L(f"{r['종목']} {p(mv, 2)}", f"엔진 {r['추천']}, 블록 예 {n(r['블록예비율'], 2)}, 20일 {p(r.get('20일(%)'))}" + (f", 빠지는 이유: {r['빠지는 이유']}" if mv < 0 and ok(r.get('빠지는 이유')) else '') + mover_news(c, r['종목']),
-                             f"전일 ±{D['보고문턱_등락(%)']}% 이상(시세.csv)"))
+                # 11/21 의장 "내용 하나당 한 줄, CSV처럼 나열 금지, 엔진 판정을 앞에 두지 마" → 사실 한 줄, 기사는 다음 줄
+                out.append(L(f"{r['종목']} {p(mv, 2)}", f"20일 {p(r.get('20일(%)'))}" + (f" · {r['빠지는 이유']}" if mv < 0 and ok(r.get('빠지는 이유')) else ''),
+                             f"전일 ±{D['보고문턱_등락(%)']}% 이상"))
+                nw = mover_news(c, r['종목'])
+                if nw:
+                    out.append(L(f"{r['종목']} 기사", nw.replace(' · 기사: ', '', 1), ''))
             if r['번호'] in recent:
                 out.append(L(f"{r['종목']} 실적", recent[r['번호']], f"{D['실적일수']}일 안 DART 잠정 공시 또는 SEC 실적 수신"))
         has = has or bool(out)
