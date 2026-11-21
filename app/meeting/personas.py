@@ -473,23 +473,19 @@ def macro_table(c):
         X['_n'] = pd.to_numeric(X['공식'].astype(str).str.extract(r'([\d.]+)(?:[^\d.]*)$')[0], errors='coerce')   # 문턱 = 맨 끝 숫자(10Y의 10이 아님)
         X['_s'] = X.apply(lambda r: (r['_n'] if '이상' in str(r['공식']) else -r['_n']) if pd.notna(r['_n']) else 0, axis=1)
         X = X.sort_values(['_on', '_s'], ascending=[False, False]).drop_duplicates('_k')
-        X = X.sort_values(['블록', '_on'], ascending=[True, False]).reset_index(drop=True)
-        # 11/21 의장 "좋다 나쁘다 판단하지 말고, 블록이 같으면 한 번만, 질문 | 지표 이름 | 숫자 | 공식"
-        EXPR = {'VIX_VIX3M': 'VIX − VIX3M', 'SOFR_IORB': 'SOFR − IORB', 'T10Y2Y': '10Y − 2Y', 'KR_BEAR': '한국 하락 국면 확률', 'US_BEAR': '미국 하락 국면 확률'}
-        rows = ['| 블록 | 질문 | 지표 | 오늘 | 공식 |', '|---|---|---|---|---|']
-        prev = None
+        X = X.sort_values(['방향', '_on', '블록'], ascending=[True, False, True]).reset_index(drop=True)
+        nb, no = (X['방향'] == '부담'), (X['방향'] == '기회')
+        rows = ['| 번호 | 블록 | 질문 | 공식 | 쪽 | 오늘 |', '|---|---|---|---|---|---|']
         for i, r in X.iterrows():
+            nm = _re.sub(r'\((기회|부담)\)', '', str(r['공식'])).strip()
             en_ = str(r['영문']) if ok(r.get('영문')) else ''
-            for k, v in (('HY spread', 'High Yield Spread'), ('UST 10Y yield', 'US Treasury 10-Year Yield'), ('10Y−2Y curve', 'US Treasury 10-Year minus 2-Year'),
-                         ('HMM bear-regime probability', 'Hidden Markov Model bear-regime probability')):
-                en_ = en_.replace(k, v)   # 11/20 의장: 약자 금지
-            ex = str(r.get('식', '') if ok(r.get('식')) else '')
-            for k, v in EXPR.items():
-                ex = ex.replace(k, v)
-            ex = ex.replace('>=', '≥').replace('<=', '≤')
-            same = r['블록'] == prev; prev = r['블록']
-            rows.append(f"| {'' if same else r['블록']} | {'' if same else r['질문']} | {en_} | {r.get('값', '') if ok(r.get('값')) else '자료 없음'} | {ex} |")
-        out += [f"**시장 블록 · 공식 {len(X)}개**", '', '\n'.join(rows), '']
+            for k, v in (('HY spread', 'High Yield Spread'), ('UST 10Y yield', 'US Treasury 10-Year Yield'), ('HY 스프레드', 'High Yield Spread'), ('HY ', 'High Yield Spread '), ('10Y−2Y', 'US Treasury 10-Year minus 2-Year'),
+                         ('HMM bear-regime probability', 'Hidden Markov Model bear-regime probability'), ('HMM', 'Hidden Markov Model')):
+                en_, nm = en_.replace(k, v), nm.replace(k, v)   # 11/20 의장: 약자 금지
+            rows.append(f"| {i + 1} | {r['블록']} | {r['질문']} | {(en_ + ' — ') if en_ else ''}{nm} | "
+                        f"{'나쁜 신호(부담)' if r['방향'] == '부담' else '좋은 신호(기회)'} | {'켜짐' if r['_on'] else '꺼짐'} |")
+        out += [f"**시장 블록 · 나쁜 신호(부담) {nb.sum()}개 중 {(nb & X['_on']).sum()}개 켜짐, 좋은 신호(기회) {no.sum()}개 중 {(no & X['_on']).sum()}개 켜짐**",
+                '', '\n'.join(rows), '']
     K = _read(c.d, '리스크')
     if len(K) and '신호' in K and c.R.get('미스 리스크', {}).get('빨강주황_표', False):   # 11/21 의장: 위 줄·시장 신호와 겹쳐 기본은 뺌
         Z = K[K['신호'].astype(str).str.contains('빨강|주황')].reset_index(drop=True)
@@ -557,7 +553,15 @@ def phobos(c):
     greed = [x.split('. ', 1)[-1] for x, v in zip(ind['지표'], s) if v >= 56]
     out.append(L('공포 쪽 지표', f"{len(fear)}개 ({', '.join(fear) or '없음'})", '점수 44 이하'))
     out.append(L('탐욕 쪽 지표', f"{len(greed)}개 ({', '.join(greed) or '없음'})", '점수 56 이상'))
-    # 11/21 의장: '채권 둘까지 공포…' 같은 덧붙인 판단 문장은 뺌(숫자는 위 7개 카드)
+    price3, bond2 = s.iloc[:3].mean(), s.iloc[5:7]
+    if len(s) >= 7:
+        if (bond2 <= 44).all():
+            read = '채권 둘(Safe Haven·Junk Bond)까지 공포: 돈이 위험 자산에서 빠지는 쪽'
+        elif price3 <= 44 and (bond2 >= 45).any():
+            read = '가격 셋은 공포인데 채권 쪽은 공포가 아님: 주가는 흔들렸고 돈은 아직 위험 회피로 가지 않음'
+        else:
+            read = '가격 셋과 채권 둘이 같은 공포 신호를 내지 않음'
+        out.append(L('시장 분위기', read, f"가격 셋(1~3) 평균 {price3:.1f}, Safe Haven {n(s.iloc[5], 1)}, Junk Bond {n(s.iloc[6], 1)} — 읽는 요령: 가격 셋 공포 + 채권 둘 정상 = 주가만 흔들림, 채권 둘까지 공포 = 위험 회피"))
     return out, [{'type': 'grid', 'columns': ['지표', '점수', '구간', '오늘 값', '시장 의미'], 'rows': rows}], tbl
 
 
@@ -693,12 +697,13 @@ def desks(c):
             mv = px.get(r['번호'])
             if mv is not None and not math.isnan(mv) and abs(mv) >= D['보고문턱_등락(%)']:
                 # 11/21 의장 "내용 하나당 한 줄, CSV처럼 나열 금지, 엔진 판정을 앞에 두지 마" → 사실 한 줄, 기사는 다음 줄
-                out.append(L(f"{r['종목']} {p(mv, 2)}", f"20일 {p(r.get('20일(%)'))}" + (f" · {r['빠지는 이유']}" if mv < 0 and ok(r.get('빠지는 이유')) else ''),
-                             f"전일 ±{D['보고문턱_등락(%)']}% 이상"))
+                # 11/21 10:00 의장 "한 기업당 한 칸만, 기사는 왜 따로 번호를 매기니" → 기사도 같은 칸 안 줄로
                 nw = mover_news(c, r['종목'])
-                if nw:
-                    out.append(L(f"{r['종목']} 기사", nw.replace(' · 기사: ', '', 1), ''))
-            # 11/21 의장 "예전에 나온 실적을 다 적는 이유가 뭐야" → 데스크 칸에 실적 줄은 쓰지 않음
+                out.append(L(f"{r['종목']} {p(mv, 2)}", f"20일 {p(r.get('20일(%)'))}" + (f" · {r['빠지는 이유']}" if mv < 0 and ok(r.get('빠지는 이유')) else '')
+                             + (' · 기사: ' + nw.replace(' · 기사: ', '', 1) if nw else ''),
+                             f"전일 ±{D['보고문턱_등락(%)']}% 이상"))
+            if r['번호'] in recent:
+                out.append(L(f"{r['종목']} 실적", recent[r['번호']], f"{D['실적일수']}일 안 DART 잠정 공시 또는 SEC 실적 수신"))
         has = has or bool(out)
         if not out:
             out.append(L('담당 종목', f"{len(G)}종목, 전일 ±{D['보고문턱_등락(%)']}%·{D['실적일수']}일 안 실적 공시 없음", '시세.csv·DART·SEC'))

@@ -250,19 +250,7 @@ def run(d, cfg=None):
     for mk, v in FLIP.items(): m[f'CTA_FLIP_{mk}'] = v
     EN = B.get('시장_공식영문') or {}   # 11/20 의장: 원고 제목은 영어 공식 이름, 한글 설명은 아랫줄
     en = lambda e, b: next((EN[v] for v in compile(e, '<f>', 'eval').co_names if v in EN), b.get('영문', ''))
-    def _val(e):   # 11/21 의장: 시장 블록 표에 '오늘 숫자' 칸 — 공식에 쓰인 변수의 오늘 값
-        out = []
-        for v in compile(e, '<f>', 'eval').co_names:
-            x = m.get(v)
-            try:
-                x = float(x)
-            except (TypeError, ValueError):
-                continue
-            if not np.isnan(x):
-                out.append(f'{x:,.2f}'.rstrip('0').rstrip('.'))
-        return ' · '.join(out) if out else '자료 없음'
-    M = pd.DataFrame([dict(블록=bid, 질문=b['질문'], 공식=n, 영문=en(e, b), 식=e, 값=_try(f'{bid} 값', lambda: _val(e), '자료 없음'),
-                           결과=LBL[_ev(e, m)], 방향=side)
+    M = pd.DataFrame([dict(블록=bid, 질문=b['질문'], 공식=n, 영문=en(e, b), 결과=LBL[_ev(e, m)], 방향=side)
                       for bid, b in B['시장'].items() for n, e, side in b['공식']])
     SB = B['종목']
     OFF = set(B.get('_꺼짐_종목', []))
