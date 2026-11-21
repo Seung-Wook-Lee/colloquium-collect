@@ -31,6 +31,9 @@ st.markdown('''<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncac
 .stMarkdown table {width: 100%; border-collapse: collapse;}
 .it {width: 100%; border-collapse: collapse; margin: 2px 0 6px;}
 .it td {font-size: 13px !important; line-height: 1.6; padding: 6px 8px !important; border: none !important; border-bottom: 1px solid #eee !important; vertical-align: top; color: #222;}
+.it td.n, .it th.n {text-align: right; white-space: nowrap; width: 1%; padding-right: 14px !important; font-variant-numeric: tabular-nums;}
+.it th {font-size: 12px !important; color: #888; font-weight: 500; padding: 4px 8px !important; border: none !important; border-bottom: 1px solid #ddd !important; background: none !important;}
+.it td.d {text-align: right; white-space: nowrap; width: 1%; vertical-align: top;}
 .it td.k {font-size: 12px !important; color: #666; white-space: nowrap; width: 30%;}
 .stMarkdown td, .stMarkdown th {padding: 6px 10px;}
 .item-t {font-size: 12.5px; font-weight: 400; color: #555; padding-top: 6px;}
@@ -471,13 +474,15 @@ SKIP_ITEM = ('공포 쪽 지표', '탐욕 쪽 지표')
 
 
 # 11/21 의장 "시장보다 약함·동료보다 약함 이런 걸 다 써야 하나? 색깔 있는 작은 동그라미로" → 빠지는 이유는 색 점, 뜻은 칸 아래 한 줄
-WHY_DOT = [('시장보다 약함', '#c8372d'), ('동료보다 약함', '#e08a1e'), ('외국인 20일 순매도', '#2b6cb0'),
-           ('업종 ETF 자금 이탈', '#7b4fb3'), ('이익 추정치 하향', '#6b7280')]
+# 11/21 10:15 의장: 원 안에 글자(빨강 시약·주황 동약·파랑 외·보라 ETF, 이익하향은 회색 원), 크기 키워 표 맨 오른쪽 끝에
+WHY_DOT = [('시장보다 약함', '#c8372d', '시약'), ('동료보다 약함', '#e08a1e', '동약'), ('외국인 20일 순매도', '#2b6cb0', '외'),
+           ('업종 ETF 자금 이탈', '#7b4fb3', 'ETF'), ('이익 추정치 하향', '#6b7280', '')]
 USED_DOTS = set()
 
 
-def dot(name, col):
-    return f'<span title="{name}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{col};margin-left:3px;vertical-align:middle"></span>'
+def dot(name, col, lab=''):
+    return (f'<span title="{name}" style="display:inline-block;width:24px;height:24px;line-height:24px;border-radius:50%;background:{col};'
+            f'color:#fff;font-size:10px;font-weight:600;text-align:center;letter-spacing:-0.5px;margin-left:3px;vertical-align:middle">{lab}</span>')
 
 
 _KO = None
@@ -521,21 +526,17 @@ def lines_(v):
         parts = [p.strip() for p in re.split(r',\s+(?![^()]*\))|\s+·\s+(?![^()]*\))|\s+\|\s+', v) if p.strip()]
     dots, keep = [], []
     for p in parts:
-        hit = next(((n, c) for n, c in WHY_DOT if p == n), None)
+        hit = next((w for w in WHY_DOT if p == w[0]), None)
         if hit:
-            dots.append(dot(*hit)); USED_DOTS.add(hit[0])
+            dots.append(hit); USED_DOTS.add(hit[0])
         else:
             keep.append(p)
-    if dots:
-        if keep:
-            keep[0] += ' ' + ''.join(dots)
-        else:
-            keep = [''.join(dots)]
+    dots = ''.join(dot(*w) for w in WHY_DOT if w in dots)   # 원 순서는 범례 순서로 고정
     if news:
         keep.append(f'<span style="color:#2b6cb0">기사</span> {news.strip()}')
     if len(keep) <= 1:
-        return keep[0] if keep else v
-    return '<br>'.join('- ' + p for p in keep)
+        return (keep[0] if keep else ''), dots
+    return '<br>'.join('- ' + p for p in keep), dots
 
 
 def render(body):
@@ -562,10 +563,23 @@ def render(body):
             # 11/21 의장 "글자 크기를 줄여서 1줄로": 항목 칸은 작은 글씨·줄바꿈 없음
             # 11/21 의장 "쉼표 대신 줄바꾸기와 - 표시, 작은 글씨": 내용은 ', '·' · ' 마다 줄을 바꿔 '- '로
             # 11/21 의장 "글자 크기 키우지 말라": 표 머리줄 없이 작은 글씨 HTML 표(공포탐욕 카드와 같은 크기)
-            t = '<table class="it">' + ''.join(f'<tr><td class="k">{circ(r[0])}</td><td class="v">{lines_(r[1])}</td></tr>' for r in rows) + '</table>'
-            st.markdown(t, unsafe_allow_html=True)
+            mv = [re.match(r'^(.*) ([+-]?\d+(?:\.\d+)?%)$', r[0]) for r in rows]
+            m20 = [re.match(r'^20일 ([+-]?\d+(?:\.\d+)?%)\s*(?:·\s*)?(.*)$', str(r[1]), re.S) for r in rows]
+            if all(mv) and all(m20):   # 11/21 10:17 의장: 등락은 종목 이름에서 떼어 오른쪽 칸에, '20일'은 제목에 한 번만
+                body = ''
+                for a, b in zip(mv, m20):
+                    c, d = lines_(b.group(2)) if b.group(2).strip() else ('', '')
+                    body += (f'<tr><td class="k">{circ(a.group(1))}</td><td class="n">{a.group(2)}</td><td class="n">{b.group(1)}</td>'
+                             f'<td class="v">{c}</td><td class="d">{d}</td></tr>')
+                st.markdown('<table class="it"><tr><th></th><th class="n">전일</th><th class="n">20일</th><th></th><th></th></tr>' + body + '</table>',
+                            unsafe_allow_html=True)
+                rows.clear()
+            t = '' if not rows else '<table class="it">' + ''.join(f'<tr><td class="k">{circ(r[0])}</td><td class="v">{a}</td><td class="d">{b}</td></tr>'
+                                                for r in rows for a, b in [lines_(r[1])]) + '</table>'
+            if t:
+                st.markdown(t, unsafe_allow_html=True)
             if USED_DOTS:
-                st.markdown('<div class="note">' + ' &nbsp; '.join(dot(n, c) + ' ' + n for n, c in WHY_DOT if n in USED_DOTS) + '</div>', unsafe_allow_html=True)
+                st.markdown('<div class="note">' + ' &nbsp; '.join(dot(n, c, l) + ' ' + n for n, c, l in WHY_DOT if n in USED_DOTS) + '</div>', unsafe_allow_html=True)
                 USED_DOTS.clear()
             rows.clear()
 
@@ -641,6 +655,7 @@ def render(body):
         else:
             t = b[1].strip()
             if t.startswith('**') and t.endswith('**'):   # 칸 안 작은 제목(데스크 이름 등): 큰 제목 대신 작은 회색 글씨
+                cnt[0] = 0   # 11/21 10:16 의장: 전문위원마다 번호를 1번부터
                 st.markdown(f'<div class="box-t" style="margin-top:10px">{t.strip("*")}</div>', unsafe_allow_html=True)
             elif not t.startswith('_출처'):
                 st.markdown(t)
