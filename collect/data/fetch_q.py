@@ -24,6 +24,7 @@ with ThreadPoolExecutor(10) as ex: R=sum(ex.map(one,t.itertuples(index=False)),[
 try:
     import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import kis
     # 11/21 23:47 의장 "그냥 한국거는 한투받아": 한국은 한투가 먼저, 한투가 비면 야후 값을 그대로 둔다
+    print('한투 키', '있음' if kis.ready() else '없음')
     if kis.ready():
         ok=[]
         for n in KR:

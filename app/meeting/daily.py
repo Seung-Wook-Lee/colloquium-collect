@@ -183,6 +183,9 @@ def fetch(W, IN):
                     raise RuntimeError(r.stderr.strip().splitlines()[-1] if r.stderr.strip() else f'코드 {r.returncode}')
                 if os.path.exists(bak):
                     os.remove(bak)
+                for ln in r.stdout.splitlines():   # 11/21: 한투 보충 결과를 실행 기록에 남김
+                    if '한투' in ln:
+                        log(f'[보조 자료] {out}: {ln[:300]}')
             done.append(out)
         except Exception as e:
             log(f'[보조 자료] {out} 갱신 실패 → 전날 사본: {str(e)[:120]}')

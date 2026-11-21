@@ -164,7 +164,7 @@ def stocks(d):
             rows = []
             for no, g in QR.groupby('번호'):
                 g = g.sort_values('분기'); g['분기'] = pd.to_datetime(g['분기'])
-                fin = g.loc[g['출처'] == '야후', '영업이익'].isna().all()
+                fin = g.loc[g['출처'].isin(['야후', '한투']), '영업이익'].isna().all()   # 11/21 한국은 한투 분기 손익
                 g['x'] = g['순이익'] if fin else g['영업이익']
                 g = g[~((g['출처'] == 'DART 잠정') & g['x'].isna())]   # 금융 잠정에 이익 칸 없으면 버림
                 # 11/21 의장 "부족한 자료는 다 채우고": 야후가 아직 발표 안 한 분기를 빈 칸으로 붙여 둠(엔비디아·타깃 10/31) → 매출·이익 모두 빈 분기는 버림
