@@ -258,6 +258,55 @@ class Ctx:
         return L('오늘의 한 종목', f"[{mark}] {r['종목']} — {why}", f"규칙: {rule.get('설명', '')} (맞는 종목 {cnt}개 중 1위)")
 
 
+def _one_line(c, cfg, rows, moves):
+    """11/21 의장 "요것만 딱 보면 알 수 있게, 나열은 인간에게 의미가 없어": 지수 나열 대신
+    ① 얼마나 큰 하루인가(기준 지수 하루 변화 ÷ 최근 1년 하루 표준편차, 최근 2년 중 몇 번째) ② 무엇이 끌어내렸나(올렸나) ③ 덜 움직인 쪽.
+    문턱은 비공개 blocks.yaml 시황_한줄."""
+    try:
+        import qc_config as QCC
+        T = QCC.load_blocks(switches=False).get('시황_한줄') or {}
+    except Exception:   # noqa: BLE001
+        T = {}
+    T = {'평범': 1.0, '큰편': 2.0, '드묾': 3.0, '주도_배수': 1.5, '덜_배수': 0.6, **T}
+    base = cfg['지수'][0]
+    b = moves.get(base)
+    if b is None:
+        return L(cfg['지수제목'], ', '.join(f"{a} {x}({y})" for a, x, y, _ in rows), '07시 매크로.csv')
+    down = b < 0
+    word = '하락' if down else '상승'
+    size, why = '', []
+    tk = {'미국': '^GSPC', '한국': '^KS11'}.get('미국' if base == 'S&P500' else '한국')
+    try:
+        I = pd.read_csv(f'{c.d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)[tk].dropna()
+        r = I.pct_change().dropna() * 100
+        sd = r.tail(252).std()
+        z = abs(b) / sd
+        jump = '급락' if down else '급등'
+        size = f'평범한 {word}' if z < T['평범'] else f'큰 편의 {word}' if z < T['큰편'] else f'드문 {jump}' if z < T['드묾'] else f'충격적인 {jump}'
+        rk = int(((r < 0) & (r <= b)).sum()) if down else int(((r > 0) & (r >= b)).sum())
+        why.append(f"{base} {b:+.2f}%는 평소 하루 움직임(최근 1년 표준편차 {sd:.2f}%)의 {z:.1f}배, 최근 2년 중 {rk}번째로 큰 {word}")
+    except Exception:   # noqa: BLE001
+        size = word
+    lead, calm = [], []
+    for k, v in moves.items():
+        if k == base or v is None:
+            continue
+        if (v < 0) == down and abs(v) >= abs(b) * T['주도_배수']:
+            lead.append((abs(v), k, v))
+        elif abs(v) <= abs(b) * T['덜_배수'] or (v < 0) != down:
+            calm.append((k, v))
+    parts = []
+    if lead:
+        _, k, v = max(lead)
+        parts.append(f"{_re.sub(r'\(.*\)', '', k).strip()} {v:+.1f}%가 끌어" + ('내렸습니다' if down else '올렸습니다'))
+        why.append(f"{k} {v:+.2f}% = {base}의 {abs(v) / abs(b):.1f}배")
+    if calm:
+        k, v = calm[0]
+        parts.append(f"{_re.sub(r'\(.*\)', '', k).strip()}는 {v:+.1f}%로 덜 " + ('빠졌습니다' if down else '올랐습니다'))
+    head = f"{size}" + (' — ' + ', '.join(parts) if parts else '')
+    return L(cfg['지수제목'], head, ' · '.join(why) + ' · 지수별 숫자는 표')
+
+
 def mr_market(c):
     """11/20 의장: 미스터 마켓은 시장만(개별 종목 금지). 오전 국장전 = 간밤 미국 시장만, 밤 미장전 = 한국 시장만.
     지수는 표(extra)로, 줄은 국면·이격만."""
@@ -270,7 +319,7 @@ def mr_market(c):
             st, G, M_, idx = g
             out.append(L(f'{mk} 국면', f"{st} 국면 · 지수 4국면 {idx or '자료 없음'}",
                          f"AI(S1~S3)÷금융·방어(S5~S6) 비율 50일 이격 {p(G, 2)}, 20일 변화 {p(M_, 2)} — 진입 −2%·−3%(5일 중 3일+당일), 둘 다 0 이상이면 해제"))
-    rows = []
+    rows, moves = [], {}
     for it in cfg['지수']:
         r = c.mac_row(it)
         if r is None:
@@ -278,9 +327,10 @@ def mr_market(c):
         v, pv = num(r['값']), num(r.get('전일 값'))
         d1 = (v / pv - 1) * 100 if v and pv else None
         rows.append([it, n(v, 2), p(d1, 2), p(num(r.get('최고 대비(%)')))])
+        moves[it] = d1
     tbl = ''
     if rows:
-        out.append(L(cfg['지수제목'], ', '.join(f"{a} {b}({c_})" for a, b, c_, _ in rows), '07시 매크로.csv, 전일 값 대비 · 사상 최고 대비는 표'))
+        out.append(_one_line(c, cfg, rows, moves))
         tbl = '| 지수 | 종가 | 전일 대비 | 사상 최고 대비 |\n|---|---|---|---|\n' + '\n'.join('| ' + ' | '.join(x) + ' |' for x in rows)
     if cfg.get('코스피이격'):
         kg = c.m.get('KS_GAP50')
