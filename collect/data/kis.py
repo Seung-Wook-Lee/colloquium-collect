@@ -7,6 +7,7 @@ import os, time, datetime as dt, requests, pandas as pd
 BASE = 'https://openapi.koreainvestment.com:9443'
 EXCD = {'NASDAQ': 'NAS', 'NYSE': 'NYS', 'NYSE American': 'AMS', 'NYSE Arca': 'AMS', 'Cboe BZX': 'AMS'}
 _TOK = {}
+_ERR = []
 
 
 def ready():
@@ -38,8 +39,11 @@ def _get(path, tr, params, retry=2):
             if j.get('rt_cd') == '0':
                 return j
             raise ValueError(f"{j.get('msg_cd')} {j.get('msg1')}")
-        except Exception:
+        except Exception as e:
             if n == retry:
+                _ERR.append(f'{tr} {str(e)[:120]}')
+                if len(_ERR) <= 3:
+                    print('한투 조회 실패', _ERR[-1])
                 return None
             time.sleep(1 + 2 * n)
 

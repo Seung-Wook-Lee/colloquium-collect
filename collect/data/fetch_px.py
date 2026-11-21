@@ -6,6 +6,7 @@ px=D['Close']
 # 11/21 의장: 야후가 막아 빈 종목(최근 5일 값 없음)은 한투 일봉으로 채운다
 try:
     import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import kis
+    print('한투 키', '있음' if kis.ready() else '없음')
     if kis.ready():
         M=N.dropna(subset=['yfinance 티커']).drop_duplicates('yfinance 티커').set_index('yfinance 티커')
         # 11/21 23:47 의장: 한국 종목은 전부 한투 일봉, 미국은 야후가 빈 것만 한투
