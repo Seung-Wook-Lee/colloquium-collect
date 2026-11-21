@@ -25,20 +25,22 @@ import drive  # noqa: E402
 st.set_page_config(page_title='스튜디오 톰앤수 회의', page_icon='📊', layout='wide')
 st.markdown('''<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
 <style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css');
 .block-container {max-width: 1100px; padding-top: 2rem;}
-.stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th {font-size: 16px; line-height: 1.9;}
+.stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th {font-size: 13.5px; line-height: 1.65;}
 .stMarkdown table {width: 100%; border-collapse: collapse;}
-.stMarkdown td, .stMarkdown th {padding: 8px 12px;}
-.item-t {font-size: 15px; font-weight: 400; color: #555; padding-top: 6px;}
-.item-v {font-size: 17px; font-weight: 400; line-height: 1.6;}
+.stMarkdown td, .stMarkdown th {padding: 6px 10px;}
+.item-t {font-size: 12.5px; font-weight: 400; color: #555; padding-top: 6px;}
+.item-v {font-size: 13.5px; font-weight: 400; line-height: 1.6;}
 h1, h2, h3, h4, h5 {font-weight: 500 !important; letter-spacing: -0.2px;}
+h4 {font-size: 15px !important;}
 .stMarkdown strong, .stMarkdown b, [data-testid="stMetricValue"] {font-weight: 500 !important;}
-.stMarkdown th {font-weight: 500;}
+.stMarkdown th {font-weight: 500; font-size: 12.5px; color: #777;}
 .why {font-size: 13px; color: #888; line-height: 1.6;}
-.sec-t {font-size: 22px; font-weight: 500; line-height: 1.4; margin: 2px 0 10px; font-family: inherit; font-variant-numeric: lining-nums;}
-.big-t td, .big-t th {font-size: 18px !important; padding: 8px 14px !important;}
-.who {font-size: 14px; font-weight: 500; color: #4a4a4a; margin-left: 10px; letter-spacing: 0.2px;}
-.box-t {font-size: 17px; font-weight: 500; color: #333; margin-bottom: 4px;}
+.sec-t {font-size: 18px; font-weight: 500; line-height: 1.4; margin: 2px 0 10px; font-family: inherit; font-variant-numeric: lining-nums;}
+.big-t td, .big-t th {font-size: 14px !important; padding: 8px 14px !important;}
+.who {font-size: 12px; font-weight: 500; color: #4a4a4a; margin-left: 10px; letter-spacing: 0.2px;}
+.box-t {font-size: 14.5px; font-weight: 500; color: #333; margin-bottom: 4px;}
 .note {font-size: 12px; color: #8a8a8a; line-height: 1.6; margin-top: 10px;}
 .sub {font-size: 13px; color: #888; line-height: 1.7;}
 .num-t {width: 100%; border-collapse: collapse; margin-top: 4px;}
@@ -432,7 +434,19 @@ def signal_chips(md):
     """시장 블록 표 → 켜진 신호만 부담·기회 두 줄 칩(11/21 의장: 난잡한 표 대신)"""
     df = md_table(md)
     if df is None or '쪽' not in df or '오늘' not in df:
-        return False
+        # 11/21 의장: 원고 표는 '블록·질문·지표·오늘·공식'(좋고 나쁨 없음). 카드 색(빨강·초록)은 그대로 → 엔진 시장블록.csv에서 읽음
+        try:
+            M = read_csv(day, '시장블록.csv')
+        except Exception:   # noqa: BLE001
+            M = None
+        if M is None or '방향' not in M:
+            return False
+        M = M.copy()
+        M['_k'] = M['블록'].astype(str) + M['방향'].astype(str) + M['공식'].astype(str).str.replace(r'[−+-]?[\d.]+', '#', regex=True)
+        M['_on'] = M['결과'] == '통과'
+        M = M.sort_values('_on', ascending=False).drop_duplicates('_k')
+        df = pd.DataFrame({'쪽': M['방향'].astype(str), '오늘': M['_on'].map({True: '켜짐', False: '꺼짐'}), '질문': M['질문'].astype(str),
+                           '공식': ' — ' + M['공식'].astype(str).str.replace(r'\((기회|부담)\)', '', regex=True).str.strip()})
     on = df[df['오늘'].str.strip() == '켜짐']
     c1, c2 = st.columns(2, gap='large')
     for col, side, color, name in ((c1, '부담', RED, '나쁜 신호'), (c2, '기회', '#2e7d32', '좋은 신호')):
@@ -450,6 +464,15 @@ def signal_chips(md):
 
 SKIP_BOX = ('매크로 체크리스트', '리스크 표')   # 11/21 의장: 겹치는 표는 화면에서 뺌
 SKIP_ITEM = ('공포 쪽 지표', '탐욕 쪽 지표')
+
+
+def lines_(v):
+    """내용 한 칸: 쉼표·가운뎃점으로 이어 쓴 것을 줄바꿈 + '- '로. '$'는 수식으로 깨지지 않게."""
+    v = str(v).replace('|', '·').replace('$', '\\$')
+    parts = [p.strip() for p in re.split(r',\s+(?![^()]*\))|\s+·\s+(?![^()]*\))', v) if p.strip()]
+    if len(parts) <= 1:
+        return v
+    return '<br>'.join('- ' + p for p in parts)
 
 
 def render(body):
@@ -474,7 +497,8 @@ def render(body):
     def flush():
         if rows:
             # 11/21 의장 "글자 크기를 줄여서 1줄로": 항목 칸은 작은 글씨·줄바꿈 없음
-            t = '| 항목 | 내용 |\n|---|---|\n' + '\n'.join(f'| <span style="white-space:nowrap;font-size:0.82em">{circ(r[0])}</span> | {r[1].replace("|", "·")} |' for r in rows)
+            # 11/21 의장 "쉼표 대신 줄바꾸기와 - 표시, 작은 글씨": 내용은 ', '·' · ' 마다 줄을 바꿔 '- '로
+            t = '| 항목 | 내용 |\n|---|---|\n' + '\n'.join(f'| <span style="white-space:nowrap;font-size:0.85em;color:#555">{circ(r[0])}</span> | {lines_(r[1])} |' for r in rows)
             st.markdown(t, unsafe_allow_html=True)
             rows.clear()
 
