@@ -78,7 +78,7 @@ def run(S, f, P, m, cfg, ledger):
     H = cfg.get('기간', 20); mult = cfg.get('벽배수', 1.0); nmin = cfg.get('최소표본', 200)
     sig = set(cfg.get('1차신호', ['추천', '관찰']))
     d0 = P.index.max().strftime('%Y-%m-%d') if len(P) else None
-    fx = f.set_index('번호')
+    fx = f.drop_duplicates('번호').set_index('번호')
     T = S[['번호', '종목', '시장', '추천'] + [c for c in ('종합점수', '분산승수', '블록예비율') if c in S]].copy()
     T['ticker'] = T['번호'].map(fx['ticker']) if 'ticker' in fx else None
     for c in ('vol60', 'beta', 'dd52'):
