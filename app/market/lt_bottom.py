@@ -115,6 +115,7 @@ def hazard_weeks(s, vix, tnx, cfg=None):
     D['10년_4주변화'] = tnx.reindex(s.index).ffill().diff(20)
     D['RSI'] = _rsi(s); D['200일선_이격'] = (s / s.rolling(200).mean() - 1) * 100; D['4주_수익'] = s.pct_change(20) * 100
     D['뒤13주'] = (s.shift(-63) / s - 1) * 100; D['뒤26주'] = (s.shift(-126) / s - 1) * 100
+    D['뒤52주'] = (s.shift(-252) / s - 1) * 100
     # 11/21 의장(XLK 손실): 평균·승률만 보이면 안 됨 → 뒤 13주 안 최저점까지 낙폭(최대 낙폭)
     D['뒤13주_최대낙폭'] = (s.iloc[::-1].rolling(63, min_periods=63).min().iloc[::-1].shift(-1) / s - 1).clip(upper=0) * 100
     W = D.resample('W-FRI').last()
@@ -139,6 +140,7 @@ def hazard(s, vix, tnx, cfg=None, start_year=2000):
             continue
         sc = StandardScaler().fit(W.loc[tr, HZ_F]); lr = LogisticRegression(C=1.0, max_iter=3000).fit(sc.transform(W.loc[tr, HZ_F]), W.loc[tr, 'y'])
         raw[te] = lr.predict_proba(sc.transform(W.loc[te, HZ_F]))[:, 1]
+    hazard.last = (W, raw)   # 구간별 성적표(buckets)가 씀
     ev = W.y.notna() & raw.notna(); y, p = W.y[ev], raw[ev]
     TEST = dict(검정기간=f'{start_year}~', 검정주=int(len(y)), 바닥주=int(y.sum()), AUC=round(roc_auc_score(y, p), 3),
                 브라이어_기술점수=round(1 - brier_score_loss(y, p) / brier_score_loss(y, np.full(len(y), y.mean())), 3))
@@ -154,6 +156,26 @@ def hazard(s, vix, tnx, cfg=None, start_year=2000):
                뒤13주_최대낙폭_평균=round(m13.mean(), 1), 뒤13주_최대낙폭_최악=round(m13.min(), 1),
                뒤26주_평균=round(f26.mean(), 1), 뒤26주_승률=round((f26 > 0).mean() * 100, 1))
     return ONE, TEST
+
+
+def buckets(W, raw, edges=(0, 20, 30, 40, 50, 60, 70, 80, 101)):
+    """11/21 의장 "확률이 얼마일 때 사면 80% 확률로 먹나": 걸어가며(그해 전까지만 학습) 낸 바닥확률 구간별로
+    그 주에 샀을 때 13·26·52주 뒤 성적. 확률 ≥ 문턱(누적)도 같이."""
+    D = W.assign(확률=raw * 100).dropna(subset=['확률'])
+    def row(m, name):
+        g = D[m]
+        r = {'구간': name, '주수': int(len(g)), '하락 사건 수': int(g['ph'].nunique())}
+        for k in ('뒤13주', '뒤26주', '뒤52주'):
+            v = g[k].dropna()
+            r[f'{k} 중앙값'] = round(v.median(), 1) if len(v) else None
+            r[f'{k} 이익 확률'] = round((v > 0).mean() * 100) if len(v) else None
+        v = g['뒤13주_최대낙폭'].dropna()
+        r['산 뒤 13주 안 더 빠진 폭(중앙값)'] = round(v.median(), 1) if len(v) else None
+        return r
+    rows = [row((D.확률 >= a) & (D.확률 < b), f'{a}~{min(b, 100)}%') for a, b in zip(edges[:-1], edges[1:])]
+    rows += [row(D.확률 >= a, f'{a}% 이상') for a in edges[1:-1]]
+    rows.append(row(D.확률 >= 0, '하락 중 아무 주(기준)'))
+    return pd.DataFrame(rows)
 
 
 def hazard_today(idx_list=('^NDX', '^GSPC'), cfg=None):
