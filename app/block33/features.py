@@ -579,6 +579,10 @@ def stocks(d):
         _bottom_cols(d, f)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('_bottom_cols(d, f)', e)
+    # 11/21: 보조 자료에 같은 번호가 두 줄이면(새로 넣은 종목) 합칠 때 줄이 불어 엔진이 멈춤 → 번호당 한 줄
+    if f['번호'].duplicated().any():
+        _fail('번호 중복', ValueError(', '.join(sorted(set(f.loc[f['번호'].duplicated(), '번호'].astype(str))))))
+        f = f.drop_duplicates('번호', keep='first').reset_index(drop=True)
     return f
 
 
