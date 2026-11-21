@@ -64,6 +64,15 @@ def stocks(d):
                  tail_low_d=c('일_봉_아랫꼬리(%)'), body_d=c('일_봉_몸통(%)').abs(),
                  sup_touch_d=N['일_지지1_터치'].astype(str).isin(['예', 'True', '1', 'Y']).astype(int))
     f['m5gap'] = f.close / f.m5 * 100
+    # 11/21 의장 "최근 상장한 것은 자료가 없으니 그냥 넘어가": 52주 고점 칸이 빈 종목(상장 1년 안 됨)은 상장 뒤 고점 대비로 채움
+    try:
+        P_ = _px(d)
+        if len(P_) and f['dd52'].isna().any():
+            P_ = P_.tail(252)
+            dd_ = (P_.ffill().iloc[-1] / P_.max() - 1) * 100
+            f['dd52'] = f['dd52'].fillna(f['ticker'].map(dd_.where(P_.notna().sum() >= 20)))
+    except Exception as e:   # noqa: BLE001
+        _fail('52주 고점 채움', e)
     E = _r(d, '예외검정')
     try:
         if len(E):
@@ -158,6 +167,9 @@ def stocks(d):
                 fin = g.loc[g['출처'] == '야후', '영업이익'].isna().all()
                 g['x'] = g['순이익'] if fin else g['영업이익']
                 g = g[~((g['출처'] == 'DART 잠정') & g['x'].isna())]   # 금융 잠정에 이익 칸 없으면 버림
+                # 11/21 의장 "부족한 자료는 다 채우고": 야후가 아직 발표 안 한 분기를 빈 칸으로 붙여 둠(엔비디아·타깃 10/31) → 매출·이익 모두 빈 분기는 버림
+                g = g[g[['매출', 'x']].notna().any(axis=1)]
+                if not len(g): continue
                 if fin:   # 금융: DART 잠정 매출(영업수익 총액)은 야후 매출과 정의가 달라 이익률 비교 안 함
                     g.loc[g['출처'] == 'DART 잠정', '매출'] = np.nan
                 g['m'] = g['x'] / g['매출'] * 100
@@ -167,8 +179,10 @@ def stocks(d):
                     pv = prev[col].iloc[0]
                     if col == 'm': return cur[col] - pv
                     return (cur[col] / pv - 1) * 100 if pv > 0 else (999 if cur[col] > 0 else -999)
+                # 11/21: 1년 전 같은 분기가 야후에 비어 있으면(버크셔·신한 2025-09) 직전 분기 전년비로 대신
+                fb = lambda col: yoy(-1, col) if not pd.isna(yoy(-1, col)) else (yoy(-2, col) if len(g) > 1 else np.nan)
                 r = dict(번호=no, kind='순이익' if fin else '영업이익', last_q=str(g['분기'].iloc[-1].date()), q_src=g['출처'].iloc[-1],
-                         op_yoy=yoy(-1, 'x'), opm_yoy=yoy(-1, 'm'), rev_yoy=yoy(-1, '매출'), opm=g['m'].iloc[-1],
+                         op_yoy=fb('x'), opm_yoy=fb('m'), rev_yoy=fb('매출'), opm=g['m'].iloc[-1],
                          prev_op_yoy=yoy(-2, 'x') if len(g) > 1 else np.nan,
                          opm2=int(g['m'].iloc[-1] > g['m'].iloc[-2] > g['m'].iloc[-3]) if len(g) >= 3 and g['m'].tail(3).notna().all() else np.nan)
                 rows.append(r)
