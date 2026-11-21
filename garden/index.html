@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>톰앤수 가든</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --card: #fffdf8;
+    --ink: #2f3a33;
+    --sub: #7b857e;
+    --line: #e3ddd0;
+    --leaf: #5d8a6a;
+    --leaf-soft: #e4eee6;
+    --mine: #e9f1ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161a17;
+      --card: #1f2520;
+      --ink: #e4e8e3;
+      --sub: #8f998f;
+      --line: #2e3630;
+      --leaf: #8fbf98;
+      --leaf-soft: #26332a;
+      --mine: #253028;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 13px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .02em; }
+  .sub { color: var(--sub); font-size: 12px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    margin-top: 12px;
+  }
+  .card h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+  input, button { font: inherit; color: inherit; }
+  input[type=text], input[type=password] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+  }
+  button {
+    border: 1px solid var(--line);
+    background: var(--card);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  button.main { background: var(--leaf); border-color: var(--leaf); color: #fff; }
+  button.on { background: var(--leaf-soft); border-color: var(--leaf); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .gap { height: 8px; }
+  .err { color: #b4584a; font-size: 12px; min-height: 18px; }
+
+  /* 입장 */
+  #gate { max-width: 340px; margin: 12vh auto 0; }
+  #gate .card { padding: 18px; }
+  .leafmark { font-size: 22px; }
+
+  /* 상단 */
+  .top { display: flex; justify-content: space-between; align-items: center; }
+  .who { color: var(--sub); font-size: 12px; }
+  .note { font-size: 12px; color: var(--sub); margin-top: 6px; }
+
+  /* 음악 */
+  .vol { width: 110px; accent-color: var(--leaf); }
+
+  /* 대화 */
+  #log { height: 46vh; min-height: 260px; overflow-y: auto; padding-right: 4px; }
+  .msg { margin: 6px 0; display: flex; flex-direction: column; align-items: flex-start; }
+  .msg .meta { font-size: 11px; color: var(--sub); }
+  .msg .body {
+    background: var(--bg);
+    border-radius: 10px;
+    padding: 6px 10px;
+    max-width: 85%;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .msg.mine { align-items: flex-end; }
+  .msg.mine .body { background: var(--mine); }
+  .sys { text-align: center; color: var(--sub); font-size: 11px; margin: 8px 0; }
+  #send { display: flex; gap: 8px; margin-top: 8px; }
+  #send input { flex: 1; }
+  .people { font-size: 12px; color: var(--sub); }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--leaf); margin-right: 4px; vertical-align: middle; }
+
+  /* 명상 */
+  #breath {
+    position: fixed; inset: 0; background: var(--bg);
+    display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 10;
+    padding: 16px;
+  }
+  #breath.show { display: flex; }
+  .orb-box { width: 240px; height: 240px; display: flex; align-items: center; justify-content: center; }
+  .orb {
+    width: 90px; height: 90px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, var(--leaf-soft), var(--leaf));
+    opacity: .85;
+    transform: scale(1);
+  }
+  #phase { font-size: 14px; margin-top: 18px; }
+  #count { color: var(--sub); font-size: 12px; margin-top: 4px; min-height: 18px; }
+  .patterns { margin-top: 18px; justify-content: center; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- 입장 -->
+<div id="gate">
+  <div class="card">
+    <div class="leafmark">🌿</div>
+    <h1>톰앤수 가든</h1>
+    <div class="sub">아는 사람만 오는 작은 정원입니다.</div>
+    <div class="gap"></div>
+    <label class="sub" for="nick">닉네임</label>
+    <input id="nick" type="text" maxlength="20" autocomplete="nickname">
+    <div class="gap"></div>
+    <label class="sub" for="pass">입장 암호</label>
+    <input id="pass" type="password" autocomplete="current-password">
+    <div class="gap"></div>
+    <div class="err" id="gateErr"></div>
+    <button class="main" id="enter" style="width:100%">들어가기</button>
+  </div>
+</div>
+
+<!-- 정원 -->
+<div id="garden" class="wrap hidden">
+  <div class="top">
+    <h1>🌿 톰앤수 가든</h1>
+    <div class="who"><span id="me"></span> · <a href="#" id="leave" style="color:inherit">나가기</a></div>
+  </div>
+  <div class="note" id="modeNote"></div>
+
+  <div class="card">
+    <h2>음악</h2>
+    <div class="row">
+      <button data-sound="rain">빗소리</button>
+      <button data-sound="pad">잔잔한 화음</button>
+      <button data-sound="wave">파도</button>
+      <span class="sub">소리</span>
+      <input class="vol" id="vol" type="range" min="0" max="100" value="45">
+    </div>
+    <div class="note">브라우저에서 바로 만들어 내는 소리라 저작권 걱정이 없습니다.</div>
+  </div>
+
+  <div class="card">
+    <h2>명상</h2>
+    <div class="row">
+      <button class="main" id="breathOpen">호흡 시작</button>
+      <span class="sub">원이 커지면 들이쉬고, 작아지면 내쉽니다.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="top">
+      <h2 style="margin:0">대화</h2>
+      <div class="people" id="people"></div>
+    </div>
+    <div class="gap"></div>
+    <div id="log"></div>
+    <form id="send" autocomplete="off">
+      <input id="text" type="text" maxlength="500" placeholder="마음 편히 적어 주세요">
+      <button class="main" type="submit">보내기</button>
+    </form>
+  </div>
+</div>
+
+<!-- 호흡 화면 -->
+<div id="breath">
+  <div class="orb-box"><div class="orb" id="orb"></div></div>
+  <div id="phase">준비</div>
+  <div id="count"></div>
+  <div class="row patterns">
+    <button data-pattern="calm" class="on">편안하게 4·2·6</button>
+    <button data-pattern="box">네모 호흡 4·4·4·4</button>
+    <button data-pattern="sleep">잠들기 4·7·8</button>
+  </div>
+  <div class="gap"></div>
+  <button id="breathClose">마치기</button>
+</div>
+
+<script src="config.js"></script>
+<script>
+(function () {
+  "use strict";
+  var CFG = window.GARDEN_CONFIG || {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function forget(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  async function sha(text) {
+    var buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  }
+
+  // ---------- 입장 ----------
+  var me = { nick: "", room: "", id: Math.random().toString(36).slice(2, 10) };
+  $("nick").value = store("garden_nick") || "";
+
+  async function enter(nick, pass, quiet) {
+    nick = (nick || "").trim().slice(0, 20);
+    if (!nick) { if (!quiet) $("gateErr").textContent = "닉네임을 적어 주세요."; return; }
+    if (!pass) { if (!quiet) $("gateErr").textContent = "입장 암호를 적어 주세요."; return; }
+    var room = (await sha("tomnsu-garden|" + pass)).slice(0, 40);
+    if (CFG.passCheck) {
+      var check = await sha("check|" + room);
+      if (check !== CFG.passCheck) { if (!quiet) $("gateErr").textContent = "암호가 맞지 않습니다."; return; }
+    }
+    me.nick = nick; me.room = room;
+    store("garden_nick", nick);
+    store("garden_room", room);
+    $("gate").classList.add("hidden");
+    $("garden").classList.remove("hidden");
+    $("me").textContent = nick;
+    startChat();
+  }
+
+  $("enter").onclick = function () { enter($("nick").value, $("pass").value); };
+  $("pass").addEventListener("keydown", function (e) { if (e.key === "Enter") $("enter").click(); });
+
+  // 한 번 들어온 기기는 다시 암호를 묻지 않음
+  (async function auto() {
+    var room = store("garden_room"), nick = store("garden_nick");
+    if (!room || !nick) return;
+    if (CFG.passCheck && (await sha("check|" + room)) !== CFG.passCheck) { forget("garden_room"); return; }
+    me.nick = nick; me.room = room;
+    $("gate").classList.add("hidden");
+    $("garden").classList.remove("hidden");
+    $("me").textContent = nick;
+    startChat();
+  })();
+
+  $("leave").onclick = function (e) {
+    e.preventDefault();
+    forget("garden_room");
+    location.reload();
+  };
+
+  // ---------- 대화 ----------
+  var chatStarted = false;
+  function timeText(t) {
+    var d = new Date(t || Date.now());
+    var h = d.getHours(), m = String(d.getMinutes()).padStart(2, "0");
+    var today = new Date().toDateString() === d.toDateString();
+    var day = today ? "" : (d.getMonth() + 1) + "/" + d.getDate() + " ";
+    return day + (h < 12 ? "오전 " : "오후 ") + ((h % 12) || 12) + ":" + m;
+  }
+  function addMsg(v) {
+    var log = $("log");
+    var near = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+    var div = document.createElement("div");
+    div.className = "msg" + (v.u === me.id || (v.n === me.nick && v.u === undefined) ? " mine" : "");
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = v.n + " · " + timeText(v.t);
+    var body = document.createElement("div");
+    body.className = "body";
+    body.textContent = v.m;
+    div.appendChild(meta); div.appendChild(body);
+    log.appendChild(div);
+    if (near) log.scrollTop = log.scrollHeight;
+  }
+  function sysMsg(text) {
+    var d = document.createElement("div");
+    d.className = "sys"; d.textContent = text;
+    $("log").appendChild(d);
+  }
+
+  function startChat() {
+    if (chatStarted) return;
+    chatStarted = true;
+    if (!CFG.firebase) {
+      $("modeNote").textContent = "미리보기입니다. 대화는 지금 이 화면에만 보이고 저장되지 않습니다.";
+      sysMsg("정원에 오신 것을 환영합니다.");
+      $("people").innerHTML = '<span class="dot"></span>' + escapeHtml(me.nick);
+      $("send").onsubmit = function (e) {
+        e.preventDefault();
+        var m = $("text").value.trim();
+        if (!m) return;
+        addMsg({ n: me.nick, m: m, t: Date.now(), u: me.id });
+        $("text").value = "";
+      };
+      return;
+    }
+    loadFirebase(function () {
+      var app = firebase.initializeApp(CFG.firebase);
+      var db = firebase.database();
+      var base = "rooms/" + me.room;
+      var msgs = db.ref(base + "/messages");
+      sysMsg("정원에 오신 것을 환영합니다.");
+      msgs.limitToLast(200).on("child_added", function (s) { addMsg(s.val()); });
+
+      // 지금 있는 사람
+      var mine = db.ref(base + "/online/" + me.id);
+      db.ref(".info/connected").on("value", function (s) {
+        if (s.val() !== true) return;
+        mine.onDisconnect().remove();
+        mine.set({ n: me.nick });
+      });
+      db.ref(base + "/online").on("value", function (s) {
+        var names = [];
+        s.forEach(function (c) { var v = c.val(); if (v && v.n && names.indexOf(v.n) < 0) names.push(v.n); });
+        $("people").innerHTML = names.map(function (n) { return '<span class="dot"></span>' + escapeHtml(n); }).join(" &nbsp;");
+      });
+
+      $("send").onsubmit = function (e) {
+        e.preventDefault();
+        var m = $("text").value.trim().slice(0, 500);
+        if (!m) return;
+        msgs.push({ n: me.nick, m: m, t: firebase.database.ServerValue.TIMESTAMP, u: me.id })
+          .catch(function () { sysMsg("보내지 못했습니다. 잠시 뒤 다시 해 주세요."); });
+        $("text").value = "";
+      };
+    });
+  }
+
+  function loadFirebase(done) {
+    var urls = [
+      "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js",
+      "https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"
+    ];
+    (function next(i) {
+      if (i >= urls.length) return done();
+      var s = document.createElement("script");
+      s.src = urls[i];
+      s.onload = function () { next(i + 1); };
+      s.onerror = function () { sysMsg("대화 연결을 불러오지 못했습니다."); };
+      document.head.appendChild(s);
+    })(0);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
+  }
+
+  // ---------- 음악 (웹 오디오로 직접 만드는 소리) ----------
+  var ctx = null, master = null, current = null, currentName = "";
+  function audio() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain();
+      master.gain.value = $("vol").value / 100;
+      master.connect(ctx.destination);
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  $("vol").oninput = function () { if (master) master.gain.setTargetAtTime(this.value / 100, ctx.currentTime, 0.1); };
+
+  function noiseBuffer(c, brown) {
+    var len = c.sampleRate * 4, buf = c.createBuffer(2, len, c.sampleRate);
+    for (var ch = 0; ch < 2; ch++) {
+      var d = buf.getChannelData(ch), last = 0;
+      for (var i = 0; i < len; i++) {
+        var w = Math.random() * 2 - 1;
+        if (brown) { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+        else d[i] = w;
+      }
+    }
+    return buf;
+  }
+
+  function makeRain(c) {
+    var out = c.createGain(); out.gain.value = 0;
+    var src = c.createBufferSource(); src.buffer = noiseBuffer(c, false); src.loop = true;
+    var hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 400;
+    var lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2600;
+    var g = c.createGain(); g.gain.value = 0.18;
+    src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out);
+    var src2 = c.createBufferSource(); src2.buffer = noiseBuffer(c, true); src2.loop = true;
+    var g2 = c.createGain(); g2.gain.value = 0.35;
+    src2.connect(g2); g2.connect(out);
+    src.start(); src2.start();
+    // 가끔 떨어지는 물방울
+    var drops = setInterval(function () {
+      if (Math.random() < 0.5) return;
+      var o = c.createOscillator(), dg = c.createGain(), t = c.currentTime;
+      o.type = "sine"; o.frequency.setValueAtTime(1400 + Math.random() * 1600, t);
+      o.frequency.exponentialRampToValueAtTime(500, t + 0.06);
+      dg.gain.setValueAtTime(0.0001, t);
+      dg.gain.exponentialRampToValueAtTime(0.03, t + 0.005);
+      dg.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+      o.connect(dg); dg.connect(out); o.start(t); o.stop(t + 0.1);
+    }, 180);
+    return { out: out, stop: function () { clearInterval(drops); src.stop(); src2.stop(); } };
+  }
+
+  function makeWave(c) {
+    var out = c.createGain(); out.gain.value = 0;
+    var src = c.createBufferSource(); src.buffer = noiseBuffer(c, true); src.loop = true;
+    var lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 700;
+    var swell = c.createGain(); swell.gain.value = 0.5;
+    var lfo = c.createOscillator(); lfo.frequency.value = 0.09;
+    var depth = c.createGain(); depth.gain.value = 0.45;
+    lfo.connect(depth); depth.connect(swell.gain);
+    var lfo2 = c.createOscillator(); lfo2.frequency.value = 0.09;
+    var fdepth = c.createGain(); fdepth.gain.value = 400;
+    lfo2.connect(fdepth); fdepth.connect(lp.frequency);
+    src.connect(lp); lp.connect(swell); swell.connect(out);
+    src.start(); lfo.start(); lfo2.start();
+    return { out: out, stop: function () { src.stop(); lfo.stop(); lfo2.stop(); } };
+  }
+
+  function makePad(c) {
+    var out = c.createGain(); out.gain.value = 0;
+    var delay = c.createDelay(2); delay.delayTime.value = 0.45;
+    var fb = c.createGain(); fb.gain.value = 0.35;
+    var lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1200;
+    delay.connect(fb); fb.connect(delay); delay.connect(lp); lp.connect(out);
+    var chords = [
+      [130.81, 196.0, 246.94, 329.63],   // C maj7 느낌
+      [110.0, 164.81, 220.0, 261.63],    // A m7
+      [87.31, 174.61, 220.0, 261.63],    // F maj7
+      [98.0, 146.83, 196.0, 246.94]      // G
+    ];
+    var oscs = [], idx = 0, voices = [];
+    for (var i = 0; i < 4; i++) {
+      var o = c.createOscillator(); o.type = i === 0 ? "sine" : "triangle";
+      var g = c.createGain(); g.gain.value = i === 0 ? 0.12 : 0.05;
+      var o2 = c.createOscillator(); o2.type = "sine"; o2.detune.value = 6;
+      var g2 = c.createGain(); g2.gain.value = 0.04;
+      o.connect(g); o2.connect(g2); g.connect(out); g2.connect(out); g.connect(delay); g2.connect(delay);
+      o.start(); o2.start();
+      oscs.push(o, o2); voices.push([o, o2]);
+    }
+    function setChord() {
+      var t = c.currentTime, ch = chords[idx % chords.length];
+      voices.forEach(function (v, i) {
+        v[0].frequency.setTargetAtTime(ch[i], t, 1.2);
+        v[1].frequency.setTargetAtTime(ch[i] * (i === 0 ? 2 : 1), t, 1.2);
+      });
+      idx++;
+    }
+    setChord();
+    var timer = setInterval(setChord, 8000);
+    return { out: out, stop: function () { clearInterval(timer); oscs.forEach(function (o) { o.stop(); }); } };
+  }
+
+  var makers = { rain: makeRain, wave: makeWave, pad: makePad };
+  function stopSound() {
+    if (!current) return;
+    var s = current, t = ctx.currentTime;
+    s.out.gain.setTargetAtTime(0, t, 0.4);
+    setTimeout(function () { s.stop(); s.out.disconnect(); }, 2000);
+    current = null; currentName = "";
+  }
+  document.querySelectorAll("[data-sound]").forEach(function (b) {
+    b.onclick = function () {
+      var name = b.getAttribute("data-sound");
+      var c = audio();
+      var same = currentName === name;
+      stopSound();
+      document.querySelectorAll("[data-sound]").forEach(function (x) { x.classList.remove("on"); });
+      if (same) return;
+      current = makers[name](c); currentName = name;
+      current.out.connect(master);
+      current.out.gain.setTargetAtTime(1, c.currentTime, 0.8);
+      b.classList.add("on");
+    };
+  });
+
+  // ---------- 명상 (호흡 안내) ----------
+  var patterns = {
+    calm:  [["들이쉬기", 4, 1.9], ["멈추기", 2, 1.9], ["내쉬기", 6, 1]],
+    box:   [["들이쉬기", 4, 1.9], ["멈추기", 4, 1.9], ["내쉬기", 4, 1], ["멈추기", 4, 1]],
+    sleep: [["들이쉬기", 4, 1.9], ["멈추기", 7, 1.9], ["내쉬기", 8, 1]]
+  };
+  var pattern = "calm", step = 0, left = 0, ticker = null, rounds = 0;
+  function runStep() {
+    var p = patterns[pattern][step];
+    left = p[1];
+    $("phase").textContent = p[0];
+    $("count").textContent = left;
+    var orb = $("orb");
+    orb.style.transition = "transform " + p[1] + "s ease-in-out";
+    orb.style.transform = "scale(" + p[2] + ")";
+  }
+  function startBreath() {
+    clearInterval(ticker);
+    step = 0; rounds = 0;
+    runStep();
+    ticker = setInterval(function () {
+      left--;
+      if (left > 0) { $("count").textContent = left; return; }
+      step++;
+      if (step >= patterns[pattern].length) { step = 0; rounds++; }
+      runStep();
+    }, 1000);
+  }
+  $("breathOpen").onclick = function () { $("breath").classList.add("show"); startBreath(); };
+  $("breathClose").onclick = function () {
+    clearInterval(ticker);
+    $("breath").classList.remove("show");
+    $("orb").style.transition = "none"; $("orb").style.transform = "scale(1)";
+  };
+  document.querySelectorAll("[data-pattern]").forEach(function (b) {
+    b.onclick = function () {
+      pattern = b.getAttribute("data-pattern");
+      document.querySelectorAll("[data-pattern]").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on");
+      startBreath();
+    };
+  });
+})();
+</script>
+</body>
+</html>
