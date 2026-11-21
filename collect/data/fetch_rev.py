@@ -26,7 +26,7 @@ d=pd.DataFrame(r,columns=['번호','연매출(원)','통화'])
 # 11/21 의장: 야후가 막아 빈 한국 종목은 한투 최근 4분기 매출 합(원)
 try:
     import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import kis
-    KR=N[(N['구분']=='개별주')&(N['시장']=='한국')].set_index('번호')['코드'].astype(str).str.split('.').str[0].str.zfill(6).to_dict()
+    KR=N[(N['구분']=='개별주')&(N['시장']=='한국')].set_index('번호')['코드' if '코드' in N else 'yfinance 티커'].astype(str).str.split('.').str[0].str.zfill(6).to_dict()   # 닉스.csv엔 코드 칸이 없어 야후 티커 앞부분
     # 11/21 23:47 의장: 한국은 한투가 먼저(최근 4분기 매출 합), 한투가 비면 야후 값
     if kis.ready():
         ok=0

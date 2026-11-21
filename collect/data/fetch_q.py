@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 warnings.filterwarnings('ignore')
 N=pd.read_csv('in/닉스.csv',encoding='utf-8-sig')
 t=N[(N['구분']=='개별주')&(N['시장'].isin(['한국','미국']))][['번호','yfinance 티커']]
-KR=N[(N['구분']=='개별주')&(N['시장']=='한국')].set_index('번호')['코드'].astype(str).str.split('.').str[0].str.zfill(6).to_dict()
+KR=N[(N['구분']=='개별주')&(N['시장']=='한국')].set_index('번호')['코드' if '코드' in N else 'yfinance 티커'].astype(str).str.split('.').str[0].str.zfill(6).to_dict()   # 닉스.csv엔 코드 칸이 없어 야후 티커 앞부분
 def one(a):
     no,tk=a; out=[]
     q=None

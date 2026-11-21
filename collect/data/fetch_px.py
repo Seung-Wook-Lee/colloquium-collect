@@ -14,7 +14,7 @@ try:
         got=[]
         for x in bad:
             r=M.loc[x]; mk=r.get('시장')
-            if mk=='한국': k=kis.daily_kr(str(r.get('코드')).split('.')[0])
+            if mk=='한국': k=kis.daily_kr(str(r.get('코드') or x).split('.')[0])
             elif mk=='미국': k=kis.daily_us(r.get('코드') or x, r.get('거래소'))
             else: continue
             if not len(k): continue
