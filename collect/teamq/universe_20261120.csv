@@ -38,7 +38,6 @@ K38,TIGER 코리아AI전력기기TOP3플러스,한국,KOSPI,ETF,전력기기,011
 K39,HANARO 원자력iSelect,한국,KOSPI,ETF,원자력,434730,434730.KS
 K42,TIGER KRX금현물,한국,KOSPI,ETF,금,0072R0,0072R0.KS
 K43,TIGER 머니마켓액티브,한국,KOSPI,ETF,현금성(MMF형),0043B0,0043B0.KS
-K44,TIGER 코스닥150,한국,KOSPI,ETF,코스닥150 지수,232080,232080.KS
 K45,KODEX 미국러셀2000(H),한국,KOSPI,ETF,미국 소형주,280930,280930.KS
 K46,KODEX 200타겟위클리커버드콜,한국,KOSPI,ETF,코스피200 커버드콜,498400,498400.KS
 K47,TIGER 200타겟위클리커버드콜,한국,KOSPI,ETF,코스피200 커버드콜,0104N0,0104N0.KS
@@ -92,8 +91,6 @@ G56,SK hynix (ADR),미국,NASDAQ,개별주,반도체(메모리) ADR,SKHY,SKHY
 G57,iShares MSCI South Korea ETF,미국,NYSE Arca,ETF,한국 주식(달러),EWY,EWY
 G58,Advanced Micro Devices,미국,NASDAQ,개별주,반도체(CPU·GPU),AMD,AMD
 K53,한미반도체,한국,KOSPI,개별주,반도체 장비(TC본더),042700,042700.KS
-K54,리노공업,한국,KOSDAQ,개별주,반도체 테스트 소켓,058470,058470.KQ
-K58,에스피지,한국,KOSDAQ,개별주,정밀 감속기·로봇,058610,058610.KQ
 K59,코스맥스,한국,KOSPI,개별주,화장품 ODM,192820,192820.KS
 K61,셀트리온,한국,KOSPI,개별주,바이오시밀러,068270,068270.KS
 K62,미래에셋증권,한국,KOSPI,개별주,증권,006800,006800.KS
