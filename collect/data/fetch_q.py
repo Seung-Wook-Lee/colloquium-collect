@@ -6,8 +6,13 @@ N=pd.read_csv('in/닉스.csv',encoding='utf-8-sig')
 t=N[(N['구분']=='개별주')&(N['시장'].isin(['한국','미국']))][['번호','yfinance 티커']]
 def one(a):
     no,tk=a; out=[]
+    q=None
+    for _ in range(2):   # 11/21: 한 번 실패(기아)하면 한 번 더
+        try:
+            q=yf.Ticker(tk).quarterly_income_stmt
+            if q is not None and len(q.columns): break
+        except Exception: q=None
     try:
-        q=yf.Ticker(tk).quarterly_income_stmt
         for c in q.columns:
             g=lambda k: q.loc[k,c] if k in q.index else None
             out.append(dict(번호=no,분기=str(c.date()),매출=g('Total Revenue'),영업이익=g('Operating Income'),순이익=g('Net Income'),출처='야후'))
