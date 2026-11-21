@@ -432,9 +432,12 @@ def miss_citadel(c):
             else:
                 out.append(L('시스템 거래 전환', '아직 아님' if (num(g.get('CTA σ 5일 변화')) or 0) <= 0 else '포지션은 오르지만 새 매수 신호 없음',
                              f"CTA 매수 신호 {int(buyn)}/3, 매수 전환까지 S&P {p(upp, 1)}, 변동성 목표 노출 5일 {p(vd, 2, '')}배"))
-        if rows:
-            out.append(L('포지셔닝', ', '.join(f"{r[0]} {r[1]}({r[3]})" for r in rows),
-                         f"VIX 1년 백분위 {n(g.get('VIX 1년 백분위(%)'), 0)}%, VXN 1년 백분위 {n(g.get('VXN 1년 백분위(%)'), 0)}%"))
+        vp = num(g.get('VIX 1년 백분위(%)'))
+        if vp is not None:
+            rows.append(['VIX·VXN 1년 백분위', f"{n(vp, 0)}% · {n(g.get('VXN 1년 백분위(%)'), 0)}%",
+                         f"{n(w.get('VIX 1년 백분위(%)'), 0)}% · {n(w.get('VXN 1년 백분위(%)'), 0)}%", '',
+                         '지난 1년 중 지금보다 낮았던 날의 비율(S&P500 · 나스닥100 변동성)'])
+        if rows:   # 11/21 의장 "4줄 표로, 나열식은 왠만하면 쓰지마": 줄 나열 없이 표만
             G.append({'type': 'grid', 'title': '포지셔닝', 'columns': ['지표', '오늘', '1주 전', '구간', '읽는 법'], 'rows': rows, 'source': '수급포지셔닝.csv'})
     MM = _read(c.d, 'MMF')
     if len(MM):
