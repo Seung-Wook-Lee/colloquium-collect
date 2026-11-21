@@ -722,12 +722,81 @@ def bottom(day, name, title='바닥 근접도'):
                     f'2000년부터 해마다 그 전 자료로만 학습해 검정({tt}).</div>', unsafe_allow_html=True)
 
 
+@st.cache_data(ttl=3 * 3600, show_spinner='분할 매수 판정 계산 중…')
+def buy_plan():
+    """11/21 의장: '다음 주부터 3주, 금요일마다 현금 1/3씩 지수를 사겠다. 어때?'에 매번 답하는 장치(market/buy_plan.py)."""
+    sys.path.insert(0, str(ROOT / 'app' / 'market'))
+    import buy_plan as BP
+    return BP.judge()
+
+
+def block_bottom():
+    """11/21 의장: 'CTA가 −4 아래로 내려가는 식의 블록을 이용한 방법을 바닥 찾기로 만들어서 제일 위에'. 공포탐욕 카드 모양, 첫 줄 '오늘은 ~'."""
+    try:
+        J = buy_plan()
+    except Exception as e:   # noqa: BLE001
+        st.caption(f'바닥 찾기 계산 실패: {e}')
+        return
+    G, GR = '#2e7d32', '#9a9a9a'
+    v = J['값']; on = J['블록']
+    S = {r['지수']: r for r in J['지수']}
+    T = {k: r['표'].set_index('신호') for k, r in S.items()}
+    n_on = sum(on.values()); fear = ['B02 VIX > VIX3M', 'B06 CTA ≤ −4', 'B06 변동성 목표 노출 < 0.6배']
+    f_on = sum(on.get(k, False) for k in fear)
+
+    def rec(sig):
+        out = []
+        for k in ('S&P500', '나스닥100'):
+            t = T[k].loc[sig]
+            w = int(round(t.이김 * t.사례)) if t.사례 else 0
+            out.append(f"{k} {t.사례}번 중 {w}번" if w < t.사례 else f"{k} {t.사례}번 모두")
+        return ' · '.join(out)
+    cur = '기회 블록 3개 이상' if n_on >= 3 else None
+    if f_on == 3:
+        head = f'오늘은 공포 쪽 기회 블록 3개가 모두 켜졌습니다. 과거 이 상태에서 다음 주부터 3주 나눠 산 경우 {rec("공포 쪽 기회 블록 3개 모두")} 13주 뒤 이겼습니다.'
+    elif cur:
+        head = (f'오늘은 기회 블록 6개 중 {n_on}개가 켜졌습니다. 과거 이 상태에서 다음 주부터 3주 나눠 산 경우 {rec(cur)} 13주 뒤 이겼습니다. '
+                f'CTA가 −4 아래로 내려가면(지금 {v.get("CTA"):.2f}) 공포 쪽 3개가 모두 켜지고, 그때는 과거 {rec("공포 쪽 기회 블록 3개 모두")} 이겼습니다.')
+    else:
+        head = f'오늘은 기회 블록 6개 중 {n_on}개가 켜졌습니다. 바닥 찾기 신호(3개 이상)는 아직입니다.'
+    VAL = {'B02 MOVE ≥100': (f"{v.get('MOVE'):.0f}", '채권 변동성. 100 이상이면 채권 쪽 공포'),
+           'B02 VIX > VIX3M': (f"{v.get('VIX−VIX3M'):+.2f}", '1달 변동성이 3달보다 높음 = 단기 공포'),
+           'B06 CTA ≤ −4': (f"{v.get('CTA'):.2f}", '추세추종 펀드 포지션. −4 아래 = 이미 많이 팜'),
+           'B06 변동성 목표 노출 < 0.6배': (f"{v.get('변동성목표'):.2f}배", '변동성 목표 펀드 주식 비중. 0.6배 아래 = 기계적 매도 많이 나옴'),
+           'B06 시스템 매수 전환': ('예' if on.get('B06 시스템 매수 전환') else '아니오', '5일 사이 CTA 매수 신호가 늘고 포지션이 오름'),
+           'B06 CTA 플러스 전환': ('예' if on.get('B06 CTA 플러스 전환') else '아니오', 'CTA 포지션이 0 위로 올라섬')}
+    with st.container(border=True):
+        st.markdown(sec_title('바닥 찾기 | 마켓 센터'), unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:14px;color:#222;line-height:1.7;margin:2px 0 10px'>{head}</div>", unsafe_allow_html=True)
+        cols = st.columns(3)
+        for i, (k, (val, desc)) in enumerate(VAL.items()):
+            lit = on.get(k, False)
+            with cols[i % 3].container(border=True):
+                st.html(f"<div style='font-size:12px;color:#666'>{k}</div>"
+                        f"<div style='font-size:20px;color:{G if lit else '#333'};line-height:1.4'>{val}"
+                        f"<span style='font-size:12px;color:{G if lit else GR};margin-left:6px'>{'켜짐' if lit else '아직'}</span></div>"
+                        f"<div style='font-size:12px;color:#888;line-height:1.5'>{desc}</div>")
+        st.markdown("<div class='box-t' style='margin-top:8px'>신호별 과거 성적 (다음 주부터 3주 금요일 나눠 사서 13주 뒤, 2006~)</div>", unsafe_allow_html=True)
+        chips = ''
+        for sig in ['공포 쪽 기회 블록 3개 모두', '기회 블록 3개 이상', '바닥 확률 ≥50% + RSI 30↓·주RSI 35↓', '바닥 확률 ≥50%']:
+            lit = bool(T['S&P500'].loc[sig].오늘)
+            worst = min(T[k].loc[sig].최악 for k in T)
+            col = G if lit else '#cfcfcf'
+            chips += (f"<div style='border-left:3px solid {col};padding:6px 10px;margin:6px 0;background:#fafafa'>"
+                      f"<div style='font-size:13px;color:#333'>{sig} <span style='font-size:12px;color:{G if lit else GR}'>{'오늘 켜짐' if lit else '아직'}</span></div>"
+                      f"<div style='font-size:12px;color:#888'>{rec(sig)} 이김 · 최악 {worst * 100:+.1f}%</div></div>")
+        st.html(chips)
+        st.markdown('<div class="note">- 하락 한 번 = 한 건(52주 고점 −10% 이후 그 고점 회복까지), 신호가 처음 켜진 금요일 기준. 사는 요일(월·수·금)은 결과 차이 작음.<br>'
+                    '- 블록 공식은 blocks.yaml 그대로, CTA·변동성 목표는 수급 수집 코드 계산 그대로.</div>', unsafe_allow_html=True)
+
+
 if not LOCAL and not drive.ready():
     st.error('드라이브 창구 비밀값(DRIVE_URL·DRIVE_TOKEN)이 없습니다.')
     st.stop()
 
 today = dt.datetime.now(KST).date()
 day = st.date_input('날짜', today, max_value=today).strftime('%Y%m%d')
+block_bottom()   # 11/21 의장: 블록 바닥 찾기를 맨 위에
 
 for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
     with tab:
