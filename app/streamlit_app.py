@@ -473,8 +473,9 @@ def render(body):
 
     def flush():
         if rows:
-            t = '| 항목 | 내용 |\n|---|---|\n' + '\n'.join(f'| {circ(r[0])} | {r[1].replace("|", "·")} |' for r in rows)
-            st.markdown(t)
+            # 11/21 의장 "글자 크기를 줄여서 1줄로": 항목 칸은 작은 글씨·줄바꿈 없음
+            t = '| 항목 | 내용 |\n|---|---|\n' + '\n'.join(f'| <span style="white-space:nowrap;font-size:0.82em">{circ(r[0])}</span> | {r[1].replace("|", "·")} |' for r in rows)
+            st.markdown(t, unsafe_allow_html=True)
             rows.clear()
 
     merged = []
