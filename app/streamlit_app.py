@@ -15,7 +15,7 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT / 'collect'), str(ROOT / 'app')]   # 11/21 두 폴더: collect(수집)·app(스튜디오)
 try:
-    for k in ('DRIVE_URL', 'DRIVE_TOKEN', 'COLLOQ_DATA'):
+    for k in ('DRIVE_URL', 'DRIVE_TOKEN', 'COLLOQ_DATA', 'GEMINI_API_KEY'):
         if k in st.secrets and not os.environ.get(k):
             os.environ[k] = str(st.secrets[k])
 except Exception:
@@ -480,9 +480,36 @@ def dot(name, col):
     return f'<span title="{name}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{col};margin-left:3px;vertical-align:middle"></span>'
 
 
+_KO = None
+
+
+def ko(v):
+    """11/21 의장 "번역하라니까. 한글로": 영어 줄은 한글 번역(app/ko_cache.json, 없으면 제미나이 키가 있을 때 바로 번역)."""
+    global _KO
+    if _KO is None:
+        try:
+            import json
+            _KO = json.load(open(Path(__file__).resolve().parent / 'ko_cache.json', encoding='utf-8'))
+        except Exception:   # noqa: BLE001
+            _KO = {}
+    t = str(v).strip()
+    if t in _KO:
+        return _KO[t]
+    if len(re.findall(r'[A-Za-z]', t)) > 15 and not re.search('[가-힣]', t) and os.environ.get('GEMINI_API_KEY'):
+        try:
+            import ko_translate
+            r = ko_translate.translate([t], log=lambda *a: None)[0]
+            if r:
+                _KO[t] = r
+                return r
+        except Exception:   # noqa: BLE001
+            pass
+    return t
+
+
 def lines_(v):
     """내용 한 칸: 쉼표·가운뎃점으로 이어 쓴 것을 줄바꿈 + '- '로(11/21 의장). 빠지는 이유는 색 점. '$'는 &#36;(수식으로 안 깨지게)."""
-    v = str(v).replace('$', '&#36;').replace('빠지는 이유: ', '')
+    v = ko(v).replace('$', '&#36;').replace('빠지는 이유: ', '')
     news = ''
     if '기사: ' in v:   # 기사 제목 안의 쉼표·가운뎃점은 나누지 않음
         v, news = v.split('기사: ', 1)

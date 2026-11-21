@@ -8,7 +8,7 @@ import time
 import requests
 
 API = 'https://generativelanguage.googleapis.com/v1beta'
-MODELS = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite']
+MODELS = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest']   # 11/21: 2.5는 404(서비스 종료)
 HANGUL = re.compile('[가-힣]')
 PROMPT = '''아래 영어 경제 기사 문장을 한국어로 번역하라. 신문 제목·요약 문체로 짧고 정확하게.
 회사·지수·인명은 한국 언론이 쓰는 표기(엔비디아, 앤트로픽, S&P500 등). 숫자·단위는 원문 그대로. 원문에 없는 말을 보태지 않는다.
