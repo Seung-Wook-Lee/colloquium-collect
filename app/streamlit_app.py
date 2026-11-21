@@ -25,26 +25,32 @@ import drive  # noqa: E402
 st.set_page_config(page_title='스튜디오 톰앤수 회의', page_icon='📊', layout='wide')
 st.markdown('''<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
 <style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css');
 .block-container {max-width: 1100px; padding-top: 2rem;}
-.stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th {font-size: 16px; line-height: 1.9;}
+.stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th {font-size: 13.5px; line-height: 1.65;}
 .stMarkdown table {width: 100%; border-collapse: collapse;}
-.stMarkdown td, .stMarkdown th {padding: 8px 12px;}
-.item-t {font-size: 15px; font-weight: 400; color: #555; padding-top: 6px;}
-.item-v {font-size: 17px; font-weight: 400; line-height: 1.6;}
+.it {width: 100%; border-collapse: collapse; margin: 2px 0 6px;}
+.it td {font-size: 13px !important; line-height: 1.6; padding: 6px 8px !important; border: none !important; border-bottom: 1px solid #eee !important; vertical-align: top; color: #222;}
+.it td.k {font-size: 12px !important; color: #666; white-space: nowrap; width: 30%;}
+.stMarkdown td, .stMarkdown th {padding: 6px 10px;}
+.item-t {font-size: 12.5px; font-weight: 400; color: #555; padding-top: 6px;}
+.item-v {font-size: 13.5px; font-weight: 400; line-height: 1.6;}
 h1, h2, h3, h4, h5 {font-weight: 500 !important; letter-spacing: -0.2px;}
+h4 {font-size: 15px !important;}
 .stMarkdown strong, .stMarkdown b, [data-testid="stMetricValue"] {font-weight: 500 !important;}
-.stMarkdown th {font-weight: 500;}
+.stMarkdown th {font-weight: 500; font-size: 12.5px; color: #777;}
 .why {font-size: 13px; color: #888; line-height: 1.6;}
-.sec-t {font-size: 22px; font-weight: 500; line-height: 1.4; margin: 2px 0 10px; font-family: inherit; font-variant-numeric: lining-nums;}
-.big-t td, .big-t th {font-size: 18px !important; padding: 8px 14px !important;}
-.who {font-size: 14px; font-weight: 500; color: #4a4a4a; margin-left: 10px; letter-spacing: 0.2px;}
-.box-t {font-size: 17px; font-weight: 500; color: #333; margin-bottom: 4px;}
+.sec-t {font-size: 18px; font-weight: 500; line-height: 1.4; margin: 2px 0 10px; font-family: inherit; font-variant-numeric: lining-nums;}
+.big-t td, .big-t th {font-size: 14px !important; padding: 8px 14px !important;}
+.who {font-size: 12px; font-weight: 500; color: #4a4a4a; margin-left: 10px; letter-spacing: 0.2px;}
+.box-t {font-size: 14.5px; font-weight: 500; color: #333; margin-bottom: 4px;}
 .note {font-size: 12px; color: #8a8a8a; line-height: 1.6; margin-top: 10px;}
 .sub {font-size: 13px; color: #888; line-height: 1.7;}
 .num-t {width: 100%; border-collapse: collapse; margin-top: 4px;}
 .num-t th {font-size: 12.5px !important; font-weight: 400 !important; color: #999; text-align: right; padding: 4px 10px !important; border: none !important; border-bottom: 1px solid #eee !important;}
-.num-t td {font-size: 24px !important; font-weight: 400; color: #222; text-align: right; padding: 6px 10px !important; border: none !important; font-variant-numeric: tabular-nums;}
-.num-t td.lab {font-size: 13px !important; color: #888; text-align: left;}
+.num-t td {font-size: 16px !important; font-weight: 400; color: #222; text-align: right; padding: 6px 10px !important; border: none !important; font-variant-numeric: tabular-nums;}
+.num-t td.lab {font-size: 12px !important; color: #888; text-align: left; white-space: nowrap;}
+[data-testid="stMetricValue"] {font-size: 28px !important;}
 html, body, [class*='css'], .stMarkdown, .stMetric, button, input {font-family: 'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif !important;}
 </style>''', unsafe_allow_html=True)
 
@@ -67,7 +73,7 @@ def read(day, name):
 EN = [   # 11/20 의장: 사람·센터 이름은 영어로, 작게
     ('마켓 센터', 'Market Center'), ('엔진 블록 센터', 'Engine Block Center'), ('퀀트센터', 'Quant Center'), ('닉스 팀', 'Team Nyx'),
     ('미스터 마켓', 'Mr. Market'), ('미스 시타델', 'Miss Citadel'), ('미스 리스크', 'Miss Risk'), ('미스 차트', 'Miss Chart'),
-    ('미스 밸류', 'Miss Value'), ('미스 세마이', 'Miss Semi'), ('미스터 빅스', 'Mr. Bix'), ('미스터 로보', 'Mr. Robo'),
+    ('미스 밸류', 'Miss Value'), ('미스 세마이', 'Miss Semi'), ('미스터 빅스', 'Mr. Big'), ('미스터 로보', 'Mr. Robo'),
     ('미스 파이낸스', 'Miss Finance'), ('마담헤비', 'Madame Heavy'), ('일라이 존슨', 'Eli Johnson'), ('엘피스', 'Elpis'),
     ('클로토', 'Clotho'), ('라케시스', 'Lachesis'), ('아트로포스', 'Atropos'), ('뚜지', 'Ttuji'), ('국장', 'Chief'),
     ('(센터장)', ', Head'), ('(팀장)', ', Head'), ('센터장', 'Head'), ('팀장', 'Head')]
@@ -432,7 +438,19 @@ def signal_chips(md):
     """시장 블록 표 → 켜진 신호만 부담·기회 두 줄 칩(11/21 의장: 난잡한 표 대신)"""
     df = md_table(md)
     if df is None or '쪽' not in df or '오늘' not in df:
-        return False
+        # 11/21 의장: 원고 표는 '블록·질문·지표·오늘·공식'(좋고 나쁨 없음). 카드 색(빨강·초록)은 그대로 → 엔진 시장블록.csv에서 읽음
+        try:
+            M = read_csv(day, '시장블록.csv')
+        except Exception:   # noqa: BLE001
+            M = None
+        if M is None or '방향' not in M:
+            return False
+        M = M.copy()
+        M['_k'] = M['블록'].astype(str) + M['방향'].astype(str) + M['공식'].astype(str).str.replace(r'[−+-]?[\d.]+', '#', regex=True)
+        M['_on'] = M['결과'] == '통과'
+        M = M.sort_values('_on', ascending=False).drop_duplicates('_k')
+        df = pd.DataFrame({'쪽': M['방향'].astype(str), '오늘': M['_on'].map({True: '켜짐', False: '꺼짐'}), '질문': M['질문'].astype(str),
+                           '공식': ' — ' + M['공식'].astype(str).str.replace(r'\((기회|부담)\)', '', regex=True).str.strip()})
     on = df[df['오늘'].str.strip() == '켜짐']
     c1, c2 = st.columns(2, gap='large')
     for col, side, color, name in ((c1, '부담', RED, '나쁜 신호'), (c2, '기회', '#2e7d32', '좋은 신호')):
@@ -450,6 +468,47 @@ def signal_chips(md):
 
 SKIP_BOX = ('매크로 체크리스트', '리스크 표')   # 11/21 의장: 겹치는 표는 화면에서 뺌
 SKIP_ITEM = ('공포 쪽 지표', '탐욕 쪽 지표')
+
+
+# 11/21 의장 "시장보다 약함·동료보다 약함 이런 걸 다 써야 하나? 색깔 있는 작은 동그라미로" → 빠지는 이유는 색 점, 뜻은 칸 아래 한 줄
+WHY_DOT = [('시장보다 약함', '#c8372d'), ('동료보다 약함', '#e08a1e'), ('외국인 20일 순매도', '#2b6cb0'),
+           ('업종 ETF 자금 이탈', '#7b4fb3'), ('이익 추정치 하향', '#6b7280')]
+USED_DOTS = set()
+
+
+def dot(name, col):
+    return f'<span title="{name}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{col};margin-left:3px;vertical-align:middle"></span>'
+
+
+def lines_(v):
+    """내용 한 칸: 쉼표·가운뎃점으로 이어 쓴 것을 줄바꿈 + '- '로(11/21 의장). 빠지는 이유는 색 점. '$'는 &#36;(수식으로 안 깨지게)."""
+    v = str(v).replace('$', '&#36;').replace('빠지는 이유: ', '')
+    news = ''
+    if '기사: ' in v:   # 기사 제목 안의 쉼표·가운뎃점은 나누지 않음
+        v, news = v.split('기사: ', 1)
+        v = re.sub(r'\s*·\s*$', '', v.strip())
+    eng = len(re.findall(r'[A-Za-z]', v)) > 0.5 * max(1, len(re.findall(r'[A-Za-z가-힣]', v)))
+    if eng or v.lstrip().startswith(('"', "'")):   # 영어 기사 제목·인용은 쉼표로 나누지 않음
+        parts = [v.strip()]
+    else:
+        parts = [p.strip() for p in re.split(r',\s+(?![^()]*\))|\s+·\s+(?![^()]*\))|\s+\|\s+', v) if p.strip()]
+    dots, keep = [], []
+    for p in parts:
+        hit = next(((n, c) for n, c in WHY_DOT if p == n), None)
+        if hit:
+            dots.append(dot(*hit)); USED_DOTS.add(hit[0])
+        else:
+            keep.append(p)
+    if dots:
+        if keep:
+            keep[0] += ' ' + ''.join(dots)
+        else:
+            keep = [''.join(dots)]
+    if news:
+        keep.append(f'<span style="color:#2b6cb0">기사</span> {news.strip()}')
+    if len(keep) <= 1:
+        return keep[0] if keep else v
+    return '<br>'.join('- ' + p for p in keep)
 
 
 def render(body):
@@ -474,8 +533,13 @@ def render(body):
     def flush():
         if rows:
             # 11/21 의장 "글자 크기를 줄여서 1줄로": 항목 칸은 작은 글씨·줄바꿈 없음
-            t = '| 항목 | 내용 |\n|---|---|\n' + '\n'.join(f'| <span style="white-space:nowrap;font-size:0.82em">{circ(r[0])}</span> | {r[1].replace("|", "·")} |' for r in rows)
+            # 11/21 의장 "쉼표 대신 줄바꾸기와 - 표시, 작은 글씨": 내용은 ', '·' · ' 마다 줄을 바꿔 '- '로
+            # 11/21 의장 "글자 크기 키우지 말라": 표 머리줄 없이 작은 글씨 HTML 표(공포탐욕 카드와 같은 크기)
+            t = '<table class="it">' + ''.join(f'<tr><td class="k">{circ(r[0])}</td><td class="v">{lines_(r[1])}</td></tr>' for r in rows) + '</table>'
             st.markdown(t, unsafe_allow_html=True)
+            if USED_DOTS:
+                st.markdown('<div class="note">' + ' &nbsp; '.join(dot(n, c) + ' ' + n for n, c in WHY_DOT if n in USED_DOTS) + '</div>', unsafe_allow_html=True)
+                USED_DOTS.clear()
             rows.clear()
 
     merged = []
@@ -513,15 +577,17 @@ def render(body):
             stocks = STOCK.findall(val)
             if len(stocks) >= 2 or FLOW.search(val) and len(FLOW.findall(val)) >= 2 or (why and len(STAT.findall(why)) + bool(GROUP.search(why)) >= 2):
                 flush()
-                st.markdown(f'#### {title}')
+                st.markdown(f'<div class="box-t" style="margin-top:10px">{title}</div>', unsafe_allow_html=True)
                 if len(stocks) >= 2:
                     stock_chart(stocks)
                 elif not flow_chart(val):
                     st.markdown(f'<div class="item-v">{val}</div>', unsafe_allow_html=True)
                 if why:
                     stat_chart(why)
-            elif rows and (title.endswith(' 기사') or title.endswith(' 실적')) and rows[-1][0].startswith(title.rsplit(' ', 1)[0] + ' '):
-                rows[-1] = (rows[-1][0], rows[-1][1] + ' · ' + ('기사: ' if title.endswith(' 기사') else '실적: ') + val)   # 11/21 의장: 한 기업 한 칸
+            elif title.endswith(' 실적') and ('SEC' in why or 'DART' in why or '분기' in val):
+                continue   # 11/21 의장 "예전 자료 가지고 매출이나 얘기하고… 무슨 의미" → 실적 줄은 화면에 안 보임
+            elif rows and title.endswith(' 기사') and rows[-1][0].startswith(title.rsplit(' ', 1)[0] + ' '):
+                rows[-1] = (rows[-1][0], rows[-1][1] + ' · 기사: ' + val)   # 11/21 의장: 한 기업 한 칸
             else:
                 rows.append((title, val))
             continue
@@ -547,8 +613,8 @@ def render(body):
             table_chart(b[1])
         else:
             t = b[1].strip()
-            if t.startswith('**') and t.endswith('**'):
-                st.markdown(f'#### {t.strip("*")}')
+            if t.startswith('**') and t.endswith('**'):   # 칸 안 작은 제목(데스크 이름 등): 큰 제목 대신 작은 회색 글씨
+                st.markdown(f'<div class="box-t" style="margin-top:10px">{t.strip("*")}</div>', unsafe_allow_html=True)
             elif not t.startswith('_출처'):
                 st.markdown(t)
     flush()
