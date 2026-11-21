@@ -15,9 +15,13 @@ def ready():
 
 def _token():
     if 'v' not in _TOK:
-        r = requests.post(f'{BASE}/oauth2/tokenP', timeout=10, json={
-            'grant_type': 'client_credentials', 'appkey': os.environ['KIS_APP_KEY'],
-            'appsecret': os.environ['KIS_APP_SECRET']}).json()
+        for n in range(3):   # 토큰은 1분에 1번만 발급 → 앞 스크립트가 막 받았으면 61초 기다렸다 다시
+            r = requests.post(f'{BASE}/oauth2/tokenP', timeout=10, json={
+                'grant_type': 'client_credentials', 'appkey': os.environ['KIS_APP_KEY'],
+                'appsecret': os.environ['KIS_APP_SECRET']}).json()
+            if r.get('access_token') or n == 2:
+                break
+            time.sleep(61)
         if not r.get('access_token'):
             raise RuntimeError(f"한투 토큰 실패 {r.get('error_code')} {r.get('error_description')}")
         _TOK['v'] = r['access_token']

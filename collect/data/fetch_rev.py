@@ -27,12 +27,13 @@ d=pd.DataFrame(r,columns=['번호','연매출(원)','통화'])
 try:
     import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import kis
     KR=N[(N['구분']=='개별주')&(N['시장']=='한국')].set_index('번호')['코드'].astype(str).str.split('.').str[0].str.zfill(6).to_dict()
-    miss=[n for n in d.loc[d['연매출(원)'].isna(),'번호'] if n in KR]
-    if kis.ready() and miss:
-        for n in miss:
+    # 11/21 23:47 의장: 한국은 한투가 먼저(최근 4분기 매출 합), 한투가 비면 야후 값
+    if kis.ready():
+        ok=0
+        for n in KR:
             v=[b for _,b,_,_ in kis.quarterly_kr(KR[n])][-4:]
-            if len(v)==4 and all(x is not None for x in v): d.loc[d['번호']==n,['연매출(원)','통화']]=[float(sum(v)),'KRW']
-        print('한투로 채움', d.loc[d['번호'].isin(miss),'연매출(원)'].notna().sum(), '/', len(miss))
+            if len(v)==4 and all(x is not None for x in v): d.loc[d['번호']==n,['연매출(원)','통화']]=[float(sum(v)),'KRW']; ok+=1
+        print('한국 한투 연매출', ok, '/', len(KR))
 except Exception as e: print('한투 매출 보충 실패', e)
 d["환율"]=fx
 d.to_csv('in/연매출.csv',index=False,encoding='utf-8-sig'); print(fx, d['연매출(원)'].notna().sum(), len(d))
