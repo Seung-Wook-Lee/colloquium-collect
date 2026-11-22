@@ -37,9 +37,10 @@ try:
     import dart_q
     print('DART 키', '있음' if dart_q.ready() else '없음')
     if dart_q.ready():
-        okd=[]
-        for n in [n for n in KR if n not in ok]:
-            q=dart_q.quarterly(KR[n])
+        okd=[]; todo=[n for n in KR if n not in ok]
+        dart_q.corp('005930')   # 고유번호 표를 먼저 한 번 받음
+        with ThreadPoolExecutor(8) as ex: QD=dict(zip(todo, ex.map(lambda n: dart_q.quarterly(KR[n]), todo)))   # 11/22: 51종목 순서대로면 15분 넘어 멈춤 → 8개씩
+        for n,q in QD.items():
             if q:
                 R=[x for x in R if x['번호']!=n]+[dict(번호=n,분기=a,매출=b,영업이익=c,순이익=e,출처='DART') for a,b,c,e in q]; okd.append(n)
         print('한국 DART', len(okd), '| 야후로 남음', [n for n in KR if n not in ok and n not in okd], '| DART 실패', dart_q.ERR[:3])
