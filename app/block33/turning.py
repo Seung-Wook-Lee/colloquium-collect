@@ -42,13 +42,16 @@ def _hlc(ax, C, H, L, color='#1c1f5c', w=2.0):
     ax.hlines(C, x - pd.Timedelta(days=w), x + pd.Timedelta(days=w), color=color, lw=.7)
 
 
+CAL_A, CAL_B = 8.45, 0.935   # 11/22 원본 그림 16곳으로 맞춘 눈금(ctm_calib.py): 원본 ≈ 8.45 + 0.935 × 우리. 기준(30 등)은 우리 눈금 그대로(의장 승인).
+
+
 def _ctm_panel(ax, T, a, b, label):
     for lo, hi, c in ((70, 100, '#d5f0d5'), (50, 70, '#e9f7e3'), (30, 50, '#fdfbe3'), (0, 30, '#fde4e4')):
         ax.axhspan(lo, hi, color=c, lw=0)
     for y in (30, 35, 40, 45, 50, 55):
         ax.axhline(y, color='#555', lw=.5, ls=(0, (2, 2)))
     z = T.loc[a:b]; ax.plot(z.index, z, color='k', lw=.9); ax.set_ylim(0, 100); ax.set_yticks([10, 30, 50, 70, 90])
-    ax.set_xlim(pd.Timestamp(a), pd.Timestamp(b) if b else z.index[-1] + pd.Timedelta(days=21)); ax.text(.005, .9, f'{label} {z.iloc[-1]:.2f}', transform=ax.transAxes, fontsize=6.5)
+    ax.set_xlim(pd.Timestamp(a), pd.Timestamp(b) if b else z.index[-1] + pd.Timedelta(days=21)); ax.text(.005, .9, f'{label} {z.iloc[-1]:.2f}  (original-chart scale ~{CAL_A + CAL_B * z.iloc[-1]:.1f})', transform=ax.transAxes, fontsize=6.5)
 
 
 def _avwap(P, V, a):
