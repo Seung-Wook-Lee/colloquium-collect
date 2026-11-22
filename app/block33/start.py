@@ -196,7 +196,7 @@ X['이긴 조합 점수'] = score(X, COMBO[win]); X['C0 최대 점수'] = score(
 X['쓴 블록 수'] = X[SB].notna().sum(axis=1)
 X['그룹'] = X['번호'].map(dict(zip(K['번호'], K['그룹'])))
 cols = ['구분', '그룹', '이름', '층L', '이긴 조합 점수', 'C0 최대 점수', '쓴 블록 수', '판정', '추천', '원칙', '관문']
-O = X.sort_values('이긴 조합 점수', ascending=False)[cols]
+O = X.sort_values('이긴 조합 점수', ascending=False)[cols].rename(columns={'관문': 'gate'})   # 11/21 의장: '관문' 대신 'gate'
 O.to_csv(f'{OD}/{TAG}_결과.csv', index=False, encoding='utf-8-sig')
 # 뽑기: 엔진 gate(판정 '걸러짐')를 통과하고, 우리 가격10년 자료에 1년(252일) 이상 값이 있는 것 중 이긴 조합 점수 순. 사람 손 조정 없음.
 # (11/22 의장: 과거값이 없어 계산 안 되는 종목은 답에서 거론하지 않음 → 코드에서 뺌)
