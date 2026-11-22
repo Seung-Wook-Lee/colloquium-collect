@@ -44,6 +44,8 @@ if _IN:
     P, _D, _M, _m = ENG.run(_IN)
     PDATE = dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime('%Y-%m-%d %H:%M')
     P.to_csv(f'{OD}/{TAG}_판정표.csv', index=False, encoding='utf-8-sig'); _M.to_csv(f'{OD}/{TAG}_시장블록.csv', index=False, encoding='utf-8-sig')
+    import features as _F
+    if _F.MISSING: print('[빠진 자료] ' + ' / '.join(f'{k}({v})' for k, v in _F.MISSING.items()))
     print(f'① 블록 계산·② 거르기: 엔진 직접 실행 {PDATE} (입력 {os.environ.get("START_INDATE", "")}) | 판정 {P["판정"].value_counts().to_dict()}')
     U = pd.read_csv(f'{_IN}/유니버스.csv', encoding='utf-8-sig')
 else:   # 손 시험용(드라이브 없는 곳): 미리 만든 판정표. 답에는 쓰지 않는다.
