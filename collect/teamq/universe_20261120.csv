@@ -167,8 +167,6 @@ G113,iShares 20+ Year Treasury Bond ETF,미국,NASDAQ,ETF,미국 20년+ 국채,T
 G114,Vanguard FTSE Emerging Markets Index Fund ETF Shares,미국,NYSE Arca,ETF,신흥국 주식,VWO,VWO
 G115,Berkshire Hathaway Inc.,미국,NYSE,개별주,복합 지주(보험·투자),BRK-B,BRK-B
 G116,ExxonMobil Holdings Corporation,미국,NYSE,개별주,석유·가스,XOM,XOM
-G117,Mastercard Incorporated,미국,NYSE,개별주,결제 네트워크,MA,MA
-G118,AbbVie Inc.,미국,NYSE,개별주,제약(면역·항암),ABBV,ABBV
 G119,Chevron Corporation,미국,NYSE,개별주,석유·가스,CVX,CVX
 G120,Oracle Corporation,미국,NYSE,개별주,소프트웨어·클라우드(AI 데이터센터),ORCL,ORCL
 G121,Bank of America Corporation,미국,NYSE,개별주,은행,BAC,BAC
@@ -192,9 +190,7 @@ G138,Gilead Sciences,미국,NASDAQ,개별주,Health Care,GILD,GILD
 G139,Dell Technologies,미국,NYSE,개별주,Information Technology,DELL,DELL
 G140,Citigroup,미국,NYSE,개별주,Financials,C,C
 G141,PepsiCo,미국,NASDAQ,개별주,Consumer Staples,PEP,PEP
-G142,Amphenol,미국,NYSE,개별주,Information Technology,APH,APH
 G143,KLA Corporation,미국,NASDAQ,개별주,Information Technology,KLAC,KLAC
-G144,Analog Devices,미국,NASDAQ,개별주,Information Technology,ADI,ADI
 G145,Abbott Laboratories,미국,NYSE,개별주,Health Care,ABT,ABT
 G146,Welltower,미국,NYSE,개별주,Real Estate,WELL,WELL
 G147,Qualcomm,미국,NASDAQ,개별주,Information Technology,QCOM,QCOM
@@ -240,7 +236,6 @@ K85,한국전력,한국,KOSPI,개별주,지주·유틸리티,015760,015760.KS
 K86,삼성SDS,한국,KOSPI,개별주,IT·전자,018260,018260.KS
 K87,SK이노베이션,한국,KOSPI,개별주,소재·에너지,096770,096770.KS
 K88,HD한국조선해양,한국,KOSPI,개별주,조선,009540,009540.KS
-K89,현대글로비스,한국,KOSPI,개별주,운송,086280,086280.KS
 K90,고려아연,한국,KOSPI,개별주,소재·에너지,010130,010130.KS
 K91,HD현대일렉트릭,한국,KOSPI,개별주,방산·전력기계,267260,267260.KS
 K92,한화오션,한국,KOSPI,개별주,조선,042660,042660.KS
