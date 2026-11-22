@@ -369,6 +369,7 @@ def run(d, cfg=None):
         out['국면'] = ('방어' if DEF else '평상') + (f" · 지수 {IR[row['시장']]}" if row['시장'] in IR else '')
         out['갈래'] = '주도' if _ev('dd52 >= -10', row) else '눌림'
         out['가짜바닥아님'] = row.get('survive')
+        out['메모리구간'] = row.get('mem_zone') or ''   # 11/22 의장: 메모리 B23 거꾸로
         out['핵심관측'] = sum(1 for k in B.get('추천', {}).get('핵심블록', ['B15', 'B24', 'B25', 'B26'])
                            if any(b == k for b, *_ in yes_blocks))
         # 주문 한도(B27·B28·B29·쏠림·CTA 전환): 가장 엄격한 승수 하나
@@ -415,10 +416,20 @@ def run(d, cfg=None):
         sf = float(m['debt'] / m['ebitda'] <= 3) if nz(m['debt']) and nz(m['ebitda']) and m['ebitda'] > 0 else None
         c = None if not (nz(m['fpe']) and nz(m['tpe'])) else float(m['fpe'] < m['tpe'])
         return e, o, (sum(st) / len(st) if st else None), sf, c
+    _MR = B.get('메모리반대', {}) or {}
+    _mem_stk = set(_MR.get('종목', [])); _mem_etf = set(_MR.get('ETF', []))
+    def _rev(t, s):   # 메모리 ETF: 구성종목 이익을 거꾸로(이미 거꾸로 된 메모리 종목은 그대로)
+        if s[0] is None or (t in tk2num and tk2num[t] in _mem_stk):
+            return s
+        return (1.0 - s[0],) + tuple(s[1:])
     for n, g in H.groupby('번호'):
         if n not in num2row: continue
         i = num2row[n]
-        sc = [(w, mscore(t)) for t, w in zip(g['멤버'], g['비중'])]
+        # 보유 자료가 한국 종목을 .KQ로 적는 경우(예: DRAM의 005930.KQ) 유니버스의 .KS로 맞춘다
+        mem_t = [t[:-3] + '.KS' if isinstance(t, str) and t.endswith('.KQ') and t not in tk2num and t[:-3] + '.KS' in tk2num else t for t in g['멤버']]
+        sc = [(w, mscore(t)) for t, w in zip(mem_t, g['비중'])]
+        if n in _mem_etf:
+            sc = [(w, _rev(t, s)) for (w, s), t in zip(sc, mem_t)]
         S.at[i, '구성종목'] = ','.join(g['이름'].astype(str).head(10))
         def wavg(j):
             v = [(w, s[j]) for w, s in sc if s[j] is not None and not pd.isna(s[j])]
@@ -428,6 +439,9 @@ def run(d, cfg=None):
         if e is not None:
             S.at[i, K_EARN] = '통과' if e > 0.5 else '탈락'
             S.at[i, '구성_이익통과'] = f"보유 비중 {e*100:.0f}% 이익 증가({ne}종목)"
+            if n in _mem_etf:
+                S.at[i, '구성_이익통과'] = f"(메모리 거꾸로) 보유 비중 {e*100:.0f}% 이익 감소({ne}종목)"
+                S.at[i, '메모리구간'] = '사는 구간(이익 감소)' if e > 0.5 else '피할 구간(이익 증가)'
         for j, k in ((1, K15), (2, K16), (3, K16B), (4, K_CHEAP)):
             v, _ = wavg(j)
             if v is not None: S.at[i, k] = round(v, 2); S.at[i, f'_sc_{k}'] = v
