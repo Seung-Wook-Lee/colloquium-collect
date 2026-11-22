@@ -6,7 +6,7 @@ import os, time
 import pandas as pd, requests, yfinance as yf
 os.makedirs('history', exist_ok=True)
 YF = {'SPX': '^GSPC', 'NDX': '^NDX', 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'BTC': 'BTC-USD', 'TLT': 'TLT', 'LQD': 'LQD', 'QLTA': 'QLTA',
-      'VIX': '^VIX', 'VIX3M': '^VIX3M', 'SKEW': '^SKEW', 'VVIX': '^VVIX', 'MOVE': '^MOVE'}
+      'VIX': '^VIX', 'VIX3M': '^VIX3M', 'SKEW': '^SKEW', 'VVIX': '^VVIX', 'MOVE': '^MOVE', 'QQQ': 'QQQ', 'RSP': 'RSP'}   # 11/22 의장 QQQ:RSP 앵커드 VWAP(거래량 포함)
 cols = {}
 for k, t in YF.items():
     for _ in range(3):
@@ -15,6 +15,7 @@ for k, t in YF.items():
             if len(h):
                 cols[k] = h['Close']
                 if k == 'SPX': cols['SPX_VOL'] = h['Volume']; cols['SPX_LOW'] = h['Low']; cols['SPX_HIGH'] = h['High']
+                if k in ('QQQ', 'RSP'): cols[f'{k}_VOL'] = h['Volume']; cols[f'{k}_LOW'] = h['Low']; cols[f'{k}_HIGH'] = h['High']
                 break
         except Exception as e:
             print(k, e); time.sleep(3)
