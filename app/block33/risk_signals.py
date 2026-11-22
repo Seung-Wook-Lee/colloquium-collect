@@ -113,11 +113,14 @@ def _ctm_out(D):
             if k == 'SPX':
                 out['CTM_RED'] = float((t.tail(4) < 30).all())
                 out['CTM_LOW_WEEKS'] = int((t[::-1] < 30).cumprod().sum())
-                # 11/22 의장 "CTM선에서 다시 오르기 시작하면 알려줘야" → 초록불(반등 시작): 26주 최고 70 이상 → 8주 최저 45 아래 → 그 최저보다 +10점
-                # 검증(ctm_green.py, 1964~ 67번): QQQ 26주 +8.1%(승률 79%) vs 같은 낙폭 아무 주 +5.8%, 26주 안 최대 낙폭 −8.1%
-                mn8 = t.rolling(8).min()
-                out['CTM_GREEN'] = float(t.rolling(26).max().iloc[-1] >= 70 and mn8.iloc[-1] < 45 and t.iloc[-1] - mn8.iloc[-1] >= 10)
-                out['CTM_GREEN_AT'] = round(float(mn8.iloc[-1]) + 10, 1)   # 이 값 이상이면 초록불(8주 최저 + 10)
+                # 11/22 의장 "CTM선에서 다시 오르기 시작하면 알려줘야" + "+10점은 너무 늦다, 3주 나눠 산다" → 초록불 = 첫 상승 주부터 3주(1·2·3단계 1/3씩)
+                # 전제: 26주 최고 70 이상 → 8주 최저 45 아래. 1단계 = 최저 다음 주에 처음 오른 주. 검증 ctm_green2.py(1964~): +10점보다 CTM 바닥에 2.6주 빠르고
+                # 3주 분할 평균가가 바닥보다 S&P 5.8%(+10점은 10.2%) 비쌈, 26주 수익 비슷(S&P 3.8 vs 4.0), 거짓(산 뒤 5% 넘게 더 빠짐) 51% vs 42%.
+                mn8 = t.rolling(8).min(); pre = (t.rolling(26).max() >= 70) & (mn8 < 45)
+                g1 = pre & (t > t.shift(1)) & (t.shift(1) == mn8.shift(1))
+                k = next((j for j in range(3) if len(g1) > j and g1.iloc[-1 - j]), None)
+                out['CTM_GREEN'] = float(k is not None); out['CTM_GREEN_STAGE'] = (k + 1) if k is not None else 0
+                out['CTM_GREEN_AT'] = round(float(t.iloc[-1]), 1) if bool(pre.iloc[-1]) and t.iloc[-1] == mn8.iloc[-1] else None   # 다음 주 이 값보다 오르면 1단계
     # 11/22 의장 카드 선택 "둘 중 하나 켜지면 현금": MA 클러스터(S&P 주봉 50·55·60·65·70·75주선) ④ 빨간불 = 종가 < 클러스터 맨 아래 + 가운데 4주 기울기 < 0
     if 'SPX' in D:
         C = D['SPX'].dropna().resample('W-FRI').last().dropna()
