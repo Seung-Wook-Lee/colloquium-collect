@@ -8,6 +8,7 @@ BASE = 'https://openapi.koreainvestment.com:9443'
 EXCD = {'NASDAQ': 'NAS', 'NYSE': 'NYS', 'NYSE American': 'AMS', 'NYSE Arca': 'AMS', 'Cboe BZX': 'AMS'}
 _TOK = {}
 _ERR = []
+_OK = []
 
 
 def ready():
@@ -103,6 +104,8 @@ def _frame(rows):
 
 def quarterly_kr(code):
     """국내 분기 손익(원): [(분기말 'YYYY-MM-DD', 매출, 영업이익, 순이익)]. 같은 해 누적값이면 분기값으로 풀어 준다."""
+    if len(_ERR) >= 3 and not _OK:   # 처음 3번이 다 거절되면 이번 실행에선 더 묻지 않는다(11/21 밤 OPSQ0001)
+        return []
     j = _get('/uapi/domestic-stock/v1/finance/income-statement', 'FHKST66430200',
              {'FID_DIV_CLS_CODE': '1', 'fid_cond_mrkt_div_code': 'J', 'fid_input_iscd': str(code).zfill(6)})
     out = (j or {}).get('output') or []
@@ -110,6 +113,7 @@ def quarterly_kr(code):
                       for o in out if o.get('stac_yymm')], columns=['ym', '매출', '영업이익', '순이익']).dropna(subset=['ym'])
     if not len(d):
         return []
+    _OK.append(code)
     d = d.drop_duplicates('ym').sort_values('ym')
     d['y'], d['m'] = d['ym'].str[:4], d['ym'].str[4:6].astype(int)
     # 누적 여부: 같은 해 안에서 매출이 분기마다 커지고 12월이 3월의 2.5배를 넘으면 누적으로 본다
