@@ -461,6 +461,18 @@ def stocks(d):
         f['earn_ok'] = ((f['op_yoy'] > 0) | (_rv > 0) | (f['earn_relief'] == 1)).astype(int).where(f['op_yoy'].notna())
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('f["earn_ok"] = ((f["op_yoy"] > 0) | (_rv', e)
+    # 11/22 의장: 메모리는 사이클 산업이라 B23을 거꾸로 — 이익이 줄 때가 사는 구간, 늘 때는 피한다(목록은 비공개 blocks.yaml 메모리반대)
+    try:
+        import qc_config as QCC
+        _MR = QCC.load_blocks().get('메모리반대', {}) or {}
+        _mem = f['번호'].isin(_MR.get('종목', []))
+        f['mem_zone'] = ''
+        if _mem.any():
+            f.loc[_mem, 'earn_ok'] = (f.loc[_mem, 'op_yoy'] < 0).astype(int).where(f.loc[_mem, 'op_yoy'].notna())
+            f.loc[_mem & (f['op_yoy'] < 0), 'mem_zone'] = '사는 구간(이익 감소)'
+            f.loc[_mem & (f['op_yoy'] > 0), 'mem_zone'] = '피할 구간(이익 증가)'
+    except Exception as e:   # noqa: BLE001
+        _fail('메모리반대(B23 거꾸로)', e)
     # 동료 비교: 같은 시장·같은 층 개별주 안에서 순위(1에 가까울수록 좋음)
     stk = f['구분'] == '개별주'
     g = [f['시장'], f['layer']]
