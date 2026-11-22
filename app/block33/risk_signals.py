@@ -99,7 +99,14 @@ def signals(D):
     cpe = D['CPCE'].dropna().ewm(span=10, adjust=False).mean() if 'CPCE' in D else pd.Series(dtype=float)
     ab = cpe > 0.69; cx = (ab & ~ab.shift(1, fill_value=False)).astype(int)
     cpce = dict(CPCE_EMA=round(last(cpe), 3) if len(cpe) >= 20 else None, CPCE_UP20=float(cx.tail(20).max()) if len(cpe) >= 20 else None)
-    return dict(**cpce, CAP_VOL=last(c1), CAP_FORCED=last(c2), CAP_XASSET=last(c4), CAP_WATERFALL=last(c3), CAP_VIXBW=last(c5),
+    # 11/22 의장 승인 B02: S&P 109주선 지지 = 주봉 저가가 109주선 −5%~+1% 안에 닿고 종가는 선 위, 직전 8주 중 6주 이상 선 +3% 위 → 4주 켜짐 (all_vs_b02.py 앞·뒤 기간 IC 모두 +0.013)
+    w109 = None
+    if 'SPX_LOW' in D:
+        Cw = s.resample('W-FRI').last().dropna(); Lw = D['SPX_LOW'].dropna().resample('W-FRI').min().reindex(Cw.index).fillna(Cw); m = Cw.rolling(109).mean()
+        ab = (Cw.shift(1) > m.shift(1) * 1.03).rolling(8).sum() >= 6
+        hit = ((Lw <= m * 1.01) & (Lw >= m * 0.95) & (Cw > m) & ab).astype(int).rolling(4, min_periods=1).max()
+        w109 = float(hit.iloc[-1]) if m.notna().iloc[-1] else None
+    return dict(**cpce, SPX_W109_SUP=w109, CAP_VOL=last(c1), CAP_FORCED=last(c2), CAP_XASSET=last(c4), CAP_WATERFALL=last(c3), CAP_VIXBW=last(c5),
                 AAA_GAP=last(gap), AAA_6M=last(aaa - aaa.shift(126)),
                 **_ctm_out(D),
                 **dict(zip(('QQRSP_AVWAP', 'QQRSP_AVWAP_GAP'), qqq_rsp_avwap(D))),
