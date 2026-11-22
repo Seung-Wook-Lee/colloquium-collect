@@ -31,6 +31,17 @@ try:
             q=kis.quarterly_kr(KR[n])
             if q:
                 R=[x for x in R if x['번호']!=n]+[dict(번호=n,분기=a,매출=b,영업이익=c,순이익=e,출처='한투') for a,b,c,e in q]; ok.append(n)
-        print('한국 한투', len(ok), '/', len(KR), '| 야후로 남음', [n for n in KR if n not in ok])
+        print('한국 한투', len(ok), '/', len(KR))
+    else: ok=[]
+    # 11/22 의장 선택: 한투가 안 된 한국 종목은 DART 정기보고서 분기 실적, 그것도 안 되면 야후
+    import dart_q
+    print('DART 키', '있음' if dart_q.ready() else '없음')
+    if dart_q.ready():
+        okd=[]
+        for n in [n for n in KR if n not in ok]:
+            q=dart_q.quarterly(KR[n])
+            if q:
+                R=[x for x in R if x['번호']!=n]+[dict(번호=n,분기=a,매출=b,영업이익=c,순이익=e,출처='DART') for a,b,c,e in q]; okd.append(n)
+        print('한국 DART', len(okd), '| 야후로 남음', [n for n in KR if n not in ok and n not in okd], '| DART 실패', dart_q.ERR[:3])
 except Exception as e: print('한투 분기 보충 실패', e)
 d=pd.DataFrame(R); d.to_csv('in/분기원자료.csv',index=False,encoding='utf-8-sig'); print(len(d), d['번호'].nunique())

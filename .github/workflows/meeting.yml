@@ -65,6 +65,7 @@ jobs:
           FRED_KEY: ${{ secrets.FRED_KEY }}
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}       # 11/21 야후가 막으면 한투로
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          DART_KEY: ${{ secrets.DART_KEY }}             # 11/22 한투 분기 손익이 안 되면 DART
         run: |
           ARGS=""
           if [ "${{ github.event_name }}" = "schedule" ]; then ARGS="--session 미장전"; fi
