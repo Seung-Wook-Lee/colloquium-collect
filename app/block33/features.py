@@ -681,6 +681,13 @@ def market(d):
                      VOLT_D5=g.get('변동성타기팅 5일 변화(배)'), SYS_TURN=g.get('시스템 매수 전환'), CTA_PLUS=g.get('CTA 플러스 전환'))
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('수급포지셔닝', e)
+    RS = _r(d, '시장위험')   # 11/22 의장: B35 항복(C1·C2·C4), B03 S&P–AAA 회사채 괴리
+    try:
+        if len(RS):
+            import risk_signals as RSG
+            m.update(RSG.signals(RS.set_index(pd.to_datetime(RS['날짜'])).drop(columns=['날짜'])))
+    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식'
+        _fail('시장위험', e)
     A = _r(d, 'ETF자금')
     try:
         if len(A):
