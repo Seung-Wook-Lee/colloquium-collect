@@ -385,8 +385,12 @@ def main():
         first = open(f'{IN}/아침보고.txt', encoding='utf-8').read().splitlines()[1:2]
         note.append('팀Q 자료 ' + (first[0][:40] if first else ''))
     c, sec = PER.build(IN, S, M, m, f, R, B.get('추천', {}), tday, EV, CAL, session=a.session)
-    if m.get('CTM_RED') == 1:   # 11/22 의장 1순위: CTM 빨간불이면 원고 맨 위에 현금 전환
-        sec.insert(0, ('0 현금 전환', '블록33 B01', '시장', [f"- 🔴 CTM 빨간불: S&P CTM {m.get('CTM_SPX')} (30 아래 {m.get('CTM_LOW_WEEKS')}주 연속) → 모든 분석을 멈추고 현금 전환"], [], ''))
+    if m.get('CASH_SWITCH') == 1 or m.get('CTM_RED') == 1:   # 11/22 의장 1순위: CTM 빨간불 또는 MA 클러스터 빨간불이면 원고 맨 위에 현금 전환
+        ls = [f"- 🔴 CTM 빨간불: S&P CTM {m.get('CTM_SPX')} (30 아래 {m.get('CTM_LOW_WEEKS')}주 연속)"] if m.get('CTM_RED') == 1 else []
+        ls += [f"- 🔴 MA 클러스터 빨간불: S&P 주봉이 50~75주선 맨 아래 {m.get('MA_CLUSTER_BOT')} 밑 + 가운데 4주 기울기 {m.get('MA_CLUSTER_SLOPE')}%"] if m.get('MA_CLUSTER_RED') == 1 else []
+        sec.insert(0, ('0 현금 전환', '블록33 B01', '시장', ls + ['- → 모든 분석을 멈추고 현금 전환'], [], ''))
+    elif m.get('CTM_GREEN') == 1:   # 11/22 의장: CTM이 내려왔다가 다시 오르기 시작하면 초록불
+        sec.insert(0, ('0 CTM 초록불', '블록33 B01', '시장', [f"- 🟢 CTM 초록불(반등 시작): S&P CTM {m.get('CTM_SPX')} (8주 최저 + 10점 = {m.get('CTM_GREEN_AT')} 넘음)"], [], ''))
     PFX = f'{today}_' if a.session == '국장전' else f'{today}_미장전_'
     if a.session == '미장전':
         Q = premarket_quotes(R)

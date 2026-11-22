@@ -779,9 +779,13 @@ today = dt.datetime.now(KST).date()
 day = st.date_input('날짜', today, max_value=today).strftime('%Y%m%d')
 try:   # 11/22 의장 1순위: B01 CTM 빨간불이면 맨 위에 현금 전환
     _M = read_csv(day, '시장블록.csv')
-    _r = _M[_M['식'].astype(str).str.contains('CTM_RED')] if _M is not None and '식' in _M else None
-    if _r is not None and len(_r) and str(_r['결과'].iloc[0]) in ('예', '켜짐', '통과', 'True', '1'):
-        st.error(f"🔴 CTM 빨간불 — 모든 분석을 멈추고 현금 전환 (S&P CTM {_r['값'].iloc[0]})")
+    _on = lambda k: (lambda r: r if r is not None and len(r) and str(r['결과'].iloc[0]) in ('예', '켜짐', '통과', 'True', '1') else None)(
+        _M[_M['식'].astype(str).str.contains(k)] if _M is not None and '식' in _M else None)
+    _red = [f"{n} ({r['값'].iloc[0]})" for k, n in (('CTM_RED', 'CTM 빨간불'), ('MA_CLUSTER_RED', 'MA 클러스터 빨간불')) if (r := _on(k)) is not None]
+    if _red:
+        st.error('🔴 ' + ' + '.join(_red) + ' — 모든 분석을 멈추고 현금 전환')
+    elif (_g := _on('CTM_GREEN')) is not None:
+        st.success(f"🟢 CTM 초록불(반등 시작) — S&P CTM {_g['값'].iloc[0]}")
 except Exception:   # noqa: BLE001
     pass
 block_bottom()   # 11/21 의장: 블록 바닥 찾기를 맨 위에
