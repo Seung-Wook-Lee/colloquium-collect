@@ -6,7 +6,7 @@ import os, time
 import pandas as pd, requests, yfinance as yf
 os.makedirs('history', exist_ok=True)
 YF = {'SPX': '^GSPC', 'NDX': '^NDX', 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'BTC': 'BTC-USD', 'TLT': 'TLT', 'LQD': 'LQD', 'QLTA': 'QLTA',
-      'VIX': '^VIX', 'VIX3M': '^VIX3M', 'SKEW': '^SKEW', 'VVIX': '^VVIX', 'MOVE': '^MOVE', 'QQQ': 'QQQ', 'RSP': 'RSP'}   # 11/22 의장 QQQ:RSP 앵커드 VWAP(거래량 포함)
+      'VIX': '^VIX', 'VIX3M': '^VIX3M', 'SKEW': '^SKEW', 'VVIX': '^VVIX', 'MOVE': '^MOVE', 'QQQ': 'QQQ', 'RSP': 'RSP', 'IEF': 'IEF', 'SHY': 'SHY', 'AGG': 'AGG', 'BIL': 'BIL'}   # 11/22 의장 QQQ:RSP 앵커드 VWAP(거래량 포함)
 cols = {}
 for k, t in YF.items():
     for _ in range(3):
@@ -23,7 +23,7 @@ for k, t in YF.items():
 for k in cols:
     cols[k].index = pd.to_datetime(cols[k].index).tz_localize(None).normalize()
 key = os.environ.get('FRED_KEY')
-for s in ('DAAA', 'BAMLC0A1CAAA', 'DGS10', 'BAMLH0A0HYM2', 'STLFSI4', 'T10Y2Y'):
+for s in ('DAAA', 'BAMLC0A1CAAA', 'DGS10', 'BAMLH0A0HYM2', 'STLFSI4', 'T10Y2Y', 'DTB3', 'DGS2', 'DGS5'):   # 11/22 의장 B01 경보 때 채권·현금 대체 수익
     try:
         r = requests.get('https://api.stlouisfed.org/fred/series/observations', params=dict(series_id=s, api_key=key, file_type='json'), timeout=60).json()
         x = pd.Series({pd.Timestamp(o['date']): pd.to_numeric(o['value'], errors='coerce') for o in r['observations']})
