@@ -2,11 +2,11 @@
 import os
 import pandas as pd, requests, yfinance as yf
 YF = {'SPX': '^GSPC', 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'BTC': 'BTC-USD', 'TLT': 'TLT', 'VIX': '^VIX', 'VIX3M': '^VIX3M', 'NDX': '^NDX', 'QQQ': 'QQQ', 'RSP': 'RSP',
-      'SPYG': 'SPYG', 'BIL': 'BIL', 'IWF': 'IWF', 'IWD': 'IWD', 'NVDA': 'NVDA', 'MGK': 'MGK'}   # 11/22 의장 변곡점 판(SPYG:BIL·IWF:IWD 일목, NVDA 앵커드 VWAP)   # 11/22 의장 B02 앵커드 VWAP(QQQ:RSP)
+      'SPYG': 'SPYG', 'BIL': 'BIL', 'IWF': 'IWF', 'IWD': 'IWD', 'NVDA': 'NVDA', 'MGK': 'MGK', 'COMPQ': '^IXIC', 'QLTA': 'QLTA'}   # 11/22 의장 변곡점 판(SPYG:BIL·IWF:IWD 일목, NVDA 앵커드 VWAP)   # 11/22 의장 B02 앵커드 VWAP(QQQ:RSP)
 cols = {}
 for k, t in YF.items():
     try:
-        h = yf.Ticker(t).history(period='max' if k in ('NDX', 'QQQ', 'RSP', 'SPX', 'SPYG', 'BIL', 'IWF', 'IWD', 'NVDA', 'VIX', 'MGK') else '2y', auto_adjust=True)   # 코폭은 월봉 10년 필요
+        h = yf.Ticker(t).history(period='max' if k in ('NDX', 'QQQ', 'RSP', 'SPX', 'SPYG', 'BIL', 'IWF', 'IWD', 'NVDA', 'VIX', 'MGK', 'COMPQ', 'QLTA', 'VIX3M') else '2y', auto_adjust=True)   # 코폭은 월봉 10년 필요
         h.index = pd.to_datetime(h.index).tz_localize(None).normalize()
         cols[k] = h['Close']
         if k in ('SPX', 'QQQ', 'RSP', 'NVDA'): cols[f'{k}_VOL'] = h['Volume']
