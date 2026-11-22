@@ -6,7 +6,7 @@ import os, time
 import pandas as pd, requests, yfinance as yf
 os.makedirs('history', exist_ok=True)
 YF = {'SPX': '^GSPC', 'NDX': '^NDX', 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'BTC': 'BTC-USD', 'TLT': 'TLT', 'LQD': 'LQD', 'QLTA': 'QLTA',
-      'VIX': '^VIX', 'VIX3M': '^VIX3M', 'SKEW': '^SKEW', 'VVIX': '^VVIX', 'MOVE': '^MOVE', 'QQQ': 'QQQ', 'RSP': 'RSP', 'IEF': 'IEF', 'SHY': 'SHY', 'AGG': 'AGG', 'BIL': 'BIL', 'NVDA': 'NVDA', 'SPYG': 'SPYG', 'IVW': 'IVW'}   # 11/22 의장 BIL:SPYG 일목 검증   # 11/22 의장 NVDA 앵커드 VWAP   # 11/22 의장 QQQ:RSP 앵커드 VWAP(거래량 포함)
+      'VIX': '^VIX', 'VIX3M': '^VIX3M', 'SKEW': '^SKEW', 'VVIX': '^VVIX', 'MOVE': '^MOVE', 'QQQ': 'QQQ', 'RSP': 'RSP', 'IEF': 'IEF', 'SHY': 'SHY', 'AGG': 'AGG', 'BIL': 'BIL', 'NVDA': 'NVDA', 'SPYG': 'SPYG', 'IVW': 'IVW', 'IWF': 'IWF', 'IWD': 'IWD'}   # 11/22 의장 IWF:IWD 월봉 일목   # 11/22 의장 BIL:SPYG 일목 검증   # 11/22 의장 NVDA 앵커드 VWAP   # 11/22 의장 QQQ:RSP 앵커드 VWAP(거래량 포함)
 cols = {}
 for k, t in YF.items():
     for _ in range(3):
