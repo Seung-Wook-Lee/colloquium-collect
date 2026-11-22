@@ -444,6 +444,16 @@ def main():
             f'{PFX}변수달력.csv': CAL.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}종목색인.csv': PER.ask_index(c).to_csv(index=False).encode('utf-8-sig')}
     outs.update({f'{PFX}{k}': v for k, v in BTO.items()})
+    try:   # 11/22 의장 '변곡점 판': 의장이 고른 그림 9개를 원본 그대로 매일 다시 그림(스트림릿 맨 위). 조건에는 안 넣음.
+        import tempfile
+        from block33 import turning as TURN
+        _td = tempfile.mkdtemp(); _r = TURN.draw(pd.read_csv(f'{IN}/시장위험.csv', index_col=0, parse_dates=True, encoding='utf-8-sig'), _td)
+        for _n in range(1, 10):
+            if os.path.exists(f'{_td}/turn_{_n}.png'):
+                outs[f'{PFX}변곡점_{_n}.png'] = open(f'{_td}/turn_{_n}.png', 'rb').read()
+        log('[변곡점 판] ' + ' '.join(f'{k}:{v}' for k, v in _r.items()))
+    except Exception as e:   # noqa: BLE001
+        log(f'[변곡점 판] 실패: {str(e)[:160]}')
     outs.update({(k if a.session == '국장전' else f'미장전_{k}'): v for k, v in judge(W, S).items()})
     for k, v in outs.items():
         open(f'{OUT}/{k}', 'wb').write(v)
