@@ -39,7 +39,7 @@ def main():
     rep = {}
     for k in ORDER:
         if k not in on:
-            rep[k] = '꺼짐'
+            rep[k] = '적용 안 함'
             continue
         t0 = time.time()
         try:

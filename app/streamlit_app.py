@@ -452,9 +452,9 @@ def signal_chips(md):
         M['_k'] = M['블록'].astype(str) + M['방향'].astype(str) + M['공식'].astype(str).str.replace(r'[−+-]?[\d.]+', '#', regex=True)
         M['_on'] = M['결과'] == '통과'
         M = M.sort_values('_on', ascending=False).drop_duplicates('_k')
-        df = pd.DataFrame({'쪽': M['방향'].astype(str), '오늘': M['_on'].map({True: '켜짐', False: '꺼짐'}), '질문': M['질문'].astype(str),
+        df = pd.DataFrame({'쪽': M['방향'].astype(str), '오늘': M['_on'].map({True: '신호 나옴', False: '신호 안 나옴'}), '질문': M['질문'].astype(str),
                            '공식': ' — ' + M['공식'].astype(str).str.replace(r'\((기회|부담)\)', '', regex=True).str.strip()})
-    on = df[df['오늘'].str.strip() == '켜짐']
+    on = df[df['오늘'].str.strip() == '신호 나옴']
     c1, c2 = st.columns(2, gap='large')
     for col, side, color, name in ((c1, '부담', RED, '나쁜 신호'), (c2, '기회', '#2e7d32', '좋은 신호')):
         x = on[on['쪽'].str.contains(side)]
@@ -812,7 +812,7 @@ today = dt.datetime.now(KST).date()
 day = st.date_input('날짜', today, max_value=today).strftime('%Y%m%d')
 try:   # 11/22 의장 1순위: B01 CTM 빨간불이면 맨 위에 현금 전환
     _M = read_csv(day, '시장블록.csv')
-    _on = lambda k: (lambda r: r if r is not None and len(r) and str(r['결과'].iloc[0]) in ('예', '켜짐', '통과', 'True', '1') else None)(
+    _on = lambda k: (lambda r: r if r is not None and len(r) and str(r['결과'].iloc[0]) in ('예', '켜짐', '신호 나옴', '통과', 'True', '1') else None)(
         _M[_M['식'].astype(str).str.contains(k)] if _M is not None and '식' in _M else None)
     _red = [f"{n} ({r['값'].iloc[0]})" for k, n in (('CTM_RED', 'CTM 빨간불'), ('MA_CLUSTER_RED', 'MA 클러스터 빨간불')) if (r := _on(k)) is not None]
     if _red:

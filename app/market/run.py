@@ -11,7 +11,7 @@ from . import canary
 def build(IN, W, B, m, M, c=None):
     X = set(B.get('_꺼짐', []))
     rows, extra = [], {}
-    can, cs = (None, '꺼짐') if '2-15' in X else (None, None)
+    can, cs = (None, '적용 안 함') if '2-15' in X else (None, None)
     if cs is None:
         try:
             can, cs = canary.run()
@@ -36,14 +36,14 @@ def build(IN, W, B, m, M, c=None):
     for mk in ('미국', '한국'):
         Mm = M if M is not None else pd.DataFrame(columns=['방향', '결과'])
         rows.append({'시장': mk,
-                     '방어 국면(2-14)': '꺼짐' if '2-14' in X else ('방어' if m.get(f'DEF_{mk}') else '평상'),
+                     '방어 국면(2-14)': '적용 안 함' if '2-14' in X else ('방어' if m.get(f'DEF_{mk}') else '평상'),
                      '지수 국면': m.get(f'IDX_{mk}', ''),
                      '시장 블록 부담': int(((Mm['방향'] == '부담') & (Mm['결과'] == '통과')).sum()) if len(Mm) else None,
                      '시장 블록 기회': int(((Mm['방향'] == '기회') & (Mm['결과'] == '통과')).sum()) if len(Mm) else None,
                      '시스템 자금 매수 전환(2-6)': {1: '예', 0: '아니오'}.get(int(m['SYS_TURN'])) if m.get('SYS_TURN') is not None else '',
-                     '바닥 근접도(2-12)': '꺼짐' if '2-12' in X else ' / '.join(f'{k}: {v}' for k, v in bot.items()),
+                     '바닥 근접도(2-12)': '적용 안 함' if '2-12' in X else ' / '.join(f'{k}: {v}' for k, v in bot.items()),
                      '카나리아(2-15)': cs,
-                     '결론(2-16)': '꺼짐' if '2-16' in X else (ST.get(mk, {}).get('act', '') if ST else ''),
+                     '결론(2-16)': '적용 안 함' if '2-16' in X else (ST.get(mk, {}).get('act', '') if ST else ''),
                      '결론 이유': ST.get(mk, {}).get('why', '') if ST else '',
                      '꺼진 하위 블록': ', '.join(k for k in B.get('_꺼짐', []) if k.startswith('2-'))})
     return pd.DataFrame(rows), extra

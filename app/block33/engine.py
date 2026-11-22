@@ -40,7 +40,7 @@ def st_filter(S, c):
         return S
     # 11/19 의장: '큰 회사인가'는 블록이 아니라 추천 자격 설정(추천.최소매출원). 개별주만, 자료 없으면 참고만
     big = (S['구분'] != '개별주') | (pd.to_numeric(S['연매출(원)'], errors='coerce') >= c['B'].get('추천', {}).get('최소매출원', 1e13))
-    filt = S[K_EARN].isin(['통과', '해당 없음', '꺼짐']) & S[K_EVENT].isin(['통과', '꺼짐'])   # 꺼짐 = 하위 블록 꺼짐(거르지 않음)   # B12 거르기 폐지 → 갈래(주도·눌림)
+    filt = S[K_EARN].isin(['통과', '해당 없음', '꺼짐', '적용 안 함']) & S[K_EVENT].isin(['통과', '꺼짐', '적용 안 함'])   # 꺼짐 = 하위 블록 꺼짐(거르지 않음)   # B12 거르기 폐지 → 갈래(주도·눌림)
     S['판정'] = np.where(filt, np.where(big, '후보', '참고만'),
                         np.where(S[K_EARN] == '자료 없음', '자료 부족', '걸러짐'))
     S.loc[S['층'] == 'S0', '판정'] = '기준층(지수·현금·금, 추천 대상 아님)'
@@ -295,7 +295,7 @@ def run(d, cfg=None):
         DEF = bool(m.get(f"DEF_{row['시장']}"))
         for bid, b in SB.items():
             if bid in OFF:   # 하위 블록 꺼짐(subblocks.yaml 켜기 목록에서 뺌)
-                out[bid] = '꺼짐'; continue
+                out[bid] = '적용 안 함'; continue
             if b.get('대상') == '개별주' and row['구분'] != '개별주':
                 out[bid] = '해당 없음'; continue
             if '조건' in b and not _ev(b['조건'], row):   # 보너스 블록: 조건이 맞을 때만 셈

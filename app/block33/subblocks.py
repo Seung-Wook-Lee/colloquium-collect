@@ -97,5 +97,5 @@ def table(B):
     for key, blk in T.items():
         for num, v in blk.get('번호', {}).items():
             tag = f" ({v['블록']})" if v.get('블록') else ''
-            rows.append([KIND.get(key, key), num, f"{v['이름']}{tag}", ('꺼짐' + (f" — {note[num]}" if num in note else '')) if num in X else '켜짐'])
+            rows.append([KIND.get(key, key), num, f"{v['이름']}{tag}", ('적용 안 함' + (f" — {note[num]}" if num in note else '')) if num in X else '적용'])
     return rows
