@@ -464,7 +464,7 @@ def signal_chips(md):
             f"<div style='font-size:14px;color:#333'>{str(r['공식']).split(' — ', 1)[-1].split(' — ')[0]}</div>"
             f"<div style='font-size:12px;color:#999'>{r['질문']}</div></div>" for _, r in x.iterrows())
         col.html(f"<div style='font-size:13px;color:#888'>{name}</div>"
-                 f"<div style='font-size:30px;color:{color};line-height:1.2'>{len(x)}<span style='font-size:14px;color:#999'> / {tot}개 켜짐</span></div>"
+                 f"<div style='font-size:30px;color:{color};line-height:1.2'>{len(x)}<span style='font-size:14px;color:#999'> / {tot}개 신호 나옴</span></div>"
                  + (chips or "<div style='color:#999;font-size:13px;margin-top:6px'>없음</div>"))
     return True
 
@@ -753,6 +753,13 @@ def turning_board(day):
     else:
         st.info('변곡점 판 그림이 아직 없습니다.')
         return
+    try:   # 11/22 의장: S&P 64·109주선 상태 4가지(위 / 하향 돌파 / 아래 / 상향 돌파)
+        _S = read_csv(dd, '이평상태.csv')
+        if _S is not None and len(_S):
+            st.html("<div style='font-size:13px;color:#333;margin:2px 0 6px'>S&amp;P " + ' · '.join(
+                f"{r['선']}: <b>{r['상태']}</b> ({float(r['차이']):+.1f}%, 선 {float(r['선값']):,.0f})" for _, r in _S.iterrows() if pd.notna(r['상태'])) + '</div>')
+    except Exception:   # noqa: BLE001
+        pass
     with st.expander(f'변곡점 판 — 그림 9개 ({dd[:4]}-{dd[4:6]}-{dd[6:]})', expanded=True):
         for n, nm in enumerate(TURN_NAMES, 1):
             b = _turn_png(dd, n)
