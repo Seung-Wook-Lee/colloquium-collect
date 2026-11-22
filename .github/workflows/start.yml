@@ -1,0 +1,70 @@
+name: start 블록(질문 하나 = 블록 계산부터 결과까지 한 흐름)
+
+on:
+  workflow_dispatch:
+    inputs:
+      q: {description: '질문', required: true}
+      tgt: {description: 'core50 또는 전체', required: false, default: 'core50'}
+      kind: {description: '주식·ETF·모두', required: false, default: '모두'}
+      hz: {description: '보유 기간(주) 4·12·26·52', required: false, default: '26'}
+      nus: {description: '뽑을 수: 미국(0이면 종목 안 뽑음·그림 없음)', required: false, default: '0'}
+      nkr: {description: '뽑을 수: 한국', required: false, default: '0'}
+      fetch: {description: '야후 보조 자료 새로 받기 — yes', required: false, default: ''}
+
+concurrency: start
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: 팀Q 아침보고·퀀트자료
+        uses: actions/checkout@v5
+        continue-on-error: true
+        with:
+          repository: Seung-Wook-Lee/team_q
+          ref: block20-V2611
+          path: team_q
+          sparse-checkout: research/daily
+          token: ${{ secrets.TEAMQ_TOKEN }}
+      - name: 비공개 설정(blocks.yaml·Core50)
+        uses: actions/checkout@v5
+        with:
+          repository: Seung-Wook-Lee/team_q
+          ref: main
+          path: team_q_private
+          sparse-checkout: colloquium_private
+          token: ${{ secrets.TEAMQ_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt pyyaml matplotlib
+      - name: 한글 글꼴
+        run: sudo apt-get install -y fonts-nanum >/dev/null
+      - name: start 실행
+        env:
+          TZ: Asia/Seoul
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+          TEAMQ_DIR: ${{ github.workspace }}/team_q
+          QC_PRIVATE: ${{ github.workspace }}/team_q_private/colloquium_private
+          FRED_KEY: ${{ secrets.FRED_KEY }}
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          DART_KEY: ${{ secrets.DART_KEY }}
+          Q: ${{ github.event.inputs.q }}
+        run: |
+          F=""; if [ "${{ github.event.inputs.fetch }}" = "yes" ]; then F="--fetch"; fi
+          python app/block33/start_run.py "$Q" "${{ github.event.inputs.tgt }}" "${{ github.event.inputs.kind }}" "${{ github.event.inputs.hz }}" "${{ github.event.inputs.nus }}" "${{ github.event.inputs.nkr }}" $F 2>&1 | tee work_start_log.txt
+      - name: 결과를 data-start 가지에 쌓음
+        if: always()
+        run: |
+          mkdir -p /tmp/o && cp -r work_start/out/. /tmp/o/ 2>/dev/null || true; cp work_start_log.txt /tmp/o/마지막_실행기록.txt || true
+          git config user.name github-actions && git config user.email github-actions@users.noreply.github.com
+          git fetch origin data-start && git checkout -B data-start origin/data-start || git checkout --orphan data-start
+          git rm -rq --cached . >/dev/null 2>&1 || true
+          mkdir -p start && cp -r /tmp/o/. start/ && git add start && git commit -qm "start 결과 $(date +%F_%H%M)" && git push origin data-start

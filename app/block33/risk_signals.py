@@ -8,6 +8,40 @@ vs 아무 날 +8.5~10.6%. C3 폭포수 +7.4%·C5 VIX 백워데이션 +3.5%는 �
 AAA 괴리(S&P 고점 5% 안 + AAA 수익률 6달 +0.5%p) 6달 뒤 +2.0% vs 아무 날 +5.1% → 부담."""
 import pandas as pd
 
+# 11/22 23:35 의장 "앵커드 Vwap을 B2에 넣어": QQQ:RSP 비율의 저점 앵커드 VWAP(거래대금 가중 누적 평균).
+# 앵커 = 비율 10% 지그재그 저점(반대로 10% 올라 확정된 날부터 씀), 앵커 뒤 3년 안의 선만. 비율 상승 추세(252일 플러스) 중 선 −5%~+1% 안 = 1(기회).
+# −5%: 의장 "선을 약간 밑돌았다가 그 근처에서 반등한 것도 지지". 검증 qqq_b02v2.py·b02_bottom_test.py(2006~).
+
+
+def qqq_rsp_avwap(D):
+    need = ('QQQ', 'RSP', 'QQQ_VOL', 'RSP_VOL')
+    if not all(k in D for k in need):
+        return None, None
+    x = D[list(need)].dropna()
+    if len(x) < 300:
+        return None, None
+    R = x['QQQ'] / x['RSP']; W = x['QQQ'] * x['QQQ_VOL'] + x['RSP'] * x['RSP_VOL']; i = R.index
+    lows = []; mode, ext, et = 0, R.iloc[0], i[0]
+    for t, v in R.items():
+        if mode == 0:
+            if v >= ext * 1.10: mode, ext, et = 1, v, t
+            elif v <= ext / 1.10: mode, ext, et = -1, v, t
+        elif mode == 1:
+            if v > ext: ext, et = v, t
+            elif v <= ext / 1.10: mode, ext, et = -1, v, t
+        else:
+            if v < ext: ext, et = v, t
+            elif v >= ext * 1.10: lows.append((et, t)); mode, ext, et = 1, v, t
+    t_now = i[-1]; best = None; on = 0
+    for t0, tc in lows:
+        if t_now < tc or t_now > t0 + pd.Timedelta(days=1095):
+            continue
+        av = float((R * W).loc[t0:].sum() / W.loc[t0:].sum()); gp = float(R.iloc[-1] / av - 1)
+        if best is None or abs(gp) < abs(best): best = gp
+        if -0.05 <= gp <= 0.01: on = 1
+    up = R.iloc[-1] > R.iloc[-253] if len(R) > 252 else False
+    return float(on and up), (round(best * 100, 2) if best is not None else None)
+
 
 def signals(D):
     D = D.sort_index()
@@ -38,4 +72,5 @@ def signals(D):
     last = lambda x: float(x.iloc[-1]) if len(x) and pd.notna(x.iloc[-1]) else None
     return dict(CAP_VOL=last(c1), CAP_FORCED=last(c2), CAP_XASSET=last(c4), CAP_WATERFALL=last(c3), CAP_VIXBW=last(c5),
                 AAA_GAP=last(gap), AAA_6M=last(aaa - aaa.shift(126)),
+                **dict(zip(('QQRSP_AVWAP', 'QQRSP_AVWAP_GAP'), qqq_rsp_avwap(D))),
                 COPPOCK=last(cop), COP_UP0=last(up0) if len(cop.dropna()) else None, COP_REV=last(rev) if len(cop.dropna()) > 60 else None)

@@ -1,14 +1,14 @@
 """B35 항복·B03 AAA 괴리용 매일 자료(야후 2년 + FRED DAAA) → in/시장위험.csv (11/22 의장 승인)"""
 import os
 import pandas as pd, requests, yfinance as yf
-YF = {'SPX': '^GSPC', 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'BTC': 'BTC-USD', 'TLT': 'TLT', 'VIX': '^VIX', 'VIX3M': '^VIX3M', 'NDX': '^NDX'}
+YF = {'SPX': '^GSPC', 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'BTC': 'BTC-USD', 'TLT': 'TLT', 'VIX': '^VIX', 'VIX3M': '^VIX3M', 'NDX': '^NDX', 'QQQ': 'QQQ', 'RSP': 'RSP'}   # 11/22 의장 B02 앵커드 VWAP(QQQ:RSP)
 cols = {}
 for k, t in YF.items():
     try:
-        h = yf.Ticker(t).history(period='max' if k == 'NDX' else '2y', auto_adjust=True)   # 코폭은 월봉 10년 필요
+        h = yf.Ticker(t).history(period='max' if k in ('NDX', 'QQQ', 'RSP') else '2y', auto_adjust=True)   # 코폭은 월봉 10년 필요
         h.index = pd.to_datetime(h.index).tz_localize(None).normalize()
         cols[k] = h['Close']
-        if k == 'SPX': cols['SPX_VOL'] = h['Volume']
+        if k in ('SPX', 'QQQ', 'RSP'): cols[f'{k}_VOL'] = h['Volume']
     except Exception as e:
         print(k, e)
 try:
