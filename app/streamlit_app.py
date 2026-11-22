@@ -730,6 +730,39 @@ def buy_plan():
     return BP.judge()
 
 
+TURN_NAMES = ['QQQ:RSP 앵커드 VWAP', 'S&P 2023~2026 + CTM', 'S&P 1994~2002 + CTM (비교용 고정)', 'NVDA AVWAP·피보나치', 'S&P 1999~2000 이평 묶음 (비교용 고정)',
+              'S&P 2026 이평 묶음', 'SPYG:BIL 일목', 'IWF:IWD 월봉 + 2016 추세선', 'MGK 주봉 + CTM-MGK']
+
+
+@st.cache_data(ttl=3 * 3600, show_spinner=False)
+def _turn_png(day, n):
+    rel = f'{day}/{day}_변곡점_{n}.png'
+    if LOCAL:
+        p = Path(LOCAL) / rel
+        return p.read_bytes() if p.exists() else None
+    return drive.get(f'{D_DATA}/{rel}')
+
+
+def turning_board(day):
+    """11/22 의장 '변곡점 판': 의장이 올린 그림 9개를 의장이 정한 순서대로, 원본 그대로 매일 다시 그린 것(daily.py → block33/turning.py)."""
+    d0 = dt.datetime.strptime(day, '%Y%m%d').date()
+    for back in range(8):   # 주말·휴장일이면 가장 최근 그림
+        dd = (d0 - dt.timedelta(days=back)).strftime('%Y%m%d')
+        if _turn_png(dd, 1):
+            break
+    else:
+        st.info('변곡점 판 그림이 아직 없습니다.')
+        return
+    with st.expander(f'변곡점 판 — 그림 9개 ({dd[:4]}-{dd[4:6]}-{dd[6:]})', expanded=True):
+        for n, nm in enumerate(TURN_NAMES, 1):
+            b = _turn_png(dd, n)
+            st.caption(f'{n}. {nm}')
+            if b:
+                st.image(b, use_container_width=True)
+            else:
+                st.caption('그림 없음')
+
+
 def block_bottom():
     """11/21 의장: 블록으로 바닥 찾기, 맨 위. Opportunity Block(과거로 다시 계산되는 블록 공식 20개) 중 13개 이상.
     켜짐은 초록·빨강 원, 과거 성적은 '산출 방법' 안. 매수 가정 = 다음 주 월요일부터 3주 월요일 종가에 1/3씩, 마지막 매수 13주 뒤."""
@@ -788,6 +821,7 @@ try:   # 11/22 의장 1순위: B01 CTM 빨간불이면 맨 위에 현금 전환
         st.success(f"🟢 CTM 초록불(반등 시작) — S&P CTM {_g['값'].iloc[0]}")
 except Exception:   # noqa: BLE001
     pass
+turning_board(day)   # 11/22 의장: 변곡점 판(그림 9개)을 맨 위에
 block_bottom()   # 11/21 의장: 블록 바닥 찾기를 맨 위에
 
 for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
