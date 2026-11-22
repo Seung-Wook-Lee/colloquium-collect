@@ -5,10 +5,11 @@ YF = {'SPX': '^GSPC', 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'BTC': 'BTC-USD', 'TLT':
 cols = {}
 for k, t in YF.items():
     try:
-        h = yf.Ticker(t).history(period='max' if k in ('NDX', 'QQQ', 'RSP') else '2y', auto_adjust=True)   # 코폭은 월봉 10년 필요
+        h = yf.Ticker(t).history(period='max' if k in ('NDX', 'QQQ', 'RSP', 'SPX') else '2y', auto_adjust=True)   # 코폭은 월봉 10년 필요
         h.index = pd.to_datetime(h.index).tz_localize(None).normalize()
         cols[k] = h['Close']
         if k in ('SPX', 'QQQ', 'RSP'): cols[f'{k}_VOL'] = h['Volume']
+        if k in ('SPX', 'QQQ'): cols[f'{k}_HIGH'] = h['High']; cols[f'{k}_LOW'] = h['Low']   # 11/22 CTM(고가·저가 볼린저 위치)
     except Exception as e:
         print(k, e)
 try:
