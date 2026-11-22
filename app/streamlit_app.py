@@ -761,13 +761,16 @@ def turning_board(day):
     except Exception:   # noqa: BLE001
         pass
     with st.expander(f'변곡점 판 — 그림 9개 ({dd[:4]}-{dd[4:6]}-{dd[6:]})', expanded=True):
-        for n, nm in enumerate(TURN_NAMES, 1):
-            b = _turn_png(dd, n)
+        for n, nm in enumerate(TURN_NAMES, 1):   # 11/22 의장: "늘 같이 준 그래프와 비교할 수 있게 옆에" → 왼쪽 재현, 오른쪽 의장이 준 원본
+            b = _turn_png(dd, n); o = Path(__file__).resolve().parent / 'assets' / 'turning_orig' / f'orig_{n}.png'
             st.caption(f'{n}. {nm}')
-            if b:
-                st.image(b, use_container_width=True)
-            else:
-                st.caption('그림 없음')
+            c1, c2 = st.columns(2, gap='small')
+            with c1:
+                st.caption('재현(오늘 자료)')
+                st.image(b, use_container_width=True) if b else st.caption('그림 없음')
+            with c2:
+                st.caption('원본(의장이 준 그림)')
+                st.image(str(o), use_container_width=True) if o.exists() else st.caption('원본 없음')
 
 
 def block_bottom():
