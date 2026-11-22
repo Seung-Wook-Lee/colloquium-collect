@@ -23,6 +23,10 @@ on:
         description: '야후 보조 자료 갱신 건너뛰기(전날 것 사용) — yes'
         required: false
         default: ''
+      backtest:
+        description: '블록 성적표·블록점수이력을 금요일이 아니어도 돌리기 — yes'
+        required: false
+        default: ''
 
 concurrency: meeting
 
@@ -66,6 +70,7 @@ jobs:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}       # 11/21 야후가 막으면 한투로
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
           DART_KEY: ${{ secrets.DART_KEY }}             # 11/22 한투 분기 손익이 안 되면 DART
+          BACKTEST: ${{ github.event.inputs.backtest == 'yes' && '1' || '' }}
         run: |
           ARGS=""
           if [ "${{ github.event_name }}" = "schedule" ]; then ARGS="--session 미장전"; fi
