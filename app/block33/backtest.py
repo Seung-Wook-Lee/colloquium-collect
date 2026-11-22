@@ -263,6 +263,20 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     sig = ','.join(sorted(mask)) + '|' + ','.join(SB for SB in B['종목'])
     if len(old) and str(old.get('_설정', pd.Series([''])).iloc[0]) != sig:
         old = pd.DataFrame()   # 블록·칸이 바뀌면 처음부터 다시
+    # 11/22 의장(BNY·PEP·STX 26주 승률 없음): 새 날짜만 덧붙이면 나중에 유니버스에 들어온 종목은 과거 주가 영영 비었다.
+    # 유니버스에 있고(기준층 S0 제외) 긴 가격이 처음 절반 안에 있는데 이력에 한 줄도 없는 종목이 있으면 처음부터 다시 계산.
+    if len(old):
+        up = os.path.join(d, '유니버스.csv')
+        if os.path.exists(up):
+            U = pd.read_csv(up, encoding='utf-8-sig')
+            tc = next((c for c in ('yfinance 티커', 'ticker', '티커') if c in U), None)
+            seen = set(old['번호'])
+            half = C.iloc[:max(len(C) // 2, 1)]
+            miss = [n for n, t, ly in zip(U['번호'], U[tc] if tc else [None] * len(U), U.get('층', pd.Series([''] * len(U))))
+                    if n not in seen and str(ly) != 'S0' and t in half.columns and half[t].notna().any()]
+            if miss:
+                print(f'이력에 없는 종목 {len(miss)}개({", ".join(map(str, miss[:10]))}) → 처음부터 다시 계산')
+                old = pd.DataFrame()
     have = set(pd.to_datetime(old['날짜']).dt.date) if len(old) else set()
     todo = [t for t in dates if t.date() not in have or t == dates[-1]]
     with Pool(workers or os.cpu_count()) as pool:
