@@ -106,7 +106,20 @@ def signals(D):
         ab = (Cw.shift(1) > m.shift(1) * 1.03).rolling(8).sum() >= 6
         hit = ((Lw <= m * 1.01) & (Lw >= m * 0.95) & (Cw > m) & ab).astype(int).rolling(4, min_periods=1).max()
         w109 = float(hit.iloc[-1]) if m.notna().iloc[-1] else None
-    return dict(**cpce, SPX_W109_SUP=w109, CAP_VOL=last(c1), CAP_FORCED=last(c2), CAP_XASSET=last(c4), CAP_WATERFALL=last(c3), CAP_VIXBW=last(c5),
+    # 11/22 의장: 64·109주선 상태 4가지(위 / 하향 돌파 / 아래 / 상향 돌파)를 매일 냄. 돌파 = 주봉 종가가 선을 건넌 주부터 4주.
+    # B02에는 109주선 상향 돌파 = 기회만 넣음(ma_state.py: 앞·뒤 기간 IC +0.008·+0.022). 나머지 상태는 표시만(IC 안 오름).
+    mst = {}
+    for n in (64, 109):
+        Cw = s.resample('W-FRI').last().dropna(); m_ = Cw.rolling(n).mean()
+        if m_.notna().sum() < 6:
+            continue
+        up = Cw > m_; was = up.shift(1)
+        xd4 = ((was == True) & ~up).astype(int).rolling(4, min_periods=1).max().astype(bool) & ~up
+        xu4 = ((was == False) & up).astype(int).rolling(4, min_periods=1).max().astype(bool) & up
+        stt = '하향 돌파' if xd4.iloc[-1] else ('상향 돌파' if xu4.iloc[-1] else ('위' if up.iloc[-1] else '아래'))
+        mst[f'SPX_W{n}_STATE'] = stt; mst[f'SPX_W{n}_MA'] = round(float(m_.iloc[-1]), 1); mst[f'SPX_W{n}_GAP'] = round(float(Cw.iloc[-1] / m_.iloc[-1] - 1) * 100, 1)
+    mst['SPX_W109_UPX'] = float(mst.get('SPX_W109_STATE') == '상향 돌파') if 'SPX_W109_STATE' in mst else None
+    return dict(**cpce, **mst, SPX_W109_SUP=w109, CAP_VOL=last(c1), CAP_FORCED=last(c2), CAP_XASSET=last(c4), CAP_WATERFALL=last(c3), CAP_VIXBW=last(c5),
                 AAA_GAP=last(gap), AAA_6M=last(aaa - aaa.shift(126)),
                 **_ctm_out(D),
                 **dict(zip(('QQRSP_AVWAP', 'QQRSP_AVWAP_GAP'), qqq_rsp_avwap(D))),

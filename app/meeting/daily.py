@@ -440,6 +440,7 @@ def main():
             f'{PFX}판정표.csv': S.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}가격대.csv': BAND.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}시장블록.csv': M.to_csv(index=False).encode('utf-8-sig'),
+            f'{PFX}이평상태.csv': pd.DataFrame([dict(선=f'{n}주선', 상태=m.get(f'SPX_W{n}_STATE'), 선값=m.get(f'SPX_W{n}_MA'), 차이=m.get(f'SPX_W{n}_GAP')) for n in (64, 109)]).to_csv(index=False).encode('utf-8-sig'),   # 11/22 의장: 64·109주선 상태 4가지
             f'{PFX}사건상태.csv': EV.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}변수달력.csv': CAL.to_csv(index=False).encode('utf-8-sig'),
             f'{PFX}종목색인.csv': PER.ask_index(c).to_csv(index=False).encode('utf-8-sig')}
