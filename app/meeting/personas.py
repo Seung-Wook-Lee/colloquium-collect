@@ -593,10 +593,10 @@ def ttuji(c):
         B = QCC.load_blocks()
         rows = SBK.table(B)
         if rows:
-            X = [r for r in rows if r[3] != '켜짐']
-            out.append(L('하위 블록', f"켜짐 {len(rows) - len(X)} · 꺼짐 {len(X)}" + (f" ({', '.join(r[1] + ' ' + r[2] for r in X[:8])})" if X else ''),
+            X = [r for r in rows if r[3] != '적용']
+            out.append(L('하위 블록', f"적용 {len(rows) - len(X)} · 적용 안 함 {len(X)}" + (f" ({', '.join(r[1] + ' ' + r[2] for r in X[:8])})" if X else ''),
                          '비공개 subblocks.yaml 켜기 목록(블록 2 phase · 3 Analysis · 4 portfolio · 5 colloquium)'))
-            G.append({'type': 'grid', 'title': '하위 블록 켜짐·꺼짐', 'columns': ['블록', '번호', '이름', '상태'], 'rows': rows, 'source': 'subblocks.yaml'})
+            G.append({'type': 'grid', 'title': '하위 블록 적용 여부', 'columns': ['블록', '번호', '이름', '상태'], 'rows': rows, 'source': 'subblocks.yaml'})
     except Exception:   # noqa: BLE001
         pass
     return out, G
@@ -845,7 +845,7 @@ def _buy_state(c):
     turn, plus = num(qg.get('시스템 매수 전환')), num(qg.get('CTA 플러스 전환'))
     cta_floor = c.R.get('미스 시타델', {}).get('CTA_바닥', -4)
     conf_on = (turn == 1) or (plus == 1) or (cta is not None and cta <= cta_floor)
-    conf_txt = (f"시스템 매수 전환 {'켜짐' if turn == 1 else '꺼짐'}, CTA 플러스 전환 {'켜짐' if plus == 1 else '꺼짐'}, "
+    conf_txt = (f"시스템 매수 전환 {'신호 나옴' if turn == 1 else '신호 안 나옴'}, CTA 플러스 전환 {'신호 나옴' if plus == 1 else '신호 안 나옴'}, "
                 f"CTA {p(cta, 2, 'σ') if cta is not None else '자료 없음'}(바닥 {cta_floor}σ)") if qg else '수급포지셔닝.csv 없음 → 확인 안 됨'
     ST = {}
     for mk in ('미국', '한국'):
@@ -923,7 +923,7 @@ def conclusion(c):
         F = QCC.load_blocks(switches=False).get('진단_공포탐욕') or {}
         term = num(c.m.get('VIX_VIX3M')) if isinstance(c.m, dict) else None
         fs = FGM.say(FGM.from_csv(_read(c.d, '공포탐욕')), F, term)
-        mood.append(L('공포탐욕', fs.get('구간') or '자료 없음', fs['말'] + (' 시장 신호: 극단 공포·신용 버팀 → 살 때가 가까움 켜짐.' if fs.get('가까움') else '')))
+        mood.append(L('공포탐욕', fs.get('구간') or '자료 없음', fs['말'] + (' 시장 신호: 극단 공포·신용 버팀 → 살 때가 가까움 신호 나옴.' if fs.get('가까움') else '')))
         if fs.get('VIX말'):
             mood.append(L('VIX', fs['VIX말'].split(' — ')[0], fs['VIX말']))
     except Exception as e:   # noqa: BLE001
