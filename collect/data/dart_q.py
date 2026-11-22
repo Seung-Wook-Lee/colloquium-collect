@@ -76,10 +76,15 @@ def quarterly(code, years=3):
     cc = corp(code)
     if not cc:
         return []
-    out, Y = [], dt.date.today().year
+    out, T = [], dt.date.today()
+    Y = T.year
+    due = {'11013': (5, 15), '11012': (8, 14), '11014': (11, 14), '11011': (3, 31)}   # 공시 마감(대략): 아직 안 나온 보고서는 묻지 않음
     for y in range(Y - years + 1, Y + 1):
         cum3 = {}
         for rc in ('11013', '11012', '11014', '11011'):
+            m, d_ = due[rc]
+            if dt.date(y + (1 if rc == '11011' else 0), m, d_) > T + dt.timedelta(days=10):
+                continue
             rows = _rep(cc, y, rc)
             if not rows:
                 continue
