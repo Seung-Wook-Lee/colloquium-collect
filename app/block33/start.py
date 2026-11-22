@@ -48,6 +48,12 @@ if _IN:
     if _F.MISSING: print('[빠진 자료] ' + ' / '.join(f'{k}({v})' for k, v in _F.MISSING.items()))
     print(f'① 블록 계산·② 거르기: 엔진 직접 실행 {PDATE} (입력 {os.environ.get("START_INDATE", "")}) | 판정 {P["판정"].value_counts().to_dict()}')
     U = pd.read_csv(f'{_IN}/유니버스.csv', encoding='utf-8-sig')
+    if _m.get('CTM_RED') == 1:   # 11/22 의장 1순위: CTM 빨간불 → 모든 분석을 멈추고 현금 전환만
+        msg = f"🔴 CTM 빨간불: S&P CTM {_m.get('CTM_SPX')} (30 아래 {_m.get('CTM_LOW_WEEKS')}주 연속) → 모든 분석 멈춤, 결론 = 현금 전환"
+        print(msg); pd.DataFrame([dict(결론='현금 전환', 이유=msg, 시각=PDATE)]).to_csv(f'{OD}/{TAG}_결과.csv', index=False, encoding='utf-8-sig')
+        L0 = pd.concat([L0, pd.DataFrame([dict(번호=NO, 시각=PDATE, 질문=Q, 대상=TGT, 구분=KIND, 판정표날짜=PDATE, 이긴조합='현금 전환(CTM 빨간불)')])])
+        L0.to_csv(LOG, index=False, encoding='utf-8-sig'); sys.exit(0)
+    print(f"CTM: S&P {_m.get('CTM_SPX')} · QQQ {_m.get('CTM_QQQ')} (빨간불 = S&P 30 아래 4주 연속, 지금 {'켜짐' if _m.get('CTM_RED') == 1 else '꺼짐'})")
 else:   # 손 시험용(드라이브 없는 곳): 미리 만든 판정표. 답에는 쓰지 않는다.
     P = pd.read_csv(f'{H}/pan.csv'); PDATE = '미리 만든 판정표 ' + dt.datetime.fromtimestamp(os.path.getmtime(f'{H}/pan.csv')).strftime('%Y-%m-%d %H:%M')
     print('주의: START_IN 없음 → 미리 만든 판정표로 손 시험(엔진 직접 아님)')

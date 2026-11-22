@@ -468,6 +468,10 @@ def run(d, cfg=None):
     S = run_stages(S, ctx)
     m['_단계'] = ctx['info']
     S = S.sort_values(['판정', '순위점수' if '순위점수' in S else '싼가', '점수'], ascending=[True, False, False])
+    # 11/22 23:47 의장 1순위: B01 CTM 빨간불(S&P CTM 30 아래 4주 연속) = 최상위 스위치 → 모든 종목 결론을 '현금 전환'으로(다른 분석 결론은 쓰지 않음)
+    if m.get('CTM_RED') == 1:
+        S['원래 추천'] = S.get('추천'); S['추천'] = '현금 전환(CTM 빨간불)'; S['판정'] = '현금 전환'
+        m['현금전환'] = 1
     run.last_f = f
     return S, pd.DataFrame(detail), M, m
 

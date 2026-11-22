@@ -6,6 +6,7 @@ block_ab.py(2006~ B02 판단력 IC, S&P 12달) 결과로 B02에 코폭 급반전
 검증(2026-11-22, risk_lab.py): 켜진 첫날 S&P 12달 뒤 — C1 +20.3%(95%, 21번, 1950~) · C2 +12.7%(78%, 47번) · C4 +11.0%(85%, 17번)
 vs 아무 날 +8.5~10.6%. C3 폭포수 +7.4%·C5 VIX 백워데이션 +3.5%는 아무 날보다 못해 판정에서 빼고 표시만.
 AAA 괴리(S&P 고점 5% 안 + AAA 수익률 6달 +0.5%p) 6달 뒤 +2.0% vs 아무 날 +5.1% → 부담."""
+import numpy as np
 import pandas as pd
 
 # 11/22 23:35 의장 "앵커드 Vwap을 B2에 넣어": QQQ:RSP 비율의 저점 앵커드 VWAP(거래대금 가중 누적 평균).
@@ -43,6 +44,30 @@ def qqq_rsp_avwap(D):
     return float(on and up), (round(best * 100, 2) if best is not None else None)
 
 
+# 11/22 23:47 의장 1순위 "CTM 빨간불 들어오면 모든 분석을 멈추고 현금으로" → B01 최상위 스위치.
+# CTM(Chande Trend Meter, StockCharts) 구성: 고가·저가·종가의 볼린저 밴드 위치(20·50·75·100봉), 100봉 표준편차 대비 가격 변화, RSI(14), 2봉 채널 돌파 → 0~100.
+# 가중은 비공개 → 그림 값에 맞춘 재현 가중(ctm_fit.py). 주봉(금요일 끝, 이번 주는 지금까지). 빨간불 = 30 아래 4주 연속.
+CTM_W = dict(BB=8, PC=0, RSI=3, BO=0)
+
+
+def ctm(D, k='SPX'):
+    c = D[k].dropna()
+    h = D[f'{k}_HIGH'].reindex(c.index).fillna(c) if f'{k}_HIGH' in D else c
+    l = D[f'{k}_LOW'].reindex(c.index).fillna(c) if f'{k}_LOW' in D else c
+    C, Hh, L = c.resample('W-FRI').last().dropna(), h.resample('W-FRI').max().dropna(), l.resample('W-FRI').min().dropna()
+    if len(C) < 110:
+        return pd.Series(dtype=float)
+    def pb(x, n):
+        m = C.rolling(n).mean(); s = C.rolling(n).std()
+        return ((x - (m - 2 * s)) / (4 * s)).clip(0, 1)
+    BB = pd.concat([pb(x, n) for n in (20, 50, 75, 100) for x in (Hh, L, C)], axis=1).mean(axis=1)
+    z = (C - C.shift(1)) / C.diff().rolling(100).std(); PC = ((z + 2) / 4).clip(0, 1)
+    d = C.diff(); up = d.clip(lower=0).ewm(alpha=1 / 14).mean(); dn = (-d.clip(upper=0)).ewm(alpha=1 / 14).mean(); RSI = up / (up + dn)
+    BO = pd.Series(np.where(C > Hh.shift(1).rolling(2).max(), 1.0, np.where(C < L.shift(1).rolling(2).min(), 0.0, 0.5)), index=C.index)
+    w = CTM_W; tw = sum(w.values())
+    return 100 * (w['BB'] * BB + w['PC'] * PC + w['RSI'] * RSI + w['BO'] * BO) / tw
+
+
 def signals(D):
     D = D.sort_index()
     s = D['SPX'].dropna(); i = s.index
@@ -72,5 +97,20 @@ def signals(D):
     last = lambda x: float(x.iloc[-1]) if len(x) and pd.notna(x.iloc[-1]) else None
     return dict(CAP_VOL=last(c1), CAP_FORCED=last(c2), CAP_XASSET=last(c4), CAP_WATERFALL=last(c3), CAP_VIXBW=last(c5),
                 AAA_GAP=last(gap), AAA_6M=last(aaa - aaa.shift(126)),
+                **_ctm_out(D),
                 **dict(zip(('QQRSP_AVWAP', 'QQRSP_AVWAP_GAP'), qqq_rsp_avwap(D))),
                 COPPOCK=last(cop), COP_UP0=last(up0) if len(cop.dropna()) else None, COP_REV=last(rev) if len(cop.dropna()) > 60 else None)
+
+
+def _ctm_out(D):
+    out = {}
+    for k in ('SPX', 'QQQ'):
+        if k not in D:
+            continue
+        t = ctm(D, k).dropna()
+        if len(t) >= 4:
+            out[f'CTM_{k}'] = round(float(t.iloc[-1]), 1)
+            if k == 'SPX':
+                out['CTM_RED'] = float((t.tail(4) < 30).all())
+                out['CTM_LOW_WEEKS'] = int((t[::-1] < 30).cumprod().sum())
+    return out
