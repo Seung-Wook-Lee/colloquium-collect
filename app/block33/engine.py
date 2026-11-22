@@ -269,6 +269,7 @@ def run(d, cfg=None):
     Q = {b['질문']: k for k, b in SB.items()}   # 질문으로 블록 찾기(번호가 바뀌어도 됨)
     K_EARN, K_EVENT, K_HOT = Q['이익이 늘고 있나?'], Q['제2의 젠슨 황 있나?'], Q['너무 많이 올랐나?']
     K_HIGH = Q['고점 부근이 아닌가?']; K_CHEAP = Q['그래서, 지금 싼가?']
+    _MEMS = set((B.get('메모리반대') or {}).get('종목', []))   # 11/22 의장 '메모리는 반대로': B23·B15를 거꾸로
     last = int(list(SB)[-1][1:])
     K_SPLIT, K_CAP, K_SELL = f'B{last+1:02d}_분할', f'B{last+2:02d}_비중상한(%)', f'B{last+3:02d}_매도신호'
     # 1) 공식별 결과
@@ -316,6 +317,8 @@ def run(d, cfg=None):
                 allp += sum(ok); alln += len(ok)
             # 자료 없는 공식이 절반을 넘으면 이 블록은 점수 없음(자료 한 개로 만점 방지)
             sc = (sum(ok) / len(ok)) if ok and len(ok) * 2 >= len(b['공식']) else None
+            if sc is not None and bid == K_CHEAP and row.get('번호') in _MEMS:   # 메모리: PER 낮음 = 이익 꼭대기 → 싼가를 거꾸로
+                sc = 1.0 - sc
             if b['역할'] == '점수' and sc is not None:
                 scores.append(sc)
             if b['역할'] in ('핵심', '점수', '타이밍') and sc is not None:
@@ -419,9 +422,10 @@ def run(d, cfg=None):
     _MR = B.get('메모리반대', {}) or {}
     _mem_stk = set(_MR.get('종목', [])); _mem_etf = set(_MR.get('ETF', []))
     def _rev(t, s):   # 메모리 ETF: 구성종목 이익을 거꾸로(이미 거꾸로 된 메모리 종목은 그대로)
-        if s[0] is None or (t in tk2num and tk2num[t] in _mem_stk):
+        if t in tk2num and tk2num[t] in _mem_stk:
             return s
-        return (1.0 - s[0],) + tuple(s[1:])
+        flip = lambda v: None if v is None or (isinstance(v, float) and math.isnan(v)) else 1.0 - v
+        return (flip(s[0]),) + tuple(s[1:4]) + (flip(s[4]),)   # 이익(B23)·싼가(B15)를 거꾸로
     for n, g in H.groupby('번호'):
         if n not in num2row: continue
         i = num2row[n]
