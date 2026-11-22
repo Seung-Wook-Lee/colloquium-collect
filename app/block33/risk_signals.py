@@ -95,7 +95,11 @@ def signals(D):
     hi = cop.rolling(120, min_periods=60).quantile(.8)
     rev = ((cop.shift(1) >= hi.shift(1)) & (cop < cop.shift(1)) & (cop.shift(1) - cop >= cop.diff().abs().rolling(120, min_periods=60).median() * 2)).astype(int)
     last = lambda x: float(x.iloc[-1]) if len(x) and pd.notna(x.iloc[-1]) else None
-    return dict(CAP_VOL=last(c1), CAP_FORCED=last(c2), CAP_XASSET=last(c4), CAP_WATERFALL=last(c3), CAP_VIXBW=last(c5),
+    # 11/22 의장 B02: CBOE 주식 풋/콜(CPCE) 10일 EMA가 0.69를 아래에서 위로 넘은 뒤 20거래일 = 기회 (cpce.py 2007~ IC 0.178→0.209, 0.67~0.73 모두 오름)
+    cpe = D['CPCE'].dropna().ewm(span=10, adjust=False).mean() if 'CPCE' in D else pd.Series(dtype=float)
+    ab = cpe > 0.69; cx = (ab & ~ab.shift(1, fill_value=False)).astype(int)
+    cpce = dict(CPCE_EMA=round(last(cpe), 3) if len(cpe) >= 20 else None, CPCE_UP20=float(cx.tail(20).max()) if len(cpe) >= 20 else None)
+    return dict(**cpce, CAP_VOL=last(c1), CAP_FORCED=last(c2), CAP_XASSET=last(c4), CAP_WATERFALL=last(c3), CAP_VIXBW=last(c5),
                 AAA_GAP=last(gap), AAA_6M=last(aaa - aaa.shift(126)),
                 **_ctm_out(D),
                 **dict(zip(('QQRSP_AVWAP', 'QQRSP_AVWAP_GAP'), qqq_rsp_avwap(D))),
