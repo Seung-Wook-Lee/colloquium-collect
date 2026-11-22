@@ -7,6 +7,7 @@ import pandas as pd, requests, yfinance as yf
 os.makedirs('history', exist_ok=True)
 YF = {'SPX': '^GSPC', 'NDX': '^NDX', 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'BTC': 'BTC-USD', 'TLT': 'TLT', 'LQD': 'LQD', 'QLTA': 'QLTA',
       'VIX': '^VIX', 'VIX3M': '^VIX3M', 'SKEW': '^SKEW', 'VVIX': '^VVIX', 'MOVE': '^MOVE', 'QQQ': 'QQQ', 'RSP': 'RSP', 'IEF': 'IEF', 'SHY': 'SHY', 'AGG': 'AGG', 'BIL': 'BIL', 'NVDA': 'NVDA', 'SPYG': 'SPYG', 'IVW': 'IVW', 'IWF': 'IWF', 'IWD': 'IWD', 'MGK': 'MGK', 'COMPQ': '^IXIC'}   # 11/22 의장 IWF:IWD 월봉 일목, MGK 주봉, 나스닥 종합 코폭   # 11/22 의장 BIL:SPYG 일목 검증   # 11/22 의장 NVDA 앵커드 VWAP   # 11/22 의장 QQQ:RSP 앵커드 VWAP(거래량 포함)
+RAW = ('QQQ', 'RSP', 'SPYG', 'BIL', 'IWF', 'IWD')   # 11/22 변곡점 판: 비율 그림 원본 재현
 cols = {}
 for k, t in YF.items():
     for _ in range(3):
@@ -16,6 +17,7 @@ for k, t in YF.items():
                 cols[k] = h['Close']
                 if k == 'SPX': cols['SPX_VOL'] = h['Volume']; cols['SPX_LOW'] = h['Low']; cols['SPX_HIGH'] = h['High']
                 if k in ('QQQ', 'RSP', 'NVDA', 'MGK'): cols[f'{k}_VOL'] = h['Volume']; cols[f'{k}_LOW'] = h['Low']; cols[f'{k}_HIGH'] = h['High']
+                if k in RAW: cols[f'{k}_RAW'] = yf.Ticker(t).history(period='max', auto_adjust=False)['Close']   # 비율 그림은 배당 안 고친 값(StockCharts와 같게)
                 break
         except Exception as e:
             print(k, e); time.sleep(3)
