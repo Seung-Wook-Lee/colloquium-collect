@@ -9,7 +9,7 @@ on:
       hz: {description: '보유 기간(주) 4·12·26·52', required: false, default: '26'}
       nus: {description: '뽑을 수: 미국(0이면 종목 안 뽑음·그림 없음)', required: false, default: '0'}
       nkr: {description: '뽑을 수: 한국', required: false, default: '0'}
-      fetch: {description: '야후 보조 자료 새로 받기 — yes', required: false, default: ''}
+      fetch: {description: '야후 보조 자료 새로 받기(기본 yes, 빠른 시험만 no)', required: false, default: 'yes'}
 
 concurrency: start
 
@@ -64,7 +64,7 @@ jobs:
       - name: 결과를 data-start 가지에 쌓음
         if: always()
         run: |
-          mkdir -p /tmp/o && cp -r work_start/out/. /tmp/o/ 2>/dev/null || true; cp work_start_log.txt /tmp/o/마지막_실행기록.txt || true
+          mkdir -p /tmp/o && cp -r app/work_start/out/. /tmp/o/ 2>/dev/null || true; cp work_start_log.txt /tmp/o/마지막_실행기록.txt || true
           git config user.name github-actions && git config user.email github-actions@users.noreply.github.com
           git fetch origin data-start && git checkout -B data-start origin/data-start || git checkout --orphan data-start
           git rm -rq --cached . >/dev/null 2>&1 || true
