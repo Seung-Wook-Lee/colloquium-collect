@@ -41,7 +41,9 @@ def run(ctx, c):
     if X is not None:
         for t, x in X.groupby('ticker'):
             rows.append({'원천': '1-4 PER·EPS', 'ticker': t, '시작': str(x.dropna(subset=['PER'])['날짜'].min())[:10],
-                         'PER_있는주(%)': round(x['PER'].notna().mean() * 100, 1)})
+                         'PER_있는주(%)': round(x['PER'].notna().mean() * 100, 1),
+                         # 11/22 의장 '우리 자료에 오류 있으면 안 됨'(TSM PER 0.65 = 화폐 단위 섞임): 상식 밖 PER 주 수
+                         'PER_상식밖(주)': int(((x['PER'] < 2) | (x['PER'] > 2000)).sum())})
     Q = pd.DataFrame(rows)
     write(ctx, '자료_품질.csv.gz', Q)
     S = Q.groupby('원천').agg(종목=('ticker', 'nunique'), 평균기간=('기간(년)', 'mean')).round(1)

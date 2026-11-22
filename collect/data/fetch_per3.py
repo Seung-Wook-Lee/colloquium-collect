@@ -20,14 +20,33 @@ def one(a):
         if not steps: return dict(번호=n)
         s=pd.Series(dict(sorted(steps))).sort_index()
         eps=s.reindex(px.index.union(s.index)).ffill().reindex(px.index)
+        # 11/22 의장 'PER 오류 고쳐라': 재무 통화가 주가 통화와 다르면(TSM: 주가 달러, EPS 대만 달러) 그날 환율로 바꾸고,
+        # ADR 비율(1 ADR = 원주 n주)은 야후 trailingEps(주가 통화·ADR 기준)와 맞춘다
+        info=T.info or {}
+        cur=info.get('currency'); fin=info.get('financialCurrency')
+        fx_note=''
+        if cur and fin and cur!=fin:
+            fx=yf.download(f'{fin}{cur}=X',period='3y',auto_adjust=False,progress=False)['Close']
+            fx=(fx.iloc[:,0] if hasattr(fx,'columns') else fx); fx.index=pd.to_datetime(fx.index).tz_localize(None)
+            fx=fx.reindex(px.index.union(fx.index)).ffill().reindex(px.index)
+            if fx.notna().sum()==0: return dict(번호=n,경고=f'환율 {fin}{cur} 없음')
+            eps=eps*fx
+            te=info.get('trailingEps')
+            if te and te>0 and eps.dropna().iloc[-1]>0:
+                r=te/eps.dropna().iloc[-1]
+                if 0.2<r<20 and abs(r-1)>0.15: eps=eps*r
+            fx_note=f'{fin}→{cur} 환산'
         per=(px/eps).where(eps>0).dropna()
         if len(per)<250: return dict(번호=n)
         now=per.iloc[-1]
+        # 자료 정련: PER이 상식 밖(2배 미만·2000배 초과)이면 쓰지 않고 경고(11/22 TSM 0.65 사건)
+        if not (2<=now<=2000): return dict(번호=n,경고=f'PER {now:.2f} 상식 밖 {fx_note}'.strip())
         p1=per[per.index>=per.index[-1]-pd.Timedelta(days=365)]
         return dict(번호=n,per_now=round(now,2),per_med3=round(per.median(),2),per_pct3=round((per<now).mean(),3),
-                    per_med1=round(p1.median(),2),per_pct1=round((p1<now).mean(),3))
+                    per_med1=round(p1.median(),2),per_pct1=round((p1<now).mean(),3),경고=fx_note)
     except Exception as e:
         return dict(번호=n)
 with cf.ThreadPoolExecutor(10) as ex: R=list(ex.map(one,zip(f['번호'],f['ticker'])))
 D=pd.DataFrame(R); D.to_csv('in/PER3년.csv',index=False,encoding='utf-8-sig')
-print(len(D), D['per_pct3'].notna().sum()); print(D.dropna().head(10))
+print(len(D), D['per_pct3'].notna().sum()); print(D.dropna(subset=['per_now']).head(10))
+if '경고' in D: print(D[D['경고'].fillna('')!=''].to_string())
