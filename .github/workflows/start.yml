@@ -58,6 +58,7 @@ jobs:
           DART_KEY: ${{ secrets.DART_KEY }}
           Q: ${{ github.event.inputs.q }}
         run: |
+          set -o pipefail
           F=""; if [ "${{ github.event.inputs.fetch }}" = "yes" ]; then F="--fetch"; fi
           python app/block33/start_run.py "$Q" "${{ github.event.inputs.tgt }}" "${{ github.event.inputs.kind }}" "${{ github.event.inputs.hz }}" "${{ github.event.inputs.nus }}" "${{ github.event.inputs.nkr }}" $F 2>&1 | tee work_start_log.txt
       - name: 결과를 data-start 가지에 쌓음

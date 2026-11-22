@@ -13,8 +13,7 @@ args = [a for a in sys.argv[1:] if a != '--fetch']; FETCH = '--fetch' in sys.arg
 W = os.path.join(REPO, 'work_start'); IN = f'{W}/in'; SD = f'{W}/sd'; OUT = f'{W}/out'
 shutil.rmtree(W, ignore_errors=True)
 for p in (IN, SD, OUT): os.makedirs(p)
-for link, target in (('in', IN), ('qblocks', HERE)):
-    os.symlink(target, os.path.join(W, link))
+os.symlink(HERE, os.path.join(W, 'qblocks'))   # fetch_*.py가 'in/'·'qblocks/'를 상대 경로로 씀(in은 IN 그 자체)
 KST = dt.timezone(dt.timedelta(hours=9)); now = dt.datetime.now(KST)
 day = None
 for k in range(0, 10):
