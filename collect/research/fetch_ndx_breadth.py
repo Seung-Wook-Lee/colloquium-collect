@@ -2,13 +2,27 @@
 주의: 지금 구성 종목만 씀(과거에 빠진 종목 없음 = 생존 편향). 결과 collect/research/out/NDX_AD.csv (날짜, 상승, 하락, 종목수)"""
 import os, io, pandas as pd, requests, yfinance as yf
 os.makedirs('collect/research/out', exist_ok=True)
-html = requests.get('https://en.wikipedia.org/wiki/Nasdaq-100', headers={'User-Agent': 'Mozilla/5.0'}, timeout=60).text
 tk = None
-for t in pd.read_html(io.StringIO(html)):
-    for c in t.columns:
-        if str(c).lower() in ('ticker', 'symbol'):
-            tk = [str(x).replace('.', '-') for x in t[c].dropna()]; break
-    if tk and len(tk) > 90: break
+try:
+    html = requests.get('https://en.wikipedia.org/wiki/Nasdaq-100', headers={'User-Agent': 'Mozilla/5.0 (research script)'}, timeout=60).text
+    for t in pd.read_html(io.StringIO(html)):
+        cs = [c for c in t.columns if any(k in str(c).lower() for k in ('ticker', 'symbol'))]
+        print('표', t.shape, list(t.columns)[:4])
+        if cs and len(t) > 90: tk = [str(x).replace('.', '-') for x in t[cs[0]].dropna()]; break
+except Exception as e:
+    print('위키 실패', e)
+if not tk:
+    try:
+        j = requests.get('https://api.nasdaq.com/api/quote/list-type/nasdaq100', headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'}, timeout=60).json()
+        tk = [r['symbol'] for r in j['data']['data']['rows']]
+    except Exception as e:
+        print('나스닥 실패', e)
+if not tk:   # 마지막 수단: 2026년 기준 구성 종목(손으로 적은 목록)
+    tk = """AAPL MSFT NVDA AMZN GOOGL GOOG META AVGO TSLA COST NFLX PLTR AMD ASML CSCO TMUS AZN LIN INTU ISRG PEP TXN QCOM BKNG ADBE AMGN AMAT
+    ARM PDD HON GILD MU LRCX PANW ADP ADI KLAC CMCSA APP VRTX MELI CRWD SBUX INTC CEG DASH MSTR ORLY CTAS MAR MDLZ CDNS SNPS FTNT ABNB
+    PYPL REGN MRVL ASML WDAY ADSK CSX AXON ROP CHTR NXPI MNST PCAR AEP PAYX FAST CPRT KDP ROST LULU DDOG EXC IDXX TTWO BKR XEL EA
+    VRSK CCEP ODFL CTSH FANG KHC ZS GEHC TEAM CSGP ANSS DXCM BIIB ON TTD CDW GFS WBD MCHP LIN SHOP""".split()
+    tk = list(dict.fromkeys(tk))
 print('구성 종목', len(tk), tk[:10])
 px = yf.download(tk, period='max', auto_adjust=True, progress=False, threads=True)['Close']
 px.index = pd.to_datetime(px.index).tz_localize(None).normalize()

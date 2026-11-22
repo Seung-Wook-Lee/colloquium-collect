@@ -26,6 +26,18 @@ try:   # 11/22 변곡점 판: SPYG:BIL 2007 전 현금 지수(DTB3)
     cols['DTB3'] = pd.Series({pd.Timestamp(o['date']): pd.to_numeric(o['value'], errors='coerce') for o in r['observations']})
 except Exception as e:
     print('DTB3', e)
+try:   # 11/22 의장 B02: CBOE 주식 풋/콜(CPCE) 최근 70일(10일 EMA·20일 켜짐에 충분) — cpce.py 검증 IC 0.178→0.209
+    cp = {}
+    for d in pd.bdate_range(pd.Timestamp.today().normalize() - pd.Timedelta(days=70), pd.Timestamp.today().normalize()):
+        try:
+            r = requests.get(f"https://cdn.cboe.com/data/us/options/market_statistics/daily/{d.strftime('%Y-%m-%d')}_daily_options", headers={'User-Agent': 'Mozilla/5.0'}, timeout=20)
+            if r.status_code == 200:
+                cp.update({d: float(x['value']) for x in r.json().get('ratios', []) if 'EQUITY' in str(x.get('name', '')).upper()})
+        except Exception:
+            pass
+    cols['CPCE'] = pd.Series(cp, dtype=float); print('CPCE', len(cp))
+except Exception as e:
+    print('CPCE', e)
 D = pd.DataFrame(cols).sort_index(); D.index.name = '날짜'
 if 'SPX' not in D or D['SPX'].dropna().empty:
     raise SystemExit('S&P500 없음')
