@@ -120,6 +120,8 @@ def sections(md):
     return head, [(p.split('\n', 1)[0].strip(), p.split('\n', 1)[1] if '\n' in p else '') for p in parts[1:]]
 
 
+SIGMARK = re.compile(r'^⟦(red|orange|green)⟧\s*')   # personas.render_md가 신호 있는 줄 앞에 붙임
+SIGCOL = {'red': '#c8372d', 'orange': '#e08a1e', 'green': '#1b8a2e'}
 ITEM = re.compile(r'^\*\*(\d+)\.\s*(.+?)\*\*\s*$')
 STOCK = re.compile(r'([^,()/]+?)\(52주 고점 대비 (-?[\d.]+)%,?\s*([^)]*)\)')
 STAT = re.compile(r'([A-Za-z가-힣][A-Za-z가-힣0-9()/ ]*?) ([+-][\d.]+)%\(승률 (\d+)%\)')
@@ -550,6 +552,7 @@ def render(body):
         hbar(df, '지표', '전일 대비(%)', unit='%')
         bl = [b for b in bl if b not in quotes]
     rows, whys = [], []
+    sigrow = {}   # 11/23 의장 "신호등은 무조건 강조해서 색깔이": 원고 줄의 신호색(⟦red⟧ 등)을 항목·내용 글자색으로
 
     cnt = [0]
     CIRC = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚'
@@ -574,7 +577,10 @@ def render(body):
                 st.markdown('<table class="it"><tr><th></th><th class="n">전일</th><th class="n">20일</th><th></th><th></th></tr>' + body + '</table>',
                             unsafe_allow_html=True)
                 rows.clear()
-            t = '' if not rows else '<table class="it">' + ''.join(f'<tr><td class="k">{circ(r[0])}</td><td class="v">{a}</td><td class="d">{b}</td></tr>'
+            def _c(r, x):
+                col = SIGCOL.get(sigrow.get(r[0], ''))
+                return f'<span style="color:{col};font-weight:700">{x}</span>' if col else x
+            t = '' if not rows else '<table class="it">' + ''.join(f'<tr><td class="k">{_c(r, circ(r[0]))}</td><td class="v">{_c(r, a)}</td><td class="d">{b}</td></tr>'
                                                 for r in rows for a, b in [lines_(r[1])]) + '</table>'
             if t:
                 st.markdown(t, unsafe_allow_html=True)
@@ -597,6 +603,9 @@ def render(body):
             if '10년 실질' in title:   # 11/20 의장: 10년 실질금리 삭제
                 continue
             val = val.replace('직전 발표 대비', '전월 대비')
+            _m = SIGMARK.match(val)
+            if _m:
+                sigrow[title] = _m.group(1); val = val[_m.end():]
             if title in SKIP_ITEM:
                 continue
             if title == '종합' and 'Fear & Greed' in val:   # 11/21 의장: 공포탐욕은 구간 게이지로

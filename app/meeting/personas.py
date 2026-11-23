@@ -428,7 +428,7 @@ def miss_citadel(c):
             if turn == 1 or plus == 1:
                 out.insert(0, L('시스템 거래 전환', '시스템 거래가 플러스(매수) 쪽으로 돌았습니다' if plus == 1 else '시스템 거래가 매수 쪽으로 돌기 시작했습니다',
                                 f"CTA 매수 신호 {int(buyn)}/3, CTA 포지션 5일 {p(num(g.get('CTA σ 5일 변화')), 2, '')}σ, 변동성 목표 노출 5일 {p(vd, 2, '')}배",
-                                crit='5일 사이 CTA 매수 신호가 늘고 CTA 포지션이 오름(CTA 0 위로 = 플러스)', sig='green'))
+                                crit='5일 사이 CTA 매수 신호가 늘고 CTA 포지션이 오름(CTA 0 위로 = 플러스)', sig='red'))   # 11/23 의장: 전환되면 붉은 글자
             else:
                 out.append(L('시스템 거래 전환', '아직 아님' if (num(g.get('CTA σ 5일 변화')) or 0) <= 0 else '포지션은 오르지만 새 매수 신호 없음',
                              f"CTA 매수 신호 {int(buyn)}/3, 매수 전환까지 S&P {p(upp, 1)}, 변동성 목표 노출 5일 {p(vd, 2, '')}배"))
@@ -1131,7 +1131,12 @@ def render_md(sections, today, picks, note=''):
         out += ['', f'## {sec} | {who}', '', f'{who}:', '']
         for i, l in enumerate(lines, 1):
             out.append(f'**{i}. {l.title}**  ')
-            out.append(l.fact + ('  ' if l.why else ''))
+            try:
+                sg = l.row().get('신호')
+            except Exception:   # noqa: BLE001
+                sg = l.sig
+            sg = sg if sg in ('red', 'orange', 'green') else None   # 11/23 의장: 신호등은 무조건 색으로 → 스트림릿이 이 표시를 글자색으로 바꿈
+            out.append((f'⟦{sg}⟧ ' if sg else '') + str(l.fact) + ('  ' if l.why else ''))
             if l.why:
                 out.append(_it('근거: ' + str(l.why)))
             out.append('')
