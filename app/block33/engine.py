@@ -40,7 +40,12 @@ def st_filter(S, c):
         return S
     # 11/19 의장: '큰 회사인가'는 블록이 아니라 추천 자격 설정(추천.최소매출원). 개별주만, 자료 없으면 참고만
     big = (S['구분'] != '개별주') | (pd.to_numeric(S['연매출(원)'], errors='coerce') >= c['B'].get('추천', {}).get('최소매출원', 1e13))
-    filt = S[K_EARN].isin(['통과', '해당 없음', '꺼짐', '적용 안 함']) & S[K_EVENT].isin(['통과', '꺼짐', '적용 안 함'])   # 꺼짐 = 하위 블록 꺼짐(거르지 않음)   # B12 거르기 폐지 → 갈래(주도·눌림)
+    ev_ok = S[K_EVENT].isin(['통과', '꺼짐', '적용 안 함'])
+    free = S['번호'].isin(c['B'].get('사건거르기해제', []) or []) if '번호' in S else False   # 11/23 의장 "엔비디아 거르기는 일단 해제하자. 슬슬 잊혀지고 있으니까"
+    if getattr(free, 'any', lambda: False)():
+        S.loc[free & ~ev_ok, K_EVENT] = '해제(의장)'
+        ev_ok = ev_ok | free
+    filt = S[K_EARN].isin(['통과', '해당 없음', '꺼짐', '적용 안 함']) & ev_ok   # 꺼짐 = 하위 블록 꺼짐(거르지 않음)   # B12 거르기 폐지 → 갈래(주도·눌림)
     S['판정'] = np.where(filt, np.where(big, '후보', '참고만'),
                         np.where(S[K_EARN] == '자료 없음', '자료 부족', '걸러짐'))
     S.loc[S['층'] == 'S0', '판정'] = '기준층(지수·현금·금, 추천 대상 아님)'
