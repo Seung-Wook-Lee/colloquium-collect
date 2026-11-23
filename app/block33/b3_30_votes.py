@@ -127,6 +127,7 @@ def today(U, years=4):
     C3 = cfg()
     if not C3:
         return None
+    U = U[~(U['yfinance 티커'].notna() & U['yfinance 티커'].duplicated())]   # 11/23: 같은 티커 두 줄이면 가격 칸이 겹쳐 멈춤
     win = (C3.get('집계') or {}).get('창일', (C3.get('시험') or {}).get('겹침일', 20))
     import tempfile
     from data import b1_1_prices as P1, b1_6_clean as P6
