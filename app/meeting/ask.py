@@ -143,6 +143,14 @@ def log_q(path, q, route, who):
 
 def answer(q, d, R, date=None, session='국장전'):
     A = R['돌발질문']
+    # ⓪ 11/23 의장: '언제' 질문은 시장기록 장부(records.py)에서 날짜를 찾는다
+    if re.search(r'언제|날짜|며칠|몇 월|몇월', q):
+        import records as REC
+        fl = next((f for f in (os.path.join(d, '시장기록_장부.csv'), os.path.join(os.path.dirname(d.rstrip('/')), '시장기록_장부.csv')) if os.path.exists(f)), None)
+        T = REC.find(q, pd.read_csv(fl, encoding='utf-8-sig')) if fl else None
+        if T is not None and len(T):
+            return ('시장기록 장부에서 찾은 날(최근 순):\n' + '\n'.join(f"- {r['날짜']} {r['지수']} {r['종가']:,} ({r['전일대비(%)']:+.2f}%, 연초 대비 {r['연초대비(%)']}%) — {r['기록']}" for _, r in T.iterrows())
+                    + '\n(시장기록_장부.csv)'), '시장기록', ''
     fp, ft, fx = (_latest(d, k, date, session) for k in ('판정표.csv', '회의원고.txt', '종목색인.csv'))
     if not fp or not ft:
         return '원고 미생성: 그날 판정표·회의원고 파일이 없습니다.', '파일 없음', ''

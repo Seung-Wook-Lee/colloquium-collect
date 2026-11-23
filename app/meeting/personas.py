@@ -291,6 +291,9 @@ def _milestones(x, gap):
     return ytd, rec
 
 
+LAST_PX = {}
+
+
 def _records(cfg):
     """11/21 의장 "지수 줄, 표로 만들라고": 지수별 (연초 대비, 기록). 시세는 야후 종가. 최소 거래일은 비공개 blocks.yaml 시황_한줄."""
     try:
@@ -306,6 +309,8 @@ def _records(cfg):
         for k in cfg['지수']:
             if YF.get(k) in P:
                 out[k] = _milestones(P[YF[k]], gap)
+                LAST_PX[k] = P[YF[k]]   # 11/23 의장: 시장기록 장부(records.py)가 같은 종가로 쌓음
+        LAST_PX['_gap'] = gap
     except Exception as e:   # noqa: BLE001
         print(f'[지수 기록] 야후 실패: {e}')
     return out
@@ -438,7 +443,7 @@ def miss_citadel(c):
                          f"{n(w.get('VIX 1년 백분위(%)'), 0)}% · {n(w.get('VXN 1년 백분위(%)'), 0)}%", '',
                          '지난 1년 중 지금보다 낮았던 날의 비율(S&P500 · 나스닥100 변동성)'])
         if rows:   # 11/21 의장 "4줄 표로, 나열식은 왠만하면 쓰지마": 줄 나열 없이 표만
-            G.append({'type': 'grid', 'title': '포지셔닝', 'columns': ['지표', '오늘', '1주 전', '구간', '읽는 법'], 'rows': rows, 'source': '수급포지셔닝.csv'})
+            G.append({'type': 'grid', 'title': '미국 포지셔닝(S&P500·나스닥100 기준)', 'columns': ['지표', '오늘', '1주 전', '구간', '읽는 법'], 'rows': rows, 'source': '수급포지셔닝.csv'})
     MM = _read(c.d, 'MMF')
     if len(MM):
         r = MM.iloc[0]
