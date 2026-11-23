@@ -136,6 +136,13 @@ def clean(t):
     return CHEAP.sub('', t)
 
 
+FORMULA = {   # 11/23 의장: 항목 밑 계산법(collect/flowpos.py와 같은 식)
+    'JPM 추세 신호 전환': '공식: ① S&P500 종가가 21·63·100거래일 전 종가보다 높으면 그 기간은 매수 신호(0~3개) '
+                        '② 5거래일 전보다 매수 신호 수가 늘었고 ③ CTA positioning(σ)도 5거래일 전보다 올랐으면 = 전환. '
+                        '②·③ 둘 다 맞아야 신호 나옴',
+}
+
+
 def blocks(body):
     """빈 줄로 나눈 덩어리: ('item', 번호, 제목, 내용, 근거) / ('table', md) / ('text', md)"""
     out = []
@@ -751,7 +758,10 @@ def render(body):
             L_ = [lines_(r[1]) for r in rows]
             used = [w[0] for w in WHY_DOT if any(w[0] in d for _, d in L_)]
             head = ('<tr><th></th><th></th>' + _dothead(used) + '</tr>') if used else ''
-            t = '' if not rows else '<table class="it">' + head + ''.join(f'<tr><td class="k">{_c(r, circ(r[0]))}</td><td class="v">{_c(r, a)}</td>{_dotcells(used, b)}</tr>'
+            def _fx(r, a):   # 11/23 의장 '밑에 공식 좀 써줘': 공식이 있는 항목은 값 밑에 작은 회색 글씨로 계산법
+                f = next((v for k, v in FORMULA.items() if k in str(r[0])), '')
+                return a + (f'<div style="font-size:11px;color:#999;margin-top:3px;line-height:1.5">{f}</div>' if f else '')
+            t = '' if not rows else '<table class="it">' + head + ''.join(f'<tr><td class="k">{_c(r, circ(r[0]))}</td><td class="v">{_c(r, _fx(r, a))}</td>{_dotcells(used, b)}</tr>'
                                                 for r, (a, b) in zip(rows, L_)) + '</table>'
             if t:
                 st.markdown(t, unsafe_allow_html=True)
