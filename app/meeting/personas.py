@@ -903,7 +903,9 @@ def _buy_state(c):
     # '오케이, 지금 시작'이었음(과거 같은 신호 S&P 6/6·나스닥100 5/5 13주 뒤 이김). 두 코드가 서로 안 읽던 것이 문제.
     BPJ = _read2(c.d, '분할판정')
     bp_ok = [r for _, r in BPJ.iterrows() if str(r.get('판정', '')).startswith('오케이')] if len(BPJ) and '판정' in BPJ else []
-    conf_on = (turn == 1) or (cta is not None and cta <= cta_floor) or bool(bp_ok)
+    conf_on = (turn == 1) or (cta is not None and cta <= cta_floor)
+    # 11/23 의장 "100% 사라는 판정은 나올 수 없어. 거의 다 됐는데 몇 개가 더 걸린다 — 이게 맞지": 분할 판정 '오케이'는 '산다'가 아니라 '분할 준비'로,
+    # 아직 안 채운 확인 조건(지금 값)을 함께 보여 준다.
     bp_txt = ' · '.join(f"{r['지수']} Opportunity Block {int(r['켜진수'])}/{int(r['전체'])}(기준 {int(r['기준'])}) {r['판정']}" for _, r in BPJ.iterrows()) if len(BPJ) and '판정' in BPJ else ''
     conf_txt = (f"JPM 추세 신호 전환 {'신호 나옴' if turn == 1 else '신호 안 나옴'}, "
                 f"CTA {p(cta, 2, 'σ') if cta is not None else '자료 없음'}(바닥 {cta_floor}σ)" + (f", 분할 매수 판정: {bp_txt}" if bp_txt else '')) if qg else '수급포지셔닝.csv 없음 → 확인 안 됨'
@@ -912,6 +914,17 @@ def _buy_state(c):
         g = c.regime(mk); dfn = bool(g and g[0] == '방어')
         if crisis:
             act, why = '사지 않는다', '신용 위기 규칙'
+        elif mk == '미국' and not conf_on and bp_ok:
+            left = []
+            if cta is not None and cta > cta_floor:
+                left.append(f"CTA {cta_floor}σ 이하(지금 {p(cta, 2, 'σ')})")
+            if turn != 1:
+                upp = num(qg.get('CTA 매수 전환까지(%)'))
+                left.append('JPM 추세 신호 전환(' + (f"매수 전환까지 S&P {p(upp, 1)}" if upp is not None else '신호 안 나옴') + ')')
+            act = f"분할 준비 — 거의 다 됨(남은 확인 {len(left)}개)"
+            why = ('분할 매수 판정 ' + ' · '.join(f"{r['지수']} Opportunity Block {int(r['켜진수'])}/{int(r['전체'])}(기준 {int(r['기준'])})" for r in bp_ok)
+                   + ' 기준 이상 · 남은 확인: ' + ' / '.join(left)
+                   + (f" · 나스닥100이 이번 하락의 바닥일 확률 {nd:.0%}" if nd is not None else ''))
         elif mk == '미국' and nd is not None and nd >= R['바닥_준비'] and not conf_on:
             act = '아직 사지 않는다(바닥 확인 신호 없음)'
             why = f"나스닥100이 이번 하락의 바닥일 확률 {nd:.0%} ≥ 준비 {R['바닥_준비']:.0%}이지만 시스템 자금 확인 없음: {conf_txt}"
