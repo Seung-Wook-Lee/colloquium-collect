@@ -84,5 +84,57 @@ def main():
     print(S.groupby('구분')['3개월(%)'].agg(['median', 'count']).sort_values('median', ascending=False).round(1).head(20).to_string())
 
 
+def timeline(P):
+    """11/23 의장 "폭락 전 고점 말고 반등 시작으로. 주가 바닥 3/23, 첫 폭락은 언제? 날짜부터 정확히":
+    날짜를 코드로 확정 → 자산마다 저점일·반등 확인일(저점 뒤 처음 50일선 위 종가) → 금 저점 뒤 구간별로 무엇이 가장 올랐나."""
+    s = P['SPY'].dropna()['2020-01-01':'2020-06-30']; r = s.pct_change()
+    D = {'S&P 고점': s[:'2020-03-01'].idxmax(), 'S&P 첫 폭락일(하루 −3% 이하)': r[r <= -0.03].index[0], 'S&P 바닥': s.idxmin()}
+    g = P['GLD'].dropna()['2020-02-01':'2020-06-30']
+    D['금 폭락 전 고점(3월)'] = g['2020-03-01':'2020-03-15'].idxmax(); D['금 바닥'] = g.idxmin()
+    t = P['TLT'].dropna()['2020-03-01':'2020-04-30']; D['장기채 고점'] = t[:'2020-03-15'].idxmax(); D['장기채 바닥'] = t[D['장기채 고점']:].idxmin()
+    print('\n[날짜 확정]'); [print(f'- {k}: {v.date()}') for k, v in D.items()]
+    print(f"- S&P 고점→바닥 {(s[D['S&P 바닥']] / s[D['S&P 고점']] - 1) * 100:.1f}%, 금 3월 고점→바닥 {(g[D['금 바닥']] / g[D['금 폭락 전 고점(3월)']] - 1) * 100:.1f}%, 장기채 {(t[D['장기채 바닥']] / t[D['장기채 고점']] - 1) * 100:.1f}%")
+    return D
+
+
+def rotation(P, U, D):
+    lab = {**ASSET}
+    for _, r in U.iterrows():
+        lab.setdefault(r['yfinance 티커'], r['yfinance 티커'] if r['시장'] == '미국' else r['정식 종목명'])
+    # 구간: 금 바닥 → S&P 바닥 → 금이 3월 고점 넘은 날 → 그 뒤 한 달씩
+    g = P['GLD'].dropna()
+    g_new = g[D['금 바닥']:][g[D['금 바닥']:] > g[D['금 폭락 전 고점(3월)']]].index[0]
+    cuts = [D['금 바닥'], D['S&P 바닥'], g_new] + [g_new + pd.DateOffset(months=m) for m in (1, 2, 3, 5)]
+    rows, conf = [], []
+    for t in P.columns:
+        c = P[t].dropna()
+        if len(c['2020-02-01':'2020-08-31']) < 100:
+            continue
+        w = c['2020-02-15':'2020-05-15']; lo_d = w.idxmin()
+        ma = c.rolling(50).mean(); x = c[lo_d:][(c[lo_d:] > ma[lo_d:])]
+        conf.append({'대상': lab.get(t, t), '종류': '자산군' if t in ASSET else '유니버스', '저점일': lo_d.date(),
+                     '반등 확인일(50일선 위)': x.index[0].date() if len(x) else None, '저점 뒤 30거래일(%)': (c[lo_d:].iloc[:31].iloc[-1] / c[lo_d] - 1) * 100})
+        for a, b in zip(cuts[:-1], cuts[1:]):
+            rows.append({'대상': lab.get(t, t), '종류': '자산군' if t in ASSET else '유니버스', '구간': f'{a:%m/%d}~{b:%m/%d}', '수익(%)': (c.asof(b) / c.asof(a) - 1) * 100})
+    R = pd.DataFrame(rows); C = pd.DataFrame(conf)
+    R.to_csv(OUT / '구간별_수익.csv', index=False, encoding='utf-8-sig'); C.to_csv(OUT / '저점_반등확인일.csv', index=False, encoding='utf-8-sig')
+    for k in R['구간'].unique():
+        X = R[R['구간'] == k]
+        a = X[X['종류'] == '자산군'].nlargest(6, '수익(%)'); u = X[X['종류'] == '유니버스'].nlargest(8, '수익(%)')
+        print(f'\n[{k}] 자산군: ' + ', '.join(f"{r['대상']} {r['수익(%)']:+.0f}%" for _, r in a.iterrows()))
+        print('   유니버스: ' + ', '.join(f"{r['대상']} {r['수익(%)']:+.0f}%" for _, r in u.iterrows()))
+    A = C[C['종류'] == '자산군'].sort_values('반등 확인일(50일선 위)')
+    print('\n[자산군 반등 확인 순서]'); print(A.round(1).to_string(index=False))
+    Q = C[C['종류'] == '유니버스'].sort_values('반등 확인일(50일선 위)').head(25)
+    print('\n[유니버스 반등 확인 빠른 25]'); print(Q.round(1).to_string(index=False))
+
+
 if __name__ == '__main__':
-    main()
+    import sys
+    if 'rotation' in sys.argv:
+        P = pd.read_pickle('/tmp/claude-0/covid_px.pkl')
+        U = pd.read_csv('/mnt/project-files/유니버스/콜로키움100_유니버스_20261121.csv', encoding='utf-8-sig')
+        U = U[~U['yfinance 티커'].isin(['DHR', 'APP', 'PH'])].dropna(subset=['yfinance 티커'])
+        rotation(P, U, timeline(P))
+    else:
+        main()
