@@ -422,11 +422,11 @@ def main():
         note.append('팀Q 자료 ' + (first[0][:40] if first else ''))
     c, sec = PER.build(IN, S, M, m, f, R, B.get('추천', {}), tday, EV, CAL, session=a.session)
     if m.get('CASH_SWITCH') == 1 or m.get('CTM_RED') == 1:   # 11/22 의장 1순위: CTM 빨간불 또는 MA 클러스터 빨간불이면 원고 맨 위에 현금 전환
-        ls = [f"- 🔴 CTM 빨간불: S&P CTM {m.get('CTM_SPX')} (30 아래 {m.get('CTM_LOW_WEEKS')}주 연속)"] if m.get('CTM_RED') == 1 else []
-        ls += [f"- 🔴 MA 클러스터 빨간불: S&P 주봉이 50~75주선 맨 아래 {m.get('MA_CLUSTER_BOT')} 밑 + 가운데 4주 기울기 {m.get('MA_CLUSTER_SLOPE')}%"] if m.get('MA_CLUSTER_RED') == 1 else []
-        sec.insert(0, ('0 현금 전환', '블록33 B01', '시장', ls + ['- → 모든 분석을 멈추고 현금 전환'], [], ''))
+        ls = [PER.L('🔴 CTM 빨간불', f"S&P CTM {m.get('CTM_SPX')} (30 아래 {m.get('CTM_LOW_WEEKS')}주 연속)", '블록33 B01 CTM_RED')] if m.get('CTM_RED') == 1 else []
+        ls += [PER.L('🔴 MA 클러스터 빨간불', f"S&P 주봉이 50~75주선 맨 아래 {m.get('MA_CLUSTER_BOT')} 밑 + 가운데 4주 기울기 {m.get('MA_CLUSTER_SLOPE')}%", '블록33 B01 MA_CLUSTER_RED')] if m.get('MA_CLUSTER_RED') == 1 else []
+        sec.insert(0, ('0 현금 전환', '블록33 B01', '시장', ls + [PER.L('결론', '모든 분석을 멈추고 현금 전환', '11/22 의장 1순위 규칙')], [], ''))   # 11/24: 줄은 L(제목·사실·근거) — 글자 줄이면 원고 만들기가 멈춤
     elif m.get('CTM_GREEN') == 1:   # 11/22 의장: CTM이 내려왔다가 다시 오르기 시작하면 초록불
-        sec.insert(0, ('0 CTM 초록불', '블록33 B01', '시장', [f"- 🟢 CTM 초록불(반등 시작) {m.get('CTM_GREEN_STAGE')}단계/3: S&P CTM {m.get('CTM_SPX')} — 최저 뒤 첫 상승 주부터 3주 동안 1/3씩"], [], ''))
+        sec.insert(0, ('0 CTM 초록불', '블록33 B01', '시장', [PER.L(f"🟢 CTM 초록불(반등 시작) {m.get('CTM_GREEN_STAGE')}단계/3", f"S&P CTM {m.get('CTM_SPX')} — 최저 뒤 첫 상승 주부터 3주 동안 1/3씩", '블록33 B01 CTM_GREEN')], [], ''))
     PFX = f'{today}_' if a.session == '국장전' else f'{today}_미장전_'
     if a.session == '미장전':
         Q = premarket_quotes(R)
