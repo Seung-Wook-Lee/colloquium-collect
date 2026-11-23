@@ -219,7 +219,10 @@ def num(x):
 def md_table(md):
     rows = [[c.strip() for c in l.strip().strip('|').split('|')] for l in md.split('\n')]
     rows = [r for r in rows if not all(re.fullmatch(r':?-+:?', c) for c in r)]
-    return pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else None
+    if len(rows) <= 1:
+        return None
+    k = len(rows[0])   # 11/23: 칸 수가 다른 줄(빈 칸·'|' 섞임)이 있어도 화면이 멈추지 않게 맞춤
+    return pd.DataFrame([(r + [''] * k)[:k] for r in rows[1:]], columns=rows[0])
 
 
 def table_chart(md):
