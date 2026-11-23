@@ -468,6 +468,22 @@ def main():
         log('[변곡점 판] ' + ' '.join(f'{k}:{v}' for k, v in _r.items()))
     except Exception as e:   # noqa: BLE001
         log(f'[변곡점 판] 실패: {str(e)[:160]}')
+    try:   # 11/23 의장: 시장기록 장부 — 지수 기록(올해 상승분 반납 등)을 날마다 쌓아 몇 달 뒤에도 '언제였지?'에 답함
+        import records as REC
+        px = {k: v for k, v in PER.LAST_PX.items() if k != '_gap'}
+        if px and use_drive:
+            import drive, io
+            b = drive.get(f'{D_DATA}/시장기록_장부.csv')
+            L0 = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig') if b else None
+            new = []
+            for k, x in px.items():
+                last = None if L0 is None or not len(L0[L0['지수'] == k]) else L0.loc[L0['지수'] == k, '날짜'].max()
+                new += REC.rows_for(x, k, PER.LAST_PX.get('_gap', 20), start=None if last is None else pd.Timestamp(last) + pd.Timedelta(days=1))
+            L1 = REC.merge(L0, new)
+            drive.put(f'{D_DATA}/시장기록_장부.csv', L1.to_csv(index=False).encode('utf-8-sig'))
+            log(f'[시장기록] 장부 {len(L1)}줄(새 {len(new)}줄)')
+    except Exception as e:   # noqa: BLE001
+        log(f'[시장기록] 실패: {str(e)[:160]}')
     outs.update({(k if a.session == '국장전' else f'미장전_{k}'): v for k, v in judge(W, S).items()})
     for k, v in outs.items():
         open(f'{OUT}/{k}', 'wb').write(v)
