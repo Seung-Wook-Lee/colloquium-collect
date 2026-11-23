@@ -289,7 +289,7 @@ def bottom(W, use_drive, B, S):
             J = BP.judge()
             pd.DataFrame([dict(지수=r['지수'], 판정=r['판정'], 켜진수=r['켜진수'], 전체=r['전체'], 기준=r['기준'], 낙폭=round(r['낙폭'], 1),
                                사례=(r['근거'] or {}).get('사례'), 이김=(r['근거'] or {}).get('이김'), 수익중앙값=(r['근거'] or {}).get('수익중앙값'),
-                               신호=(r['근거'] or {}).get('신호'), 날짜=J['날짜']) for r in J['지수']]).to_csv(f'{W}/분할판정.csv', index=False, encoding='utf-8-sig')
+                               신호=(r['근거'] or {}).get('신호'), 남은조건=' · '.join(k for k, v in (r['켜짐'] or {}).items() if not v), 날짜=J['날짜']) for r in J['지수']]).to_csv(f'{W}/분할판정.csv', index=False, encoding='utf-8-sig')
             for r in J['지수']:
                 log(f"[분할판정] {r['지수']} {r['판정']} (Opportunity Block {r['켜진수']}/{r['전체']}, 기준 {r['기준']})")
         except Exception as e:   # noqa: BLE001
