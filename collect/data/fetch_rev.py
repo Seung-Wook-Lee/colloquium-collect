@@ -30,11 +30,24 @@ try:
     # 11/21 23:47 의장: 한국은 한투가 먼저(최근 4분기 매출 합), 한투가 비면 야후 값
     print('한투 키', '있음' if kis.ready() else '없음')
     if kis.ready():
-        ok=0
+        ok=0; oks=set()
         for n in KR:
             v=[b for _,b,_,_ in kis.quarterly_kr(KR[n])][-4:]
-            if len(v)==4 and all(x is not None for x in v): d.loc[d['번호']==n,['연매출(원)','통화']]=[float(sum(v)),'KRW']; ok+=1
+            if len(v)==4 and all(x is not None for x in v): d.loc[d['번호']==n,['연매출(원)','통화']]=[float(sum(v)),'KRW']; ok+=1; oks.add(n)
         print('한국 한투 연매출', ok, '/', len(KR))
+    else: oks=set()
+    # 11/23: 한투가 안 된 한국 종목은 분기원자료와 같이 DART 정기보고서 최근 4분기 매출 합(11/22 의장 선택), 그것도 안 되면 야후 값
+    import dart_q
+    if dart_q.ready():
+        from concurrent.futures import ThreadPoolExecutor as _TP
+        todo=[n for n in KR if n not in oks]
+        dart_q.corp('005930')
+        with _TP(8) as ex: QD=dict(zip(todo, ex.map(lambda n: dart_q.quarterly(KR[n]), todo)))
+        okd=0
+        for n,q in QD.items():
+            v=[b for _,b,_,_ in (q or [])][-4:]
+            if len(v)==4 and all(x is not None for x in v): d.loc[d['번호']==n,['연매출(원)','통화']]=[float(sum(v)),'KRW']; okd+=1
+        print('한국 DART 연매출', okd, '/', len(todo), '| DART 실패', dart_q.ERR[:3])
 except Exception as e: print('한투 매출 보충 실패', e)
 d["환율"]=fx
 d.to_csv('in/연매출.csv',index=False,encoding='utf-8-sig'); print(fx, d['연매출(원)'].notna().sum(), len(d))
