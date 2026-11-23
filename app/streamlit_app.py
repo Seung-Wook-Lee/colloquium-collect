@@ -807,23 +807,17 @@ def turning_board(day):
     with st.expander('그래프 9개 펼치기·접기', expanded=True):
         for n, no in TURN_SHOW:
             nm = TURN_NAMES[n - 1]   # 11/22 의장: "늘 같이 준 그래프와 비교할 수 있게 옆에" → 왼쪽 재현, 오른쪽 의장이 준 원본
-            b = _turn_png(dd, n); o = Path(__file__).resolve().parent / 'assets' / 'turning_orig' / f'orig_{n}.png'
+            b = _turn_png(dd, n)
             st.html(f"<div style='font-size:15px;font-weight:700;color:#1b5e20;border-left:4px solid #2e7d32;padding-left:8px;margin:14px 0 2px'>{no}. {nm}</div>")   # 11/23 의장: 돋보이게, 녹색(그린 라이트)
-            c1, c2 = st.columns(2, gap='small')
+            c1, c2 = st.columns([3, 2], gap='small')   # 11/23 의장: 원본은 화면에서 뺌(재현 그래프만). 원본 파일은 assets/turning_orig에 그대로 둠
             with c1:
-                st.caption('오늘 그래프')
                 if b:
                     st.image(b, use_container_width=True)
                 else:
                     st.caption('그림 없음')
+            with c2:
                 if _LN is not None and len(_LN):
                     _turn_lines(_LN[_LN['그림'].astype(int) == n])
-            with c2:
-                st.caption('비교 그래프')
-                if o.exists():
-                    st.image(str(o), use_container_width=True)
-                else:
-                    st.caption('원본 없음')
 
 
 def block_bottom():
