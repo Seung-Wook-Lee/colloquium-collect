@@ -638,13 +638,20 @@ def _bottom_cols(d, f):
             f.loc[m, 'mk_rsi'] = float(rsi(x).iloc[-1])
             if 'ret63' in f and len(x) > 63:
                 f.loc[m, 'rs_mkt63'] = f.loc[m, 'ret63'] - (x.iloc[-1] / x.iloc[-64] - 1) * 100
-    be = [x[1] for x in SB.get('B11', {}).get('공식', [])]   # mk_bottom_n = B11 공식 중 켜진 수(자료 있는 공식이 과반일 때만)
+    try:   # 11/23 의장: 옛 B11(시장 바닥 5개)은 blocks.yaml '시장바닥'으로 옮김. mk_bottom_n = 그 공식 중 켜진 수(B12 조건)
+        MB = QCC.load_blocks().get('시장바닥', {})
+    except Exception:   # noqa: BLE001
+        MB = {}
+    be = [x[1] for x in MB.get('공식', [])]   # 자료 있는 공식이 과반일 때만
     rows = [env(r) for r in f.to_dict('records')]
     def cnt(r):
         v = [ev(e, r) for e in be]
         v = [x for x in v if x is not None]
         return float(sum(v)) if be and len(v) * 2 > len(be) else np.nan
     f['mk_bottom_n'] = [cnt(r) for r in rows]
+    # 11/23 의장 B11 = '이 종목이 바닥 즈음인가?' — 종목 자기 값 5개(단기 4 + 200일선) 중 켜진 수
+    sb = [x[1] for x in SB.get('B11', {}).get('공식', [])]
+    f['st_bottom_n'] = [(lambda v: float(sum(v)) if sb and len(v) * 2 > len(sb) else np.nan)([x for x in (ev(e, r) for e in sb) if x is not None]) for r in rows]
 
 
 def market(d):

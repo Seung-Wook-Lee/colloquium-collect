@@ -108,9 +108,9 @@ def pool(P, tk, O):
     m5 = c.resample('ME').last().rolling(5).mean()
     vix = P['^VIX'].reindex(c.index).ffill(); vv3 = O['B02 VIX > VIX3M'].reindex(c.index).ffill()
     D = pd.DataFrame({
-        'B11·B16 50일 이격 ≤ 90': c / c.rolling(50).mean() * 100 <= 90,
-        'B11·B16 일봉 RSI ≤ 30': _rsi(c) <= 30,
-        'B11 VIX ≥ 30 또는 VIX > VIX3M': (vix >= 30) | (vv3 > 0),
+        'B16 50일 이격 ≤ 90': c / c.rolling(50).mean() * 100 <= 90,
+        'B16 일봉 RSI ≤ 30': _rsi(c) <= 30,
+        '시장바닥 VIX ≥ 30 또는 VIX > VIX3M': (vix >= 30) | (vv3 > 0),
         'B16 볼린저 %B ≤ 0.05': pb <= 0.05,
         'B16 CCI ≤ −100': cci <= -100,
         'B16 스토캐스틱 ≤ 20': stk <= 20,
