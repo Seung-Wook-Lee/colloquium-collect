@@ -145,3 +145,18 @@ def daily_index_kr(code='1001', days=3650):
                 rows.append((o['stck_bsop_date'], _f(o.get('bstp_nmix_prpr')), _f(o.get('bstp_nmix_hgpr')), _f(o.get('bstp_nmix_lwpr')), _f(o.get('acml_vol'))))
         end = s - dt.timedelta(days=1)
     return _frame(rows)
+
+
+def daily_index_us(code='SOX', days=3650):
+    """해외 지수 일봉(SOX 필라델피아 반도체 등) — FHKST03030100, 시장구분 N(해외지수). DataFrame(Close·High·Low·Volume)"""
+    end, start, rows = dt.date.today(), dt.date.today() - dt.timedelta(days=days), []
+    while end > start:
+        s = max(start, end - dt.timedelta(days=140))
+        j = _get('/uapi/overseas-price/v1/quotations/inquire-daily-chartprice', 'FHKST03030100',
+                 {'FID_COND_MRKT_DIV_CODE': 'N', 'FID_INPUT_ISCD': code, 'FID_INPUT_DATE_1': s.strftime('%Y%m%d'),
+                  'FID_INPUT_DATE_2': end.strftime('%Y%m%d'), 'FID_PERIOD_DIV_CODE': 'D'})
+        for o in (j or {}).get('output2') or []:
+            if o.get('stck_bsop_date'):
+                rows.append((o['stck_bsop_date'], _f(o.get('ovrs_nmix_prpr')), _f(o.get('ovrs_nmix_hgpr')), _f(o.get('ovrs_nmix_lwpr')), _f(o.get('acml_vol'))))
+        end = s - dt.timedelta(days=1)
+    return _frame(rows)

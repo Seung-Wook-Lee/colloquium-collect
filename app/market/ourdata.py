@@ -18,7 +18,7 @@ import pandas as pd
 
 DIRS = [Path(p) for p in (os.environ.get('START_DIR', ''), '/mnt/project-files/유니버스/코드', '/mnt/project-files/유니버스/start') if p]
 ALIAS = {'금': 'GOLD', 'GC=F': 'GOLD', '은': 'SILVER', '장기채': 'TLT', 'S&P500': 'SPX', '^GSPC': 'SPX', '나스닥100': 'NDX', '^NDX': 'NDX',
-         '코스피': '^KS11', 'KOSPI': '^KS11', '코스닥': 'KOSDAQ', '^KQ11': 'KOSDAQ', '금광주': 'GDX', '비트코인': 'BTC', 'BTC-USD': 'BTC'}
+         '코스피': '^KS11', 'KOSPI': '^KS11', '코스닥': 'KOSDAQ', '^KQ11': 'KOSDAQ', '금광주': 'GDX', '필라델피아반도체': 'SOX', '필반': 'SOX', '^SOX': 'SOX', '비트코인': 'BTC', 'BTC-USD': 'BTC'}
 
 
 class NotInOurData(KeyError):

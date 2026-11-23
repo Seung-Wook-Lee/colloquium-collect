@@ -20,18 +20,24 @@ if drive.ready():
     if b:
         old = pd.read_csv(io.BytesIO(b), index_col=0, parse_dates=True, encoding='utf-8-sig')
 days = 3650 if old is None else 400
+full = lambda k: old is None or k not in old.columns  # 새로 더한 항목은 10년치
 cols, rep = {}, []
 for t in (L.get('미국') or {}):
-    d = kis.daily_us(t, days=days, pages=30 if old is None else 5)
+    d = kis.daily_us(t, days=3650 if full(t) else 400, pages=30 if full(t) else 5)
     rep.append(f'{t} {len(d)}일' + (f' {d.index[0]:%Y-%m-%d}~{d.index[-1]:%Y-%m-%d}' if len(d) else ' 못 받음'))
     if len(d):
         cols[t] = d['Close']; cols[f'{t}_LOW'] = d['Low']
 for c, nm in (L.get('국내지수') or {}).items():
     k = {'1001': 'KOSDAQ', '0001': 'KOSPI'}.get(str(c), f'KRX{c}')
-    d = kis.daily_index_kr(str(c), days=days)
+    d = kis.daily_index_kr(str(c), days=3650 if full(k) else 400)
     rep.append(f'{k} {len(d)}일' + (f' {d.index[0]:%Y-%m-%d}~{d.index[-1]:%Y-%m-%d}' if len(d) else ' 못 받음'))
     if len(d):
         cols[k] = d['Close']; cols[f'{k}_LOW'] = d['Low']
+for c, nm in (L.get('해외지수') or {}).items():
+    d = kis.daily_index_us(str(c), days=3650 if full(str(c)) else 400)
+    rep.append(f'{c} {len(d)}일' + (f' {d.index[0]:%Y-%m-%d}~{d.index[-1]:%Y-%m-%d}' if len(d) else ' 못 받음'))
+    if len(d):
+        cols[str(c)] = d['Close']; cols[f'{c}_LOW'] = d['Low']
 new = pd.DataFrame(cols)
 D = new if old is None else new.combine_first(old)
 D = D.sort_index()
