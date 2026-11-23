@@ -102,7 +102,11 @@ def build(d, cache, since=None):
     for nm, cik in C['펀드'].items():
         name, fl = filings(cik, cache, since or C.get('시작', '2013-01-01'))
         for fd, rd, acc in fl:
-            t = table(cik, acc, cache)
+            try:
+                t = table(cik, acc, cache)
+            except RuntimeError as e:   # 오래된 보고서 하나가 안 받아지면 그것만 건너뜀(전체 중단 방지)
+                print(f'  건너뜀 {nm} {rd} {acc}: {e}', flush=True)
+                continue
             if not len(t):
                 continue
             t['cusip6'] = t['cusip'].str[:6]
