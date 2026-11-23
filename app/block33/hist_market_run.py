@@ -24,6 +24,11 @@ for src, dst in ((f'{D}/1_data/가격10년_종가.csv.gz', '가격10년_종가.c
     b = drive.get(src)
     if b: open(f'{W}/{dst}', 'wb').write(b)
     print(dst, '받음' if b else '없음')
+# 11/24 B21 장기 펀드 13F 과거 기록(2013~, 공시일 기준) — 우리 수집 코드 fetch_13f.py --full
+r = subprocess.run([sys.executable, f'{REPO}/collect/data/fetch_13f.py', W, f'{W}/13F캐시', '--full'], capture_output=True, text=True, timeout=3000)
+print('[13F]', r.returncode, (r.stdout + r.stderr).strip()[-500:])
+if os.path.exists(f'{W}/장기펀드13F_이력.csv'):
+    drive.put(f'{D}/1_data/장기/장기펀드13F_이력.csv', open(f'{W}/장기펀드13F_이력.csv', 'rb').read()); print('드라이브 올림 장기펀드13F_이력.csv')
 y = os.path.join(os.environ.get('QC_PRIVATE', ''), 'blocks.yaml')
 r = subprocess.run([sys.executable, '-W', 'ignore', f'{HERE}/hist_market.py', W, y], capture_output=True, text=True, timeout=5000)
 print(r.stdout[-3000:], r.stderr[-2000:])
