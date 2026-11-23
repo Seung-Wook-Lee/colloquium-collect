@@ -712,6 +712,14 @@ def market(d):
     try:
         if len(V2):
             v = V2.iloc[-1]; m['SPX_FPER'] = float(v['선행PER'])
+            try:   # 11/23 의장: PER은 오늘 S&P500 ÷ 선행 EPS(지수밸류.csv 값이 옛 날짜로 남는 것 막기)
+                ix = pd.read_csv(f'{d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)['^GSPC'].dropna()
+                eps = float(v['선행EPS'])
+                if len(ix) and eps > 0:
+                    m['SPX_CLOSE'], m['SPX_CLOSE_DATE'] = float(ix.iloc[-1]), f'{ix.index[-1]:%Y-%m-%d}'
+                    m['SPX_FPER'] = round(m['SPX_CLOSE'] / eps, 2)
+            except Exception as e:   # noqa: BLE001
+                _fail('지수밸류 PER 다시 계산', e)
             if len(V2) >= 6: m['SPX_EPS_UP'] = float(V2['선행EPS'].iloc[-1] - V2['선행EPS'].iloc[-6])
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('지수밸류', e)
