@@ -416,7 +416,7 @@ def main():
     except Exception as e:   # noqa: BLE001
         log(f'[가격대] 실패: {e}')
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
-    BTO = backtest(W, IN, use_drive, tday, B, S) if '5-1' not in B.get('_꺼짐', []) and a.session == '국장전' and (tday.weekday() == B.get('성적표', {}).get('요일', 4) or os.environ.get('BACKTEST')) else {}
+    BTO = backtest(W, IN, use_drive, tday, B, S) if '5-1' not in B.get('_꺼짐', []) and ((a.session == '국장전' and tday.weekday() == B.get('성적표', {}).get('요일', 4)) or os.environ.get('BACKTEST')) else {}   # 11/24: 손으로 backtest=yes면 미장전에도 돎
     BTO.update(bottom(W, use_drive, B, S))
 
     # 4) 위원 원고
