@@ -61,7 +61,7 @@ def daily_kr(code, days=730):
     """국내 일봉 2년: DataFrame(index=날짜, Close·High·Low·Volume)"""
     end, start, rows = dt.date.today(), dt.date.today() - dt.timedelta(days=days), []
     while end > start:
-        s = max(start, end - dt.timedelta(days=140))   # 한 번에 100거래일
+        s = max(start, end - dt.timedelta(days=60))  # 한 번에 50줄까지라 60일(약 42거래일)씩 (11/23 빈칸 1300일 오류)   # 한 번에 100거래일
         j = _get('/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice', 'FHKST03010100',
                  {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': str(code).zfill(6), 'FID_INPUT_DATE_1': s.strftime('%Y%m%d'),
                   'FID_INPUT_DATE_2': end.strftime('%Y%m%d'), 'FID_PERIOD_DIV_CODE': 'D', 'FID_ORG_ADJ_PRC': '0'})
@@ -136,7 +136,7 @@ def daily_index_kr(code='1001', days=3650):
     """국내 지수 일봉(0001 코스피, 1001 코스닥) — FHKUP03500100. DataFrame(index=날짜, Close·High·Low·Volume)"""
     end, start, rows = dt.date.today(), dt.date.today() - dt.timedelta(days=days), []
     while end > start:
-        s = max(start, end - dt.timedelta(days=140))
+        s = max(start, end - dt.timedelta(days=60))  # 한 번에 50줄까지라 60일(약 42거래일)씩 (11/23 빈칸 1300일 오류)
         j = _get('/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice', 'FHKUP03500100',
                  {'FID_COND_MRKT_DIV_CODE': 'U', 'FID_INPUT_ISCD': code, 'FID_INPUT_DATE_1': s.strftime('%Y%m%d'),
                   'FID_INPUT_DATE_2': end.strftime('%Y%m%d'), 'FID_PERIOD_DIV_CODE': 'D'})
@@ -151,7 +151,7 @@ def daily_index_us(code='SOX', days=3650):
     """해외 지수 일봉(SOX 필라델피아 반도체 등) — FHKST03030100, 시장구분 N(해외지수). DataFrame(Close·High·Low·Volume)"""
     end, start, rows = dt.date.today(), dt.date.today() - dt.timedelta(days=days), []
     while end > start:
-        s = max(start, end - dt.timedelta(days=140))
+        s = max(start, end - dt.timedelta(days=60))  # 한 번에 50줄까지라 60일(약 42거래일)씩 (11/23 빈칸 1300일 오류)
         j = _get('/uapi/overseas-price/v1/quotations/inquire-daily-chartprice', 'FHKST03030100',
                  {'FID_COND_MRKT_DIV_CODE': 'N', 'FID_INPUT_ISCD': code, 'FID_INPUT_DATE_1': s.strftime('%Y%m%d'),
                   'FID_INPUT_DATE_2': end.strftime('%Y%m%d'), 'FID_PERIOD_DIV_CODE': 'D'})
