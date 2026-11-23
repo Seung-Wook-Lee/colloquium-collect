@@ -6,7 +6,7 @@
 
 신호(강한 순서, 2006-08~ 금요일 종가 기준, 하락 한 번 = 한 건으로 셈)
   ① Opportunity Block 3개 모두 = B02 VIX>VIX3M · B06 CTA ≤ −4 · B06 변동성 목표 노출 < 0.6배
-  ② Opportunity Block(B02·B06의 '기회' 공식) 6개 중 3개 이상 (B02 MOVE ≥100, VIX>VIX3M / B06 CTA ≤ −4, 변동성 목표 <0.6배, 시스템 매수 전환, CTA 플러스 전환)
+  ② Opportunity Block(B02·B06의 '기회' 공식) 5개 중 3개 이상 (B02 MOVE ≥100, VIX>VIX3M / B06 CTA ≤ −4, 변동성 목표 <0.6배, 시스템 매수 전환) — 11/23 의장: CTA 플러스 전환 뺌
   ③ 바닥 확률(8개 공식, lt_bottom) ≥ 50% + 일봉 RSI ≤ 30 + 주봉 RSI ≤ 35
   ④ 바닥 확률 ≥ 50%
   ⑤ 하락 구간 안(52주 고점 −5% 또는 −10%)
@@ -56,7 +56,6 @@ def blocks(P):
         'B06 CTA ≤ −4': cta <= -4,
         'B06 변동성 목표 노출 < 0.6배': volt < 0.6,
         'B06 시스템 매수 전환': (sig > sig.shift(5)) & (cta.diff(5) > 0),
-        'B06 CTA 플러스 전환': (cta > 0) & (cta.shift(5) <= 0),
     }).astype(float)
     O[vv3.isna()] = np.nan
     V = pd.DataFrame({'CTA': cta, '변동성목표': volt, 'VIX−VIX3M': vv3, 'MOVE': move})
@@ -132,7 +131,7 @@ def pool(P, tk, O):
 SIGNALS = [
     ('Opportunity Block 기준 이상', lambda W: W['opp'] >= W.attrs['need']),
     ('Opportunity Block 3개(VIX>VIX3M·CTA ≤ −4·변동성 목표 <0.6배) 모두', lambda W: W['공포3'] >= 3),
-    ('Opportunity Block 6개 중 3개 이상', lambda W: W['기회수'] >= 3),
+    ('Opportunity Block 5개 중 3개 이상', lambda W: W['기회수'] >= 3),
     ('바닥 확률 ≥50% + RSI 30↓·주RSI 35↓', lambda W: (W.p8 >= .5) & (W.r14 <= 30) & (W.wr <= 35)),
     ('바닥 확률 ≥50%', lambda W: W.p8 >= .5),
     ('하락 구간 안', lambda W: pd.Series(True, index=W.index)),
