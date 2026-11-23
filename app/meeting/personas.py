@@ -518,7 +518,8 @@ def rio(c):
     for it in ('미국 2년', '미국 10년'):   # 11/20 의장: 10년 실질 삭제
         r = c.mac_row(it)
         if r is not None:
-            out.append(L(it, f"{n(r['값'], 3, '%')}(1달 {p(r['1달'], 2, '%p')}, YTD {p(r['YTD'], 2, '%p')})",
+            d1 = (num(r['값']) - num(r.get('전일 값'))) if num(r.get('전일 값')) is not None and num(r['값']) is not None else None   # 11/23 의장: 하루 전도
+            out.append(L(it, f"{n(r['값'], 3, '%')}(" + (f"전일 {p(d1, 2, '%p')}, " if d1 is not None else '') + f"1달 {p(r['1달'], 2, '%p')}, YTD {p(r['YTD'], 2, '%p')})",
                          (f"[{r['신호']}] {r['표시']}" if ok(r.get('신호')) else '의장 기준 신호 없음') + ' (07시 매크로.csv)'))
     K = _read(c.d, '리스크')
     if len(K):
@@ -529,7 +530,13 @@ def rio(c):
     V = _read(c.d, '지수밸류')
     if len(V):
         v = V.iloc[-1]
-        out.append(L('지수 밸류', f"S&P500 선행 PER {n(v['선행PER'], 1, '배')}, 선행 EPS {n(v['선행EPS'], 1)}", f"{v['날짜']} {v['출처']}"))
+        # 11/23 의장 "PER이 11/13 블룸버그라고? 지금이 23일인데": PER은 오늘 S&P500 종가 ÷ 선행 EPS로 매일 다시 계산(EPS는 마지막으로 받은 값, 날짜 밝힘)
+        fper, spx = c.m.get('SPX_FPER'), c.m.get('SPX_CLOSE')
+        if spx is not None and fper is not None:
+            out.append(L('지수 밸류', f"S&P500 선행 PER {n(fper, 1, '배')} (S&P500 {n(spx, 0)} ÷ 선행 EPS {n(v['선행EPS'], 1)})",
+                         f"S&P500 {c.m.get('SPX_CLOSE_DATE', '')} 종가 · 선행 EPS는 {v['날짜']} {v['출처']} — EPS 새 값 받아야 함"))
+        else:
+            out.append(L('지수 밸류', f"S&P500 선행 PER {n(v['선행PER'], 1, '배')}, 선행 EPS {n(v['선행EPS'], 1)}", f"{v['날짜']} {v['출처']}"))
     if c.m.get('KS_GAP50') is not None:
         g, MR = c.m['KS_GAP50'], c.R.get('미스터 마켓', {})
         hot, warn = MR.get('코스피이격_과열', 130), MR.get('코스피이격_주의', 125)
@@ -541,7 +548,23 @@ def rio(c):
     go = eval(c.R['미스 리스크']['여건_규칙'], {'__builtins__': {}}, {'기회': len(o), '부담': len(b), '방어': dfn})
     out.append(L('현금 집행 여건', '됨' if go else '아님', f"기회 {len(o)}, 부담 {len(b)}, 방어 국면 {'예' if dfn else '아니오'}",
                  crit=f"규칙: {c.R['미스 리스크']['여건_규칙']}", sig='green' if go else 'orange'))
-    return out, []
+    # 11/23 의장 "현금집행 여건은 달랑 보여주지 말고 자세한 설명 표가 있어야지": 어떤 공식이 기회·부담으로 셈됐는지, 방어 국면 이유, 규칙
+    G, M = [], c.M
+    rows = []
+    if len(M):
+        X = M[M['결과'] == '통과']
+        for side in ('기회', '부담'):
+            for _, r in X[X['방향'] == side].iterrows():
+                val = next((str(r[k]) for k in ('오늘', '값', '지표값') if k in r and ok(r.get(k))), '')
+                rows.append([side, str(r.get('블록', '')), str(r.get('질문', '')), _re.sub(r'\((기회|부담)\)', '', str(r['공식'])).strip(), val])
+    for mk in ('미국', '한국'):
+        g = c.regime(mk)
+        if g:
+            rows.append(['방어 국면' if g[0] == '방어' else '국면', mk, str(g[0]), ' · '.join(str(x) for x in g[1:] if ok(x))[:120], ''])
+    rows.append(['규칙', '', '', f"{c.R['미스 리스크']['여건_규칙']} → 기회 {len(o)} {'>' if len(o) > len(b) else '≤'} 부담 {len(b)}, 방어 {'예' if dfn else '아니오'}", '됨' if go else '아님'])
+    G.append({'type': 'grid', 'title': f"현금 집행 여건 — {'됨' if go else '아님'} (기회 {len(o)} · 부담 {len(b)} · 방어 국면 {'예' if dfn else '아니오'})",
+              'columns': ['구분', '블록', '질문', '공식·이유', '오늘'], 'rows': rows, 'source': '엔진 시장 블록(통과한 공식) · 국면'})
+    return out, G
 
 
 def phobos(c):
@@ -1128,7 +1151,7 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)는 겹치니 '미스 리스크' 한 위원으로 합친다
     a1, g1 = _safe(rio, 2, c)
     a2, g2, tbl = _safe(phobos, 3, c)
-    sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, (tbl + '\n\n' + _safe(macro_table, 0, c)).strip()))   # 체크리스트는 맨 아래
+    sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, ('\n\n'.join(_gmd(x) for x in g1) + '\n\n' + tbl + '\n\n' + _safe(macro_table, 0, c)).strip()))   # 11/23 의장: 현금 집행 여건 설명 표   # 체크리스트는 맨 아래
     a, g = _safe(ttuji, 2, c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
     a, g, tbl = _safe(miss_chart_market, 3, c); sections.append(('3-1 기술적 분석', '미스 차트(퀀트센터 팀장)', '시장·업종 기술 지표와 기술적 추천', a, g, tbl))   # 11/23 의장: 기술적 분석은 매일, 추천도 함
     a, g = _safe(miss_chart, 2, c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
@@ -1255,6 +1278,13 @@ def premarket(c, Q, today):
                 continue
             chg = q['전일대비(%)']
             big = (q['티커'].endswith('=F') and q['티커'] in ('ES=F', 'NQ=F', 'YM=F') and pd.notna(chg) and abs(chg) >= P.get('크게움직임_선물(%)', 1))
+            if q['티커'] == '^TNX':   # 11/23 의장: 10년 금리는 하루 전·1달 전 모두, 변화는 %p(금리를 %로 나눈 값 금지)
+                v = float(q['값']); prev = v / (1 + chg / 100) if pd.notna(chg) else None
+                mr = c.mac_row('미국 10년'); m1v = num(mr.get('1달 전 값')) if mr is not None else None
+                parts = ([f"전일 {p(v - prev, 2, '%p')}"] if prev is not None else []) + ([f"1달 {p(v - m1v, 2, '%p')}"] if m1v is not None else [])
+                out.append(L('미국 10년물', f"{n(v, 2, '%')}" + (f" ({' · '.join(parts)})" if parts else ''),
+                             f"야후 {q['티커']}, {q['시각']} 기준 · 1달 전 값은 07시 매크로.csv"))
+                continue
             out.append(L(q['이름'], f"{n(q['값'], 2)}" + (f" ({'+' if chg >= 0 else ''}{chg:.2f}%)" if pd.notna(chg) else '') + (' — 선물 큰 움직임' if big else ''),
                          f"야후 {q['티커']}, {q['시각']} 기준, 전일 종가 대비"))
     else:
