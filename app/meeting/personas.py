@@ -922,7 +922,13 @@ def _buy_state(c):
                 upp = num(qg.get('CTA 매수 전환까지(%)'))
                 left.append('JPM 추세 신호 전환(' + (f"매수 전환까지 S&P {p(upp, 1)}" if upp is not None else '신호 안 나옴') + ')')
             act = f"분할 준비 — 거의 다 됨(남은 확인 {len(left)}개)"
-            why = ('분할 매수 판정 ' + ' · '.join(f"{r['지수']} Opportunity Block {int(r['켜진수'])}/{int(r['전체'])}(기준 {int(r['기준'])})" for r in bp_ok)
+            # 11/23 의장 "우리는 어디까지나 확률로 말하는 것, 사는 건 내가 판단, 애매하면 분할": 과거 같은 신호의 이긴 비율·수익 중앙값을 함께
+            def _pr(r):
+                try:
+                    return f", 과거 같은 신호 {int(r['사례'])}번 중 {round(float(r['이김']) * int(r['사례']))}번 13주 뒤 이김(수익 중앙값 {float(r['수익중앙값']) * 100:+.1f}%)"
+                except (TypeError, ValueError, KeyError):
+                    return ''
+            why = ('분할 매수 판정 ' + ' · '.join(f"{r['지수']} Opportunity Block {int(r['켜진수'])}/{int(r['전체'])}(기준 {int(r['기준'])}){_pr(r)}" for r in bp_ok)
                    + ' 기준 이상 · 남은 확인: ' + ' / '.join(left)
                    + (f" · 나스닥100이 이번 하락의 바닥일 확률 {nd:.0%}" if nd is not None else ''))
         elif mk == '미국' and nd is not None and nd >= R['바닥_준비'] and not conf_on:
