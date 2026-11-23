@@ -54,6 +54,41 @@ def _ctm_panel(ax, T, a, b, label):
     ax.set_xlim(pd.Timestamp(a), pd.Timestamp(b) if b else z.index[-1] + pd.Timedelta(days=21)); ax.text(.005, .9, f'{label} {z.iloc[-1]:.2f}  (original-chart scale ~{CAL_A + CAL_B * z.iloc[-1]:.1f})', transform=ax.transAxes, fontsize=6.5)
 
 
+# 11/23 의장: 그림마다 밑에 "대상 값·기준선 값·닿음/돌파" 표 → 그림을 그리면서 같은 선으로 기록(ROWS), draw()가 turn_lines.csv로 남김
+ROWS = []
+TOUCH = 1.0   # 선과 ±1% 안이면 '닿음'
+CROSS_N = 4   # 돌파는 돌파한 봉부터 4봉 동안(64·109주선 상태와 같은 규칙), 그 사이 같은 쪽에 있을 때
+
+
+def state(P, S):
+    """대상 P와 기준선 S(같은 날짜 칸)로 상태: 상향 돌파 / 하향 돌파 / 위에서 닿음 / 아래에서 닿음 / 위 / 아래"""
+    x = pd.concat([P, S], axis=1, keys=['p', 's']).dropna()
+    if not len(x):
+        return None, None
+    up = x['p'] >= x['s']; gap = (x['p'].iloc[-1] / x['s'].iloc[-1] - 1) * 100
+    k = up.iloc[-(CROSS_N + 1):]
+    if len(k) > 1 and (k != k.iloc[-1]).any():
+        return ('상향 돌파' if up.iloc[-1] else '하향 돌파'), gap
+    if abs(gap) <= TOUCH:
+        return ('위에서 닿음' if up.iloc[-1] else '아래에서 닿음'), gap
+    return ('위' if up.iloc[-1] else '아래'), gap
+
+
+def _rec(n, who, P, line, S, fmt='{:,.2f}'):
+    """기준선 S는 Series(이평·VWAP 등) 또는 숫자(피보·CTM 30 등). CTM은 점수라 차이를 '점'으로."""
+    P = P.dropna()
+    if not isinstance(S, pd.Series):
+        S = pd.Series(float(S), index=P.index)
+    st_, gap = state(P, S)
+    sv = S.reindex(P.index).dropna()
+    if who.startswith('CTM'):
+        gap_s = f'{P.iloc[-1] - sv.iloc[-1]:+.1f}점' if len(sv) else ''
+    else:
+        gap_s = '' if gap is None else f'{gap:+.1f}%'
+    ROWS.append({'그림': n, '기준일': str(P.index[-1].date()), '대상': who, '대상 값': fmt.format(P.iloc[-1]), '기준선': line,
+                 '선 값': fmt.format(sv.iloc[-1]) if len(sv) else '', '차이': gap_s, '상태': st_})
+
+
 def _avwap(P, V, a):
     return ((P * V).loc[a:].cumsum() / V.loc[a:].cumsum())
 
@@ -73,7 +108,8 @@ def fig1(D, out):
     fig, ax = plt.subplots(figsize=(11, 5.6)); ax.plot(z.index, z, color='k', lw=.8, label=f'QQQ:RSP (Daily) {R.iloc[-1]:.2f}')
     for a, c in QR_ANCHORS:
         t = R.loc[a:].index[0]; s = _avwap(R, x['v'], t); ax.plot(s.index, s, color=c, lw=1.1, label=f'Anchored VWAP {s.iloc[-1]:.2f}')
-    pk = R.loc['2020-06':'2021-06'].max(); ax.axhline(pk, color='#1f5fbf', lw=1.6, ls=(0, (6, 3))); ax.text(z.index[-1], pk, f' {pk:.2f}', va='bottom', fontsize=6.5)
+        _rec(1, 'QQQ:RSP', R, f'앵커드 VWAP({t:%Y-%m-%d})', s.reindex(R.index), '{:.3f}')
+    pk = R.loc['2020-06':'2021-06'].max(); _rec(1, 'QQQ:RSP', R, '2021 고점선', pk, '{:.3f}'); ax.axhline(pk, color='#1f5fbf', lw=1.6, ls=(0, (6, 3))); ax.text(z.index[-1], pk, f' {pk:.2f}', va='bottom', fontsize=6.5)
     ax.set_yscale('log'); ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f'{v:.2f}')); ax.yaxis.set_minor_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f'{v:.2f}')); ax.yaxis.tick_right()
     ax.set_title(f'QQQ:RSP - Invesco QQQ Trust/Invesco S&P 500 Equal Weight ETF   {R.index[-1]:%d-%b-%Y}', loc='left', fontsize=8)
     ax.legend(loc='upper left', fontsize=6, framealpha=.9); ax.text(.45, .06, 'NASDAQ 100 vs. EQ-WT S&P 500', transform=ax.transAxes, color='#1f5fbf', fontsize=12, weight='bold')
@@ -87,6 +123,9 @@ def _ma_ctm(D, out, n, a, b, title, sub, notes=()):
     z = slice(a, b); _hlc(ax, C.loc[z], H.loc[z], L.loc[z])
     for p, col in MA19:
         m = C.rolling(p).mean().loc[z]; ax.plot(m.index, m, color=col, lw=THICK.get(p, .6), ls='-' if p in THICK else (0, (1, 1.2)), label=f'MA({p}) {m.iloc[-1]:.2f}')
+        _rec(n, 'S&P 주봉', C.loc[z], f'{p}주선', C.rolling(p).mean().loc[z])
+    for y in (30, 50):
+        _rec(n, 'CTM-$SPX', T.loc[a:b], f'CTM {y}', y)
     if n == 3: ax.set_yscale('log')
     ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f'{v:,.0f}')); ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter()); ax.yaxis.tick_right()
     lo = min(L.loc[z].min(), C.rolling(230).mean().loc[z].min()) * .97; ax.set_ylim(lo, H.loc[z].max() * 1.03)
@@ -118,10 +157,12 @@ def fig4(D, out):
     fig, ax = plt.subplots(figsize=(11, 5.4)); ax.plot(z.index, z, color='k', lw=.9, label=f'NVDA (Weekly) {C.iloc[-1]:.2f}')
     for a, c, ls in NV_ANCHORS:
         s = _wk(_avwap(P, x['NVDA_VOL'], a)); ax.plot(s.index, s, color=c, lw=1.2 if ls == '-' else .8, ls=ls, label=f'Anchored VWAP {s.iloc[-1]:.2f}')
+        _rec(4, 'NVDA 주봉', C, f'앵커드 VWAP({a})', s.reindex(C.index))
     lo, lt = C.loc['2022-06':'2023-01'].min(), C.loc['2022-06':'2023-01'].idxmin(); hi = C.loc['2023':].max()   # 원본 피보는 주봉 종가
     ax.axvspan(pd.Timestamp('2022-07-01'), lt, color='#ddd', alpha=.6)
     for r in (0, .382, .5, .618, 1):
         y = hi - (hi - lo) * r; ax.hlines(y, pd.Timestamp('2022-07-01'), lt, color='k', lw=.8); ax.text(lt, y, f'{r * 100:.2f}%', fontsize=6, ha='right', va='bottom')
+        _rec(4, 'NVDA 주봉', C, f'피보 {r * 100:.1f}%', y)
         if r in (.5, .618):
             ax.axhline(y, color='#1f5fbf', lw=1.8, ls=(0, (5, 3))); ax.text(z.index[-1] + pd.Timedelta(days=30), y, f'{y:.2f}', fontsize=7, va='bottom')
     ax.set_yscale('log'); ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f'{v:.0f}')); ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter()); ax.yaxis.tick_right()
@@ -138,11 +179,13 @@ def _cluster(D, out, n, a, b, title, notes=(), fib=None):
     fig, ax = plt.subplots(figsize=(11, 5.2)); ax.plot(z.index, z, color='k', lw=1, label=f'$SPX (Weekly) {z.iloc[-1]:.2f}')
     for p, c in CL6:
         m = C.rolling(p).mean().loc[a:b]; ax.plot(m.index, m, color=c, lw=1.1, label=f'MA({p}) {m.iloc[-1]:.2f}')
+        _rec(n, 'S&P 주봉', z, f'{p}주선', C.rolling(p).mean().loc[a:b])
+    _rec(n, 'S&P 주봉', z, '110주선', C.rolling(110).mean().loc[a:b])
     m = C.rolling(110).mean().loc[a:b]; ax.plot(m.index, m, color='#8b0000', lw=1.1, ls=(0, (1, 1.5)), label=f'MA(110) {m.iloc[-1]:.2f}')
     if fib:
         lo, hi = fib
         for r in (0, .382, .5, .618, 1):
-            y = hi - (hi - lo) * r; ax.axhline(y, color='#777', lw=.6, ls=(0, (2, 2)), xmin=.82); ax.text(z.index[int(len(z) * .83)], y, f'{r * 100:.1f}%: {y:.2f}', fontsize=6, color='#555')
+            y = hi - (hi - lo) * r; _rec(n, 'S&P 주봉', z, f'피보 {r * 100:.1f}%', y); ax.axhline(y, color='#777', lw=.6, ls=(0, (2, 2)), xmin=.82); ax.text(z.index[int(len(z) * .83)], y, f'{r * 100:.1f}%: {y:.2f}', fontsize=6, color='#555')
     for t, y, s, col in notes:
         ax.annotate(s, (pd.Timestamp(t), y), fontsize=8, color=col, weight='bold', bbox=dict(fc='w', ec='#888', lw=.5))
     ax.yaxis.tick_right(); ax.legend(loc='upper left', fontsize=6, framealpha=.9)
@@ -186,6 +229,8 @@ def fig7(D, out):
     C, H, L = _wk(R), _wk(R, 'max'), _wk(R, 'min'); a, e = '2021-05-01', C.index[-1] + pd.Timedelta(days=200)
     fig, (ax, bx) = plt.subplots(2, 1, figsize=(11, 6), gridspec_kw={'height_ratios': [3, 1.1]}, sharex=True)
     ten, kij, A2, B2 = _cloud(ax, C, H, L, a, e, 'W-FRI'); z = C.loc[a:]
+    for nm_, L_ in (('전환선', ten), ('기준선', kij), ('구름 위끝', pd.concat([A2, B2], axis=1).max(axis=1)), ('구름 아래끝', pd.concat([A2, B2], axis=1).min(axis=1))):
+        _rec(7, 'SPYG:BIL 주봉', z, f'일목 {nm_}', L_.reindex(z.index), '{:.3f}')
     ax.plot(z.index, z, color='k', lw=1.1, label=f'SPYG:BIL (Weekly) {C.iloc[-1]:.3f}')
     ax.plot([], [], color='#2e8b57', label=f'ICHIMOKU(9,26,52) {ten.iloc[-1]:.3f}, {kij.iloc[-1]:.3f}, {A2.dropna().iloc[-1]:.3f}, {B2.dropna().iloc[-1]:.3f}')
     ax.yaxis.tick_right(); ax.legend(loc='upper left', fontsize=6); ax.text(.45, .9, 'LC GROWTH vs. 1-3 MONTH T-BILLS', transform=ax.transAxes, fontsize=13, weight='bold')
@@ -204,6 +249,10 @@ def fig8(D, out):
         cc = C.loc[z][m.loc[z]]; _hlc(ax, cc, H.reindex(cc.index), L.reindex(cc.index), color=col, w=9)
     t1, t2 = L.loc['2015-01':'2016-12'].idxmin(), L.loc['2022-01':'2023-12'].idxmin(); k = (L[t2] - L[t1]) / (t2 - t1).days
     xs = pd.date_range(t1, e, freq='ME'); ax.plot(xs, L[t1] + k * (xs - t1).days, color='#1f3cd1', lw=2)
+    cz = C.loc[z]
+    for nm_, L_ in (('전환선', ten), ('기준선', kij), ('구름 위끝', pd.concat([A2, B2], axis=1).max(axis=1)), ('구름 아래끝', pd.concat([A2, B2], axis=1).min(axis=1))):
+        _rec(8, 'IWF:IWD 월봉', cz, f'일목 {nm_}', L_.reindex(cz.index), '{:.3f}')
+    _rec(8, 'IWF:IWD 월봉', cz, '2016 추세선', pd.Series(L[t1] + k * (cz.index - t1).days, index=cz.index), '{:.3f}')
     ax.annotate('BEAR MARKET ENDS', (t2, L[t2]), xytext=(pd.Timestamp('2024-06-01'), L[t2] * .82), fontsize=12, color='#1f3cd1', weight='bold',
                 bbox=dict(fc='w', ec='#888'), arrowprops=dict(arrowstyle='-', color='#888'))
     ax.text(.03, .85, 'GROWTH vs. VALUE\nMONTHLY', transform=ax.transAxes, fontsize=14, color='#1f3cd1', weight='bold'); ax.yaxis.tick_right()
@@ -222,17 +271,23 @@ def fig9(D, out):
     z = C.loc[a:]; ax.plot(z.index, z, color='#1c1f5c', lw=1, label=f'MGK (Weekly) {C.iloc[-1]:.2f}')
     for p, col, ls in MGK_MA:
         m = C.rolling(p).mean().loc[a:]; ax.plot(m.index, m, color=col, lw=.9, ls=ls, label=f'MA({p}) {m.iloc[-1]:.2f}')
+        _rec(9, 'MGK 주봉', z, f'{p}주선', C.rolling(p).mean().loc[a:])
     t1, t2 = C.loc['2022-06':'2023-03'].idxmin(), C.loc['2025-03':'2025-05'].idxmin(); k = (C[t2] - C[t1]) / (t2 - t1).days
     xs = pd.date_range(t1, z.index[-1] + pd.Timedelta(days=60), freq='W-FRI'); ax.plot(xs, C[t1] + k * (xs - t1).days, color='#1f3cd1', lw=2.2)
+    _rec(9, 'MGK 주봉', z, '2022~2025 저점 추세선', pd.Series(C[t1] + k * (z.index - t1).days, index=z.index).where(z.index >= t1))
     for (l0, l1), (h0, h1), x0 in ((('2020-02', '2020-04'), ('2021-06', '2022-01'), '2020-03-01'), (('2022-09', '2023-01'), ('2024-06', '2025-03'), '2022-12-01'),
                                    (('2025-03', '2025-05'), ('2025-06', None), '2025-04-01')):
         lo, hi = C.loc[l0:l1].min(), C.loc[h0:h1].max()   # 원본 피보는 주봉 종가
         for r in (0, .382, .5, .618, 1):
             y = hi - (hi - lo) * r; ax.hlines(y, pd.Timestamp(x0), pd.Timestamp(x0) + pd.Timedelta(days=640), color='#1c1f5c', lw=.8)
+            if x0 == '2025-04-01':
+                _rec(9, 'MGK 주봉', z, f'피보(2025) {r * 100:.1f}%', y)
             ax.text(pd.Timestamp(x0) + pd.Timedelta(days=640), y, f'{r * 100:.1f}%: {y:.2f}', fontsize=5.5, ha='right', va='bottom', color='#444')
     ax.set_yscale('log'); ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f'{v:.0f}')); ax.yaxis.set_minor_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f'{v:.0f}' if v in (15, 25, 35, 45, 55, 65, 75, 85) else '')); ax.yaxis.tick_right()
     ax.legend(loc='upper left', fontsize=6, framealpha=.9); ax.text(.1, .62, 'MGK (HEAVY MAG 7)\nWEEKLY 2017-2026', transform=ax.transAxes, fontsize=13, weight='bold')
     ax.set_title(f'MGK Vanguard Mega Cap Growth ETF   {C.index[-1]:%d-%b-%Y}', loc='left', fontsize=8)
+    for y in (30, 50):
+        _rec(9, 'CTM-MGK', T.loc[a:], f'CTM {y}', y)
     _ctm_panel(bx, T, a, None, 'CTM-MGK'); bx.set_xlim(pd.Timestamp(a), z.index[-1] + pd.Timedelta(days=60)); fig.tight_layout(h_pad=.2); _save(fig, out, 9)
 
 
@@ -241,13 +296,14 @@ FIGS = [fig1, fig2, fig3, fig4, fig5, fig6, fig7, fig8, fig9]
 
 def draw(D, out, only=None):
     """그림 9개를 그린다. 하나가 실패해도 나머지는 그린다. 돌려줌: {번호: '그림'|'실패: …'}"""
-    os.makedirs(out, exist_ok=True); D = D.sort_index(); res = {}
+    os.makedirs(out, exist_ok=True); D = D.sort_index(); res = {}; ROWS.clear()
     for i, f in enumerate(FIGS, 1):
         if only and i not in only: continue
         try:
             f(D, out); res[i] = '그림'
         except Exception as e:   # noqa: BLE001
             res[i] = f'실패: {str(e)[:120]}'
+    pd.DataFrame(ROWS).to_csv(f'{out}/turn_lines.csv', index=False, encoding='utf-8-sig')
     return res
 
 
