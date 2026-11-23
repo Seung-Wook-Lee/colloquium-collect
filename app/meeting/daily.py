@@ -262,6 +262,9 @@ def backtest(W, IN, use_drive, tday, B, S):
                 b = drive.get(f'{D_DATA}/1_data/{nm}')
                 if b: open(f'{IN}/장기/{nm}', 'wb').write(b)
                 log(f'[성적표] 1_data/{nm} ' + ('받음' if b else '없음'))
+            b = drive.get(f'{D_DATA}/00_누적/00_역도산_주봉.csv')   # 11/24 B18 업종 ETF 60주선 과거 값
+            if b: open(f'{IN}/장기/역도산_주봉.csv', 'wb').write(b)
+            log('[성적표] 00_누적/00_역도산_주봉.csv ' + ('받음' if b else '없음'))
         r = subprocess.run([sys.executable, '-W', 'ignore', f'{QC}/backtest.py', IN], cwd=W, capture_output=True, text=True, timeout=5400, env={**os.environ, 'PYTHONPATH': PYPATH})
         if r.returncode != 0:
             raise RuntimeError((r.stderr.strip().splitlines() or ['?'])[-1])
