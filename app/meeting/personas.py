@@ -904,6 +904,7 @@ def _buy_state(c):
     BPJ = _read2(c.d, '분할판정')
     bp_ok = [r for _, r in BPJ.iterrows() if str(r.get('판정', '')).startswith('오케이')] if len(BPJ) and '판정' in BPJ else []
     conf_on = (turn == 1) or (cta is not None and cta <= cta_floor)
+    # 원칙(11/23 의장, 바꾸지 말 것): 확률로 말한다 · 사는 건 의장 판단 · 애매하면 분할 · 여러 공식의 다른 신호를 종합한 점수가 중요(market/buy_plan.py 머리말).
     # 11/23 의장 "100% 사라는 판정은 나올 수 없어. 거의 다 됐는데 몇 개가 더 걸린다 — 이게 맞지": 분할 판정 '오케이'는 '산다'가 아니라 '분할 준비'로,
     # 아직 안 채운 확인 조건(지금 값)을 함께 보여 준다.
     bp_txt = ' · '.join(f"{r['지수']} Opportunity Block {int(r['켜진수'])}/{int(r['전체'])}(기준 {int(r['기준'])}) {r['판정']}" for _, r in BPJ.iterrows()) if len(BPJ) and '판정' in BPJ else ''
