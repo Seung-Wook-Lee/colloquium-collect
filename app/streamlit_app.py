@@ -400,9 +400,12 @@ def _pos_line(H, col, title, unit, refs, zones):
     w1, m1 = at(7), at(30)
     sub = ' · '.join(x for x in (f'1주 전 {f(w1)}{"" if unit == "/3" else unit}' if w1 is not None else '',
                                   f'1달 전 {f(m1)}{"" if unit == "/3" else unit}' if m1 is not None else '') if x)
-    st.markdown(f'<div style="font-size:14px;font-weight:700;color:#1b5e20;margin-top:6px">{title}</div>'
-                f'<div style="font-size:22px;font-weight:700;color:#222;line-height:1.3">{now}'
-                f'<span style="font-size:12px;font-weight:400;color:#888"> &nbsp; {sub} · {last:%Y-%m-%d} 기준</span></div>', unsafe_allow_html=True)
+    # 11/23 22:20 의장 '촌스럽고 다닥다닥 → 위아래 여유': 제목·값·비교 세 줄로 나누고 줄 사이를 띄움
+    st.markdown(f'<div style="padding:4px 2px 0 2px">'
+                f'<div style="font-size:13px;font-weight:600;color:#2e7d32;letter-spacing:-0.2px">{title}</div>'
+                f'<div style="font-size:24px;font-weight:700;color:#222;line-height:1.2;margin-top:10px">{now}</div>'
+                f'<div style="font-size:12px;color:#999;margin-top:6px;margin-bottom:14px">{sub + " · " if sub else ""}{last:%Y-%m-%d} 기준</div>'
+                f'</div>', unsafe_allow_html=True)
     lo = min(D['값'].min(), *[r[0] for r in refs]); hi = max(D['값'].max(), *[r[0] for r in refs])
     pad = (hi - lo) * 0.08 or 0.5
     dom = [lo - pad, hi + pad] if unit != '%' else [0, 100]
@@ -426,7 +429,8 @@ def _pos_line(H, col, title, unit, refs, zones):
         tooltip=['날짜:T', '지표:N', alt.Tooltip('값:Q', format='.2f')]))
     E = D[D['날짜'] == D['날짜'].max()]
     lay.append(alt.Chart(E).mark_circle(size=70).encode(x='날짜:T', y=alt.Y('값:Q', scale=alt.Scale(domain=dom)), color=alt.Color('지표:N', scale=pal, legend=None)))
-    st.altair_chart(alt.layer(*lay).properties(height=210).configure_view(strokeWidth=0), use_container_width=True)
+    st.altair_chart(alt.layer(*lay).properties(height=220, padding={'top': 6, 'bottom': 4, 'left': 2, 'right': 8})
+                    .configure_view(strokeWidth=0), use_container_width=True)
 
 
 def pos_board(title, md):
@@ -437,11 +441,15 @@ def pos_board(title, md):
     if H is not None and len(H):
         st.caption('최근 1년 · 점선 = 기준선 · 색 띠 = 바닥(녹색)·과열(붉은색) 구간 · 출처 00_수급포지셔닝_이력.csv')
         for i in range(0, len(POS_PANEL), 2):
-            cc = st.columns(2)
+            if i:
+                st.markdown('<div style="height:22px"></div>', unsafe_allow_html=True)   # 11/23 의장: 위아래 여유
+            cc = st.columns(2, gap='large')
             for c, pnl in zip(cc, POS_PANEL[i:i + 2]):
                 with c:
                     if pnl[0] in H:
-                        _pos_line(H, *pnl)
+                        with st.container(border=True):
+                            _pos_line(H, *pnl)
+        st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
     df = md_table(md)
     if df is None or df.empty:
         st.markdown(md); return
