@@ -15,8 +15,10 @@ RIO_ITEMS = [
     # 2026-11-05 의장 "위기 관리용 지표 추가": 하이일드 실효수익률(회사가 실제로 내는 금리 = 국채금리 + 스프레드)
     ('하이일드 실효수익률', lambda: FS.get('BAMLH0A0HYM2EY'), '%', 'up', 0.25, 'pp', 'FRED BAMLH0A0HYM2EY'),
     ('MOVE', lambda: YS.get('MOVE'), '', 'up', 10, 'pct', '야후 ^MOVE'),
-    ('미국 10년물', lambda: FS.get('DGS10') if FS.get('DGS10') is not None else YS.get('미국 10년'), '%', 'up', 0.15, 'pp',
-     'FRED DGS10 (없으면 야후 ^TNX)'),
+    # 11/23: FRED는 야후보다 하루 늦음 → 엔진 B04가 11/19 값 5.04, 원고 07시 표는 11/20 값 4.912로 서로 달랐음. 더 최근 날짜 쪽을 씀
+    ('미국 10년물', lambda: max((x for x in (FS.get('DGS10'), YS.get('미국 10년')) if x is not None and len(x.dropna())),
+                            key=lambda x: x.dropna().index[-1], default=None), '%', 'up', 0.15, 'pp',
+     'FRED DGS10·야후 ^TNX 중 더 최근 날짜'),
     ('실질금리(10년 TIPS)', lambda: FS.get('DFII10'), '%', 'up', 0.15, 'pp', 'FRED DFII10'),
     ('유가(WTI)', lambda: YS.get('WTI'), '$', 'up', 8, 'pct', '야후 CL=F'),
     # 공포탐욕은 거꾸로 본다(2026-11-02 의장): 공포 쪽으로 내려가면 오를 때가 다가오는 것, 탐욕 쪽으로 오르면 조정이 다가오는 것

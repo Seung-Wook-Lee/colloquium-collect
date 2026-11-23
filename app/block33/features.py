@@ -663,6 +663,12 @@ def market(d):
             g = dict(zip(C['항목'], _num(C['값'])))
             m.update(US10Y=g.get('미국 10년물'), REAL10Y=g.get('실질금리(10년 TIPS)'))
             m['REAL10Y_1W'] = dict(zip(C['항목'], _num(C['1주 전']))).get('실질금리(10년 TIPS)')
+            # 11/23: 체크리스트 10년물(FRED, 하루 늦음)보다 07시 매크로(야후 ^TNX)가 더 최근이면 그 값 — 같은 날 원고와 B04가 다른 값을 내지 않게
+            X = _r(d, '매크로')
+            if len(X) and '미국 10년' in set(X['항목']):
+                x = X[X['항목'] == '미국 10년'].iloc[0]; c0 = C[C['항목'] == '미국 10년물']
+                if not len(c0) or str(x['기준일']) > str(c0['기준일'].iloc[0]):
+                    m['US10Y'] = float(_num(pd.Series([x['값']])).iloc[0])
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('매크로체크리스트', e)
     G = _r(d, '공포탐욕')
