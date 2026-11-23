@@ -72,13 +72,13 @@ def daily_kr(code, days=730):
     return _frame(rows)
 
 
-def daily_us(sym, exch=None, days=730):
+def daily_us(sym, exch=None, days=730, pages=8):
     """해외 일봉 2년. 거래소를 모르면 NAS→NYS→AMS 순으로"""
     sym = str(sym).replace('-', '/')
     first = EXCD.get(exch, 'NAS')
     for ex in [first] + [e for e in ('NAS', 'NYS', 'AMS') if e != first]:
         rows, bymd, stop = [], '', dt.date.today() - dt.timedelta(days=days)
-        for _ in range(8):
+        for _ in range(pages):
             j = _get('/uapi/overseas-price/v1/quotations/dailyprice', 'HHDFS76240000',
                      {'AUTH': '', 'EXCD': ex, 'SYMB': sym, 'GUBN': '0', 'BYMD': bymd, 'MODP': '1'})
             out = [o for o in (j or {}).get('output2') or [] if o.get('xymd')]
@@ -130,3 +130,18 @@ def quarterly_kr(code):
         q = pd.Timestamp(int(r['y']), int(r['m']), 1) + pd.offsets.MonthEnd(0)
         res.append((str(q.date()), *(r[k] * 1e8 if pd.notna(r[k]) else None for k in ('매출', '영업이익', '순이익'))))
     return res
+
+
+def daily_index_kr(code='1001', days=3650):
+    """국내 지수 일봉(0001 코스피, 1001 코스닥) — FHKUP03500100. DataFrame(index=날짜, Close·High·Low·Volume)"""
+    end, start, rows = dt.date.today(), dt.date.today() - dt.timedelta(days=days), []
+    while end > start:
+        s = max(start, end - dt.timedelta(days=140))
+        j = _get('/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice', 'FHKUP03500100',
+                 {'FID_COND_MRKT_DIV_CODE': 'U', 'FID_INPUT_ISCD': code, 'FID_INPUT_DATE_1': s.strftime('%Y%m%d'),
+                  'FID_INPUT_DATE_2': end.strftime('%Y%m%d'), 'FID_PERIOD_DIV_CODE': 'D'})
+        for o in (j or {}).get('output2') or []:
+            if o.get('stck_bsop_date'):
+                rows.append((o['stck_bsop_date'], _f(o.get('bstp_nmix_prpr')), _f(o.get('bstp_nmix_hgpr')), _f(o.get('bstp_nmix_lwpr')), _f(o.get('acml_vol'))))
+        end = s - dt.timedelta(days=1)
+    return _frame(rows)

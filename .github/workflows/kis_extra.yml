@@ -1,0 +1,21 @@
+name: 한투 추가 자료(우리 자료에 없는 것)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 22 * * 0-4'   # 평일 07:30 KST(미국 장 마감 뒤)
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install requests pandas pyyaml
+      - run: python collect/data/kis_extra.py
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
