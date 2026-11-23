@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ourdata as O
 
 OUT = Path('/mnt/project-files/유니버스/start/covid_rotation/')
-A = ['장기채', '금', '나스닥100', '코스피', 'S&P500', 'SOXX']
+A = ['장기채', '금', '나스닥100', '코스피', 'S&P500', 'SOX', 'SOXX']
 P = O.get(*A)
 spx = P['S&P500'].dropna(); us = spx.index
 td = lambda a, b: int(us.searchsorted(b) - us.searchsorted(a))
