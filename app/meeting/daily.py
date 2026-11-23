@@ -256,6 +256,12 @@ def backtest(W, IN, use_drive, tday, B, S):
         r = subprocess.run([sys.executable, f'{DATA}/fetch_long.py', IN], cwd=W, capture_output=True, text=True, timeout=900, env={**os.environ, 'PYTHONPATH': PYPATH})
         if r.returncode != 0:
             raise RuntimeError('긴 가격 실패: ' + (r.stderr.strip().splitlines() or ['?'])[-1])
+        if use_drive:   # 11/23 의장 '24개 블록 과거 값 채워': 재무 칸 과거 값(공시일 기준)
+            import drive
+            for nm in ('SEC재무_분기.csv.gz', 'DART재무_분기.csv.gz', 'PER_EPS_주별.csv.gz'):
+                b = drive.get(f'{D_DATA}/1_data/{nm}')
+                if b: open(f'{IN}/장기/{nm}', 'wb').write(b)
+                log(f'[성적표] 1_data/{nm} ' + ('받음' if b else '없음'))
         r = subprocess.run([sys.executable, '-W', 'ignore', f'{QC}/backtest.py', IN], cwd=W, capture_output=True, text=True, timeout=5400, env={**os.environ, 'PYTHONPATH': PYPATH})
         if r.returncode != 0:
             raise RuntimeError((r.stderr.strip().splitlines() or ['?'])[-1])
