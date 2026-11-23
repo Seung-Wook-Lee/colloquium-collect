@@ -6,7 +6,7 @@ on:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -14,6 +14,12 @@ jobs:
           python-version: '3.12'
       - run: pip install requests pandas pyyaml
       - run: python collect/data/kis_extra.py
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+      - run: python collect/data/kis_credit.py
         env:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
