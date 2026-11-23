@@ -898,9 +898,15 @@ def _buy_state(c):
     turn, plus = num(qg.get('시스템 매수 전환')), num(qg.get('CTA 플러스 전환'))
     cta_floor = c.R.get('미스 시타델', {}).get('CTA_바닥', -4)
     plus = 0   # 11/23 의장 "CTA 플러스 전환은 그냥 빼고(추세 바뀐 뒤 한참 뒤에 나옴)" → gate·원고에서 뺌
-    conf_on = (turn == 1) or (cta is not None and cta <= cta_floor)
+    # 11/23 의장(11/20 금요일 "분할을 슬슬 준비하라는 사인이 나와야 함"): 시스템 자금 확인 셋째 길 = 분할 매수 판정(buy_plan)
+    # Opportunity Block 기준 이상 → '오케이'. 11/20에 CTA −3.33σ·JPM 0/3이라 gate가 막았지만 분할 판정은 S&P 12/19(기준 11)·나스닥100 13/19(기준 13)
+    # '오케이, 지금 시작'이었음(과거 같은 신호 S&P 6/6·나스닥100 5/5 13주 뒤 이김). 두 코드가 서로 안 읽던 것이 문제.
+    BPJ = _read2(c.d, '분할판정')
+    bp_ok = [r for _, r in BPJ.iterrows() if str(r.get('판정', '')).startswith('오케이')] if len(BPJ) and '판정' in BPJ else []
+    conf_on = (turn == 1) or (cta is not None and cta <= cta_floor) or bool(bp_ok)
+    bp_txt = ' · '.join(f"{r['지수']} Opportunity Block {int(r['켜진수'])}/{int(r['전체'])}(기준 {int(r['기준'])}) {r['판정']}" for _, r in BPJ.iterrows()) if len(BPJ) and '판정' in BPJ else ''
     conf_txt = (f"JPM 추세 신호 전환 {'신호 나옴' if turn == 1 else '신호 안 나옴'}, "
-                f"CTA {p(cta, 2, 'σ') if cta is not None else '자료 없음'}(바닥 {cta_floor}σ)") if qg else '수급포지셔닝.csv 없음 → 확인 안 됨'
+                f"CTA {p(cta, 2, 'σ') if cta is not None else '자료 없음'}(바닥 {cta_floor}σ)" + (f", 분할 매수 판정: {bp_txt}" if bp_txt else '')) if qg else '수급포지셔닝.csv 없음 → 확인 안 됨'
     ST = {}
     for mk in ('미국', '한국'):
         g = c.regime(mk); dfn = bool(g and g[0] == '방어')
