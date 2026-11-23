@@ -32,3 +32,8 @@ print('\n'.join(rep)); print('합친 표', D.shape)
 if drive.ready() and len(D):
     drive.put(PATH, D.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig'))
     print('드라이브 저장', PATH)
+    # 작은 압축본: 잔고율(%)만 날짜×코드 표로 → 프로젝트 폴더로 내려받아 검정에 쓴다
+    import gzip
+    T = D.pivot_table(index='날짜', columns='코드', values='잔고율')
+    drive.put('콜로키움 수집데이터/1_data/신용잔고율_표.csv.gz', gzip.compress(T.to_csv(float_format='%.4g', encoding='utf-8-sig').encode('utf-8-sig')))
+    print('드라이브 저장 신용잔고율_표.csv.gz', T.shape)
