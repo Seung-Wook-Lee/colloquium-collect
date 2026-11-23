@@ -766,13 +766,13 @@ def turning_board(day):
             st.caption(f'{n}. {nm}')
             c1, c2 = st.columns(2, gap='small')
             with c1:
-                st.caption('재현(오늘 자료)')
+                st.caption('오늘 그래프')
                 if b:
                     st.image(b, use_container_width=True)
                 else:
                     st.caption('그림 없음')
             with c2:
-                st.caption('원본(의장이 준 그림)')
+                st.caption('비교 그래프')
                 if o.exists():
                     st.image(str(o), use_container_width=True)
                 else:
