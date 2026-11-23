@@ -3,10 +3,12 @@
 신호 검정: '주가가 고점 −10% 아래인데 금(장기채)이 구간 저점에서 +5% 오른 첫날' → 그날부터 S&P 바닥까지 며칠, 그날 산 S&P 63일 뒤 수익 vs 같은 낙폭 아무 날."""
 from pathlib import Path
 import pandas as pd
-import yfinance as yf
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ourdata as O
 
 OUT = Path('/mnt/project-files/유니버스/start/covid_rotation/')
-P = yf.download(['^GSPC', 'GC=F', 'ZB=F', '^NDX', '^KS11'], start='1999-01-01', auto_adjust=True, progress=False)['Close'].ffill()
+P = O.get('S&P500', '금', '장기채').rename(columns={'S&P500': '^GSPC', '금': 'GC=F', '장기채': 'ZB=F'}).ffill()   # 11/23: 우리 자료만(장기채 = TLT, 2002~)
 s = P['^GSPC'].dropna()
 dd = s / s.cummax() - 1
 eps, i = [], 0
@@ -25,7 +27,10 @@ for pk, bt, d in eps:
     end = idx[min(idx.get_loc(bt) + 20, len(idx) - 1)]
     r = {'S&P 고점': pk.date(), 'S&P 바닥': bt.date(), 'S&P 낙폭(%)': round(d * 100, 1)}
     for t, nm in (('GC=F', '금'), ('ZB=F', '장기채')):
-        c = P[t][pk:end].dropna(); lo = c.idxmin()
+        c = P[t][pk:end].dropna()
+        if c.empty or P[t].dropna().index[0] > pk:   # 그 자산 자료가 고점보다 늦게 시작하면 이 구간은 셈하지 않음
+            continue
+        lo = c.idxmin()
         lag = idx.get_loc(bt) - idx.get_indexer([lo], method='nearest')[0]
         r[f'{nm} 저점'] = lo.date(); r[f'{nm} 낙폭(%)'] = round((c.min() / P[t].asof(pk) - 1) * 100, 1)
         r[f'{nm}가 먼저(거래일)'] = lag
@@ -42,7 +47,7 @@ E1.to_csv(OUT / '선행성_구간별.csv', index=False, encoding='utf-8-sig'); E
 pd.set_option('display.width', 250)
 print(E1.to_string(index=False)); print(E2.to_string(index=False))
 for nm in ('금', '장기채'):
-    x = E1[f'{nm}가 먼저(거래일)']
+    x = E1[f'{nm}가 먼저(거래일)'].dropna()
     print(nm, '먼저 바닥 비율', f'{(x > 0).mean() * 100:.0f}% ({(x > 0).sum()}/{len(x)})', '중앙값', x.median())
 base = s.pct_change(63).shift(-63)[dd <= -0.10].dropna()
 print('같은 낙폭(−10% 아래) 아무 날 S&P 63일 뒤', f'{base.mean() * 100:+.1f}%', f'{(base > 0).mean() * 100:.0f}%')
