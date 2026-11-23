@@ -23,6 +23,7 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 COLLECT = os.path.join(os.path.dirname(os.path.dirname(HERE)), 'collect')   # 11/21 두 폴더: 수집(collect)·스튜디오(app)
 sys.path.insert(0, COLLECT)   # nyx.py(닉스 지표), blocks/b09_exc.py(예외 검정)
 import features as F  # noqa: E402
+import hist_fund as HF  # noqa: E402  11/23 과거 재무 칸(SEC·DART 공시일 기준)
 import nyx  # noqa: E402
 import orders as O  # noqa: E402
 from engine import _ev  # noqa: E402
@@ -114,8 +115,7 @@ def scores(f, SB, mask):
     for _, row in f.iterrows():
         r = row.to_dict(); o = {}
         for bid, b in SB.items():
-            if b['역할'] not in SCORED and '통과식' not in b:
-                continue
+            # 11/23 의장 '24개 블록 과거 값 채워': 정보 블록(B12·B17·B32 등)도 이력에 점수를 남긴다(역할로 거르지 않음)
             if b.get('대상') == '개별주' and r['구분'] != '개별주':
                 continue
             if '조건' in b and not _ev(b['조건'], r):
@@ -160,6 +160,8 @@ def _one(args):
     try:
         asof_dir(d, L, t, tmp)
         f = feats(tmp, B)
+        close = L['가격2년'].loc[:t].ffill().iloc[-1].to_dict()
+        f = HF.apply(f, t, close, d, (B.get('메모리반대') or {}).get('종목', []))
         S = scores(f, B['종목'], mask)
         S.insert(0, '날짜', t.date()); S.insert(1, '번호', f['번호']); S.insert(2, '종목', f['종목'])
         S.insert(3, '시장', f['시장']); S.insert(4, '구분', f['구분']); S.insert(5, '층', f['layer']); S.insert(6, '방어국면', f['DEF'])
@@ -258,6 +260,9 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     dates = [C.index[C.index.searchsorted(x, side='right') - 1] for x in pd.date_range(start, C.index[-1], freq=step)]
     dates = sorted(set(dates) | {C.index[-1]})
     keep, mask = price_vars(d, L, B, [dates[-1], dates[-13], dates[-53]])
+    if os.path.exists(f'{d}/장기/SEC재무_분기.csv.gz') or os.path.exists(f'{d}/장기/DART재무_분기.csv.gz'):
+        mask = mask - HF.VARS; keep = keep | (HF.VARS & formula_vars(B['종목']))   # 재무 칸은 공시일 기준 과거 값으로 채움
+    print('비운 칸(과거 값 없음):', ', '.join(sorted(mask)))
     cache = os.path.join(d, '..', '블록점수이력.csv')
     old = pd.read_csv(cache, encoding='utf-8-sig') if os.path.exists(cache) else pd.DataFrame()
     sig = ','.join(sorted(mask)) + '|' + ','.join(SB for SB in B['종목'])
