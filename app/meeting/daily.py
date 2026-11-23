@@ -409,7 +409,7 @@ def main():
         pm = PER.premarket(c, Q, tday)
         i1 = next((i for i, x in enumerate(sec) if x[0] == '1 시장'), None)
         if i1 is None:
-            sec.insert(0, ('1 시장', '마켓 센터', '시장', pm, [], ''))
+            sec.insert(0, ('1 시장', '미스터 마켓', '마켓 센터장 · 시장', pm, [], ''))
         else:
             t, w, r, ls, g, tb = sec[i1]
             sec[i1] = (t, w, r, pm + ls, g, tb)
