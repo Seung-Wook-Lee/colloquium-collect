@@ -639,21 +639,23 @@ def nyx(c, who):
 
 
 def miss_value(c, desk_has):
-    T = c.T[(c.T['구분'] == '개별주') & (c.T['판정'] == '후보')]
-    out = []
-    X = T.dropna(subset=['per_pct3'])
-    fmt = lambda r: f"{r['종목']} PER {n(r.get('per_now'), 1, '배')}(3년 중앙값 {n(r.get('per_med3'), 1, '배')}, 3년 중 하위 {n(num(r['per_pct3'])*100, 0, '%')}), 선행 PER {n(r.get('fper'), 1, '배')}, PBR {n(r.get('pbr'), 2, '배')}"
-    if len(X):
-        out.append(L('3년 PER 가장 싼 쪽', ' / '.join(fmt(r) for _, r in X.nsmallest(3, 'per_pct3').iterrows()), '자기 3년 PER 백분위(PER3년.csv), 엔진 후보 개별주'))
-        out.append(L('3년 PER 가장 비싼 쪽', ' / '.join(fmt(r) for _, r in X.nlargest(3, 'per_pct3').iterrows()), '같은 표'))
-    semi = T[T.get('sector', pd.Series('', index=T.index)).astype(str).str.contains('반도체') & T['pbr'].notna()]
-    if len(semi):
-        out.append(L('반도체 PBR', ' / '.join(f"{r['종목']} PBR {n(r['pbr'], 2, '배')}(층 안 하위 {n(num(r.get('pbr_rank'), )*100 if ok(r.get('pbr_rank')) else None, 0, '%')})" for _, r in semi.nsmallest(3, 'pbr').iterrows()), '반도체는 PBR 우선, PER 참고(룰 4장)'))
+    """11/23 의장 "그냥 엔진에서 나오는대로 말하면 됨. 그때그때 코드를 바꾸면 되니까": 미스 밸류가 따로 줄 세우지 않고
+    엔진 판정표 순서(추천 → 관찰, 같은 등급 안 순위점수) 그대로, 밸류 블록 B15 점수·PER을 함께 보여 줌."""
+    T = c.T[(c.T['구분'] == '개별주') & (c.T['판정'] == '후보') & c.T['추천'].isin(['추천', '관찰'])].copy()
+    out, G = [], []
+    if len(T):
+        T['_g'] = T['추천'].map({'추천': 0, '관찰': 1})
+        T = T.sort_values(['_g', '순위점수'] if '순위점수' in T else ['_g'], ascending=[True, False] if '순위점수' in T else [True])
+        cnt = T['추천'].value_counts()
+        out.append(L('엔진 결과', f"추천 {cnt.get('추천', 0)}개, 관찰 {cnt.get('관찰', 0)}개(개별주 후보)", '엔진 판정표 추천 칸 그대로, 순서도 엔진 순위점수'))
+        tk = lambda r: r['ticker'] if r.get('시장') == '미국' and ok(r.get('ticker')) else r['종목']   # 11/22 의장: 미국은 티커
+        G.append({'type': 'grid', 'title': '엔진 추천·관찰 개별주(순서 = 엔진)', 'columns': ['종목', '엔진 추천', '원칙', '순위점수', 'B15 싼가 점수', 'PER'],
+                  'rows': [[tk(r), r['추천'], r.get('원칙', ''), n(r.get('순위점수'), 2), n(r.get('B15'), 2), n(r.get('PER'), 1, '배')] for _, r in T.head(10).iterrows()],
+                  'source': '판정표.csv(엔진)'})
+    else:
+        out.append(L('엔진 결과', '추천·관찰 개별주 없음', '엔진 판정표'))
     out.append(L('데스크 보고', '있음' if desk_has else '없음', '담당 종목 전일 ±3% 또는 3일 안 실적 공시가 있으면 있음'))
-    rule = c.R['한종목']['미스 밸류']
-    r, cnt = pick(c.T, rule)
-    out.append(c.pick_line('미스 밸류', rule, r, cnt, fmt))
-    return out, []
+    return out, G
 
 
 def desk_of(name, sector, layer, D):
@@ -1063,7 +1065,7 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식'
         print(f'[칸 실패] 섹터 데스크: {e}')
         dk, has = {k: [] for k in DESKS}, False
-    a, g = _safe(miss_value, 2, c, has); sections.append(('4-1 밸류에이션', '미스 밸류', '밸류에이션', a, g, ''))
+    a, g = _safe(miss_value, 2, c, has); sections.append(('4-1 밸류에이션', '미스 밸류', '밸류에이션', a, g, '\n\n'.join(_gmd(x) for x in g)))
     for desk in DESKS:
         sections.append(('4-2 섹터 데스크', desk, '섹터 데스크', dk[desk], [], ''))
     a, g = _safe(elpis, 2, c); sections.append(('5 긍정 요인', '엘피스', '긍정 요인', a, g, ''))
