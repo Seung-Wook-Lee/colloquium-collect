@@ -620,6 +620,51 @@ def miss_chart(c):
     return out, []
 
 
+def miss_chart_market(c):
+    """11/23 의장 "종목 추천 안 하더라도 분석은 해야. 기술적 분석 페르소나 키우는 게 중요": 미스 차트가 시장·업종 기술 지표를
+    해석과 할 일까지 붙여 매일 발표한다(닉스.csv 전 종목 + 섹터.csv 업종 ETF)."""
+    N, S = c.N, _read(c.d, '섹터')
+    out, G = [], []
+    st = lambda col, pre: int(N[col].fillna('').astype(str).str.startswith(pre).sum()) if col in N else 0
+    tot = len(N)
+    up, bo, br = st('주_지지상태', '위'), st('주_지지상태', '반등'), st('주_지지상태', '이탈')
+    pat = N['주_패턴'].fillna('').astype(str) if '주_패턴' in N else pd.Series(dtype=str)
+    bot = int(pat.str.contains('바닥|역헤드').sum()); topp = int((pat.str.contains('천장') | pat.str.match('^헤드앤숄더')).sum())
+    w20 = int((pd.to_numeric(N.get('주_20주_이격도'), errors='coerce') >= 100).sum()) if '주_20주_이격도' in N else 0
+    out.append(L('주봉 지지선', f"전체 {tot}종목 중 지지선 위 {up} · 지지선 닿고 반등 {bo} · 지지선 이탈 {br}",
+                 ('이탈이 반등보다 많음 → 바닥은 아직 확인되지 않음. 새로 사는 것은 지지 반등 종목만 분할' if br > bo else
+                  '반등이 이탈보다 많음 → 바닥 다지기 시작. 지지 반등 종목부터 1/3 분할 매수 검토')))
+    out.append(L('주봉 패턴', f"바닥 패턴 {bot} · 천장 패턴 {topp}",
+                 ('천장 패턴이 더 많음 → 보유 종목은 넥라인 이탈 때 줄이기' if topp > bot else
+                  '바닥 패턴이 더 많음 → 넥라인 돌파 종목이 나오면 매수 후보')))
+    out.append(L('20주선', f"20주선 위 {w20}종목 / {tot}",
+                 '절반 아래 → 시장 전체는 중기 하락 추세. 비중 늘리기는 20주선 회복 뒤' if w20 < tot / 2 else '절반 위 → 중기 상승 추세 유지'))
+    if len(S):
+        s20 = int((S['20주선_위'] == '위').sum()) if '20주선_위' in S else 0
+        rrg = S['RRG_사분면'].value_counts().to_dict() if 'RRG_사분면' in S else {}
+        out.append(L('업종 ETF', f"20주선 위 {s20}/{len(S)} · 상대강도 " + ' '.join(f"{k} {v}" for k, v in rrg.items()),
+                     ('업종 모두 20주선 아래 → 한국 시장은 업종 가리지 않고 하락 추세. 선도·개선 업종만 지켜보기' if s20 == 0 else
+                      '20주선 위 업종이 있음 → 그 업종이 이번 반등을 이끄는 쪽')))
+        cols = [x for x in ['종목', 'RRG_사분면', '20주선_위', '주_RSI', '주_20주_이격도', '52주고점대비(%)', '주_지지상태', '판정'] if x in S]
+        G.append({'type': 'grid', 'title': '업종 ETF 기술 지표(모멘텀 순)', 'columns': ['업종 ETF', '상대강도', '20주선', '주봉 RSI', '20주 이격도', '고점 대비(%)', '주봉 지지', '미스 차트·닉스 판정'][:len(cols)],
+                  'rows': [[('' if not ok(r[k]) else (n(r[k], 1) if isinstance(r[k], float) else str(r[k]))) for k in cols] for _, r in S.iterrows()],
+                  'source': '섹터.csv'})
+    # 기술적 분석팀 추천(11/23 의장 "기술적 분석팀은 추천도 하라고 해"): 주봉 지지 반등 + 주봉 바닥 패턴, 주봉 RSI 낮은 순
+    if len(N) and '주_지지상태' in N:
+        X = N[N['주_지지상태'].fillna('').astype(str).str.startswith('반등') | pat.str.contains('바닥|역헤드')].copy()
+        X['_r'] = pd.to_numeric(X.get('주_RSI'), errors='coerce')
+        X['_both'] = X['주_지지상태'].fillna('').astype(str).str.startswith('반등') & X['주_패턴'].fillna('').astype(str).str.contains('바닥|역헤드')
+        X = X.sort_values(['_both', '_r'], ascending=[False, True]).head(10)
+        tk = lambda r: r['yfinance 티커'] if r.get('시장') == '미국' and ok(r.get('yfinance 티커')) else r['정식 종목명']
+        if len(X):
+            out.append(L('기술적 추천', ', '.join(tk(r) for _, r in X.head(5).iterrows()),
+                         '주봉 지지선 반등 + 주봉 바닥 패턴 둘 다 맞는 종목 먼저, 그 안에서 주봉 RSI 낮은 순. 넥라인 돌파 확인 뒤 1/3씩 분할'))
+            G.append({'type': 'grid', 'title': '미스 차트 기술적 추천 후보', 'columns': ['종목', '주봉 지지', '주봉 패턴', '주봉 RSI', '52주 고점 대비(%)'],
+                      'rows': [[tk(r), str(r.get('주_지지상태', '')), str(r.get('주_패턴', '') if ok(r.get('주_패턴')) else ''), n(r.get('주_RSI'), 0), n(r.get('52주고점대비(%)'), 1)] for _, r in X.iterrows()],
+                      'source': '닉스.csv'})
+    return out, G, '\n\n'.join(_gmd(x) for x in G)
+
+
 def nyx(c, who):
     rule = c.R['한종목'][who]
     base = (c.T['층'] != 'S0') if '층' in c.T else None   # 11/20: 기준층(지수·현금·MMF·금·커버드콜)은 닉스 팀 한 종목 후보에서 뺀다(MMF가 '너무 많이 오름'으로 뽑힌 일)
@@ -1059,6 +1104,7 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     a2, g2, tbl = _safe(phobos, 3, c)
     sections.append(('3 리스크', '미스 리스크', '리스크·공포와 탐욕', a1 + a2, g1 + g2, (tbl + '\n\n' + _safe(macro_table, 0, c)).strip()))   # 체크리스트는 맨 아래
     a, g = _safe(ttuji, 2, c); sections.append(('4 엔진 블록 센터', '뚜지(센터장)', '엔진 블록 결과', a, g, ''))   # 11/20 의장: 뚜지는 엔진 블록 센터장
+    a, g, tbl = _safe(miss_chart_market, 3, c); sections.append(('3-1 기술적 분석', '미스 차트(퀀트센터 팀장)', '시장·업종 기술 지표와 기술적 추천', a, g, tbl))   # 11/23 의장: 기술적 분석은 매일, 추천도 함
     a, g = _safe(miss_chart, 2, c); sections.append(('4 퀀트센터', '미스 차트(팀장)', '추천 종목 기술 지표', a, g, ''))   # 11/20 의장: 퀀트센터 팀장은 미스 차트
     for who, role in (('클로토', '바닥 진입'), ('라케시스', '추세·비중 확대'), ('아트로포스', '과열 분할 매도')):
         a, g = _safe(nyx, 2, c, who); sections.append(('4 퀀트센터 — 닉스 팀', who, role, a, g, ''))
@@ -1076,12 +1122,13 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
         a, g = _safe(objections, 2, c); sections.append(('7 반대 의견', c.R['반대'].get('위원', '미스 리스크'), '오늘의 한 종목 반대', a, g, ''))
     # 11/20 의장 "종목 추천은 마지막에 해. 중간에 쓸데없는 추천하지 말고": 위원별 '오늘의 한 종목' 줄은 원고에서 뺀다(csv는 그대로),
     # 뚜지의 추천 목록·제외 줄은 맨 끝 칸으로 옮기고, 종목 추천은 그 칸 하나에서만 한다.
+    TECH = ('3-1 기술적 분석', '4 퀀트센터')
     REC = _re.compile(r'^(추천 \d+|제외 |오늘의 추천 종목)')
     moved, out = [], []
     for sec, who, role, lines, g, extra in sections:
         keep = []
         for l in lines:
-            if l.title == '오늘의 한 종목':
+            if l.title == '오늘의 한 종목' and not sec.startswith(TECH):   # 11/23 의장: 기술적 분석팀은 추천함
                 continue
             (moved if who.startswith('뚜지') and REC.match(str(l.title)) else keep).append(l)
         out.append((sec, who, role, keep, g, extra))
@@ -1091,9 +1138,10 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     if c.R.get('종목추천', True) is False:
         # 11/21 1:29 의장: "이제 회의에서 종목 추천하지 마." → 종목을 고르는 칸·줄을 원고에서 모두 뺀다(시장·수급·리스크·섹터 소식만).
         # 엔진 판정표는 포트폴리오용으로 따로 남는다(원고·화면에는 안 나옴).
-        drop_sec = ('4 엔진 블록 센터', '4 퀀트센터', '7 반대 의견', '8 종목 추천')
+        # 11/23 의장 "기술적 분석팀은 추천도 하라고 해": 퀀트센터(미스 차트·닉스 팀)는 빼지 않는다
+        drop_sec = ('4 엔진 블록 센터', '7 반대 의견', '8 종목 추천')
         drop_line = _re.compile(r'오늘의 한 종목|눈에 띄는 저평가|의장 기준가|가장 싼 쪽|가장 비싼 쪽|지켜볼 종목|공포 속 기회|^추천 \d|^제외 |오늘의 추천 종목')
-        out = [(sec, who, role, [l for l in lines if not drop_line.search(str(l.title))], g, extra)
+        out = [(sec, who, role, [l for l in lines if sec.startswith(TECH) or not drop_line.search(str(l.title))], g, extra)
                for sec, who, role, lines, g, extra in out if not sec.startswith(drop_sec)]
         out = [x for x in out if x[3] or x[4] or x[5]]
         c.picks = {}
