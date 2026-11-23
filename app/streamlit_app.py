@@ -350,6 +350,105 @@ def hy_chart():
     return True
 
 
+@st.cache_data(ttl=3 * 3600, show_spinner=False)
+def _pos_hist():
+    import io
+    rel = '00_누적/00_수급포지셔닝_이력.csv'
+    if LOCAL:
+        p = Path(LOCAL) / rel
+        b = p.read_bytes() if p.exists() else None
+    else:
+        b = drive.get(f'{D_DATA}/{rel}')
+    if not b:
+        return None
+    H = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', parse_dates=['날짜'])
+    return H[H['날짜'] >= H['날짜'].max() - pd.Timedelta(days=372)]
+
+
+POS_PANEL = [   # (칸, 제목, 단위, 기준선[(값, 이름, 색)], 칠할 구간[(아래, 위, 색)])
+    ('CTA σ(근사)', 'CTA positioning — 추세추종 펀드 포지션', 'σ',
+     [(0, '0', '#999'), (-4, '바닥 −4σ', '#1b8a2e'), (4, '고점 +4σ', '#c8372d')], [(-9, -4, '#dff0e1'), (4, 9, '#f7dedc')]),
+    ('변동성타기팅 노출(배)', 'Vol-target exposure — 변동성 목표 펀드 보유 배수', '배',
+     [(0.6, '많이 팜 0.6배', '#1b8a2e'), (1.0, '보통 1배', '#999')], [(0, 0.6, '#dff0e1')]),
+    ('추세 신호 매수 수(21·63·100일)', 'CTA 추세 신호 — 21·63·100일 매수 신호 수', '/3',
+     [(3, '전부 매수 3', '#1b8a2e')], []),
+    ('VIX 1년 백분위(%)', 'VIX·VXN 1년 백분위 — S&P500·나스닥100 변동성', '%',
+     [(80, '80%', '#c8372d')], [(80, 100, '#f7dedc')]),
+]
+
+
+def _pos_line(H, col, title, unit, refs, zones):
+    """11/23 의장 '크기도 작고 조잡한 디자인 → 더 자세하게, 선그래프로': 1년 선그래프 + 기준선 + 오늘·1주 전·1달 전."""
+    cols = [col] + (['VXN 1년 백분위(%)'] if col.startswith('VIX') else [])
+    D = H[['날짜'] + cols].melt('날짜', var_name='지표', value_name='값').dropna()
+    if D.empty:
+        return
+    s = H.set_index('날짜')[col].dropna()
+    last = s.index[-1]
+    def at(days):
+        x = s[s.index <= last - pd.Timedelta(days=days)]
+        return x.iloc[-1] if len(x) else None
+    f = (lambda v: f'{v:.0f}') if unit in ('%', '/3') else (lambda v: f'{v:+.2f}' if unit == 'σ' else f'{v:.2f}')
+    now = f(s.iloc[-1]) + ('' if unit == '/3' else unit)
+    if col.startswith('VIX'):
+        now = f"VIX {s.iloc[-1]:.0f}% · VXN {H['VXN 1년 백분위(%)'].dropna().iloc[-1]:.0f}%"
+    elif unit == '/3':
+        now = f"매수 {int(s.iloc[-1])}/3 · 매수 전환까지 S&P {H['CTA 매수 전환까지(%)'].dropna().iloc[-1]:+.1f}%"
+    w1, m1 = at(7), at(30)
+    sub = ' · '.join(x for x in (f'1주 전 {f(w1)}{"" if unit == "/3" else unit}' if w1 is not None else '',
+                                  f'1달 전 {f(m1)}{"" if unit == "/3" else unit}' if m1 is not None else '') if x)
+    st.markdown(f'<div style="font-size:14px;font-weight:700;color:#1b5e20;margin-top:6px">{title}</div>'
+                f'<div style="font-size:22px;font-weight:700;color:#222;line-height:1.3">{now}'
+                f'<span style="font-size:12px;font-weight:400;color:#888"> &nbsp; {sub} · {last:%Y-%m-%d} 기준</span></div>', unsafe_allow_html=True)
+    lo = min(D['값'].min(), *[r[0] for r in refs]); hi = max(D['값'].max(), *[r[0] for r in refs])
+    pad = (hi - lo) * 0.08 or 0.5
+    dom = [lo - pad, hi + pad] if unit != '%' else [0, 100]
+    if unit == '/3':
+        dom = [-0.2, 3.3]
+    x = alt.X('날짜:T', title=None, axis=alt.Axis(format='%y.%m', grid=False, domain=False, ticks=False, labelColor='#888', labelFontSize=11))
+    y = alt.Y('값:Q', title=None, scale=alt.Scale(domain=dom, clamp=True),
+              axis=alt.Axis(grid=True, gridColor='#eee', domain=False, ticks=False, labelColor='#888', labelFontSize=11))
+    lay = []
+    if zones:
+        Z = pd.DataFrame([(max(a, dom[0]), min(b, dom[1]), c) for a, b, c in zones if b > dom[0] and a < dom[1]], columns=['a', 'b', 'c'])
+        if len(Z):
+            lay.append(alt.Chart(Z).mark_rect(opacity=0.7).encode(y=alt.Y('a:Q', scale=alt.Scale(domain=dom)), y2='b:Q', color=alt.Color('c:N', scale=None)))
+    R = pd.DataFrame(refs, columns=['y', 't', 'c'])
+    lay.append(alt.Chart(R).mark_rule(strokeDash=[4, 3], strokeWidth=1).encode(y=alt.Y('y:Q', scale=alt.Scale(domain=dom)), color=alt.Color('c:N', scale=None)))
+    lay.append(alt.Chart(R).mark_text(align='left', dx=4, dy=-6, fontSize=11).encode(
+        y=alt.Y('y:Q', scale=alt.Scale(domain=dom)), x=alt.value(0), text='t:N', color=alt.Color('c:N', scale=None)))
+    pal = alt.Scale(domain=cols, range=['#1b5e20', '#e08a1e'][:len(cols)])
+    lay.append(alt.Chart(D).mark_line(strokeWidth=2, interpolate='step-after' if unit == '/3' else 'monotone').encode(
+        x=x, y=y, color=alt.Color('지표:N', scale=pal, legend=alt.Legend(orient='top', title=None, labelFontSize=11) if len(cols) > 1 else None),
+        tooltip=['날짜:T', '지표:N', alt.Tooltip('값:Q', format='.2f')]))
+    E = D[D['날짜'] == D['날짜'].max()]
+    lay.append(alt.Chart(E).mark_circle(size=70).encode(x='날짜:T', y=alt.Y('값:Q', scale=alt.Scale(domain=dom)), color=alt.Color('지표:N', scale=pal, legend=None)))
+    st.altair_chart(alt.layer(*lay).properties(height=210).configure_view(strokeWidth=0), use_container_width=True)
+
+
+def pos_board(title, md):
+    """11/23 의장: 미국 포지셔닝은 아주 중요 → 2 수급·포지셔닝 맨 위, 크게, 4개 지표 1년 선그래프 + 자세한 표."""
+    st.markdown(f'<div style="font-size:17px;font-weight:800;color:#1b5e20;border-left:5px solid #2e7d32;padding-left:8px;margin-bottom:4px">{title}</div>',
+                unsafe_allow_html=True)
+    H = _pos_hist()
+    if H is not None and len(H):
+        st.caption('최근 1년 · 점선 = 기준선 · 색 띠 = 바닥(녹색)·과열(붉은색) 구간 · 출처 00_수급포지셔닝_이력.csv')
+        for i in range(0, len(POS_PANEL), 2):
+            cc = st.columns(2)
+            for c, pnl in zip(cc, POS_PANEL[i:i + 2]):
+                with c:
+                    if pnl[0] in H:
+                        _pos_line(H, *pnl)
+    df = md_table(md)
+    if df is None or df.empty:
+        st.markdown(md); return
+    body = ''.join('<tr>' + ''.join(f'<td style="padding:6px 8px;border-bottom:1px solid #eee;{"font-weight:700;" if j == 0 else ""}'
+                                    f'{"white-space:nowrap;" if j < 4 else ""}{"color:#1b5e20;font-weight:700;" if j == 3 and ("기회" in str(v) or "바닥" in str(v)) else ""}">{v}</td>'
+                                    for j, v in enumerate(r)) + '</tr>' for r in df.values.tolist())
+    head = ''.join(f'<th style="text-align:left;padding:6px 8px;background:#e8f5e9;color:#1b5e20">{c}</th>' for c in df.columns)
+    st.html(f'<table style="font-size:13px;border-collapse:collapse;width:100%;margin-top:6px"><tr>{head}</tr>{body}</table>')
+
+
 FULL = [('HY spread', 'High Yield Spread'), ('UST 10Y yield', 'US Treasury 10-Year Yield'),
         ('HMM bear-regime probability', 'Hidden Markov Model bear-regime probability')]
 
@@ -439,6 +538,40 @@ def fg_seven(df):
             st.markdown(f"<div style='font-size:12px;color:#888;line-height:1.5'>{mean}</div>", unsafe_allow_html=True)
 
 
+# 11/23 의장 "약자로 쓰지 말고" · "신호 나옴이면 뭐 하라는 거야. 구체적으로": 칩마다 풀어 쓴 이름 + 할 일(의장 기준·블록 규칙 그대로)
+ABBR = [(r'\bHY 스프레드', '하이일드 스프레드(High Yield Spread)'), (r'\bHY\b', '하이일드 스프레드(High Yield Spread)'),
+        (r'\bHMM\b', '은닉 마르코프 모형(Hidden Markov Model)'), (r'\b10Y−2Y\b', '미국 10년−2년 국채 금리차'),
+        (r'(?<!미국 )10년물', '미국 10년 국채금리'), (r'\bSOFR−IORB\b', '담보부 익일물 금리(SOFR) − 지급준비금 이자율(IORB)'),
+        (r'\bMOVE\b(?!\()', 'MOVE(미국 국채 변동성 지수)'), (r'\bVIX\b(?!\()', 'VIX(S&P500 변동성 지수)'), (r'공포탐욕', 'CNN 공포탐욕 지수(Fear & Greed)')]
+CHIP_DO = [
+    (r'HMM.*한국|한국 HMM', '한국 시장이 하락 국면으로 계산됨 → 부담 1개로 셈(현금 집행 여건 계산에서 기회와 맞섬)'),
+    (r'HMM.*미국|미국 HMM', '미국 시장이 하락 국면으로 계산됨 → 부담 1개로 셈'),
+    (r'HY 3~4', '의장 기준: 3~4% 주의, 5% 이상 위기 징후. 오늘은 주의 단계 → 5%를 넘으면 B03 위기 공식으로 넘어감'),
+    (r'HY 스프레드 5', '의장 기준: 5% 이상 = 위기 징후(신용 경색)'),
+    (r'10년물 5\.0', '의장 기준: 5.0% 돌파 = Derisking(위험자산 줄이기)'),
+    (r'10년물 4\.8', '의장 기준: 4.8% 돌파 = 주식 위험 프리미엄 감소 → 주식 비중 축소'),
+    (r'10Y−2Y', '의장 기준: 마이너스면 경기침체 가능성 높아짐'),
+    (r'MOVE 100', '의장 기준: MOVE 100~110 = 채권 변동성 저점 구간 → 기회 1개로 셈'),
+    (r'VIX 33\.5', '1990년 이후 첫날 25번: S&P500 12달 뒤 평균 +17.8%, 승률 84% → 기회 1개로 셈'),
+    (r'VIX 15\.5', '의장 기준: 15.5 이하 = 과열 조짐 → 현금 늘림'),
+    (r'공포탐욕 10', '의장 기준: 사건으로 생긴 하락의 바닥을 재는 신호 → 기회 1개로 셈'),
+    (r'공포탐욕 75', '의장 기준: 70 넘으면 현금 늘림'),
+    (r'보유 배수 0\.6', '변동성 목표 펀드가 이미 많이 팜 → 변동성이 내려가면 공식대로 다시 사는 돈(기회 1개)'),
+    (r'방어 국면', '규칙: 방어 국면이면 기회가 많아도 현금 집행 여건은 \'아님\''),
+    (r'금융 스트레스', '0 위 = 금융 스트레스가 평균보다 큼'),
+]
+
+
+def unabbr(t):
+    for a, b in ABBR:
+        t = re.sub(a, b, t)
+    return t
+
+
+def chip_do(t):
+    return next((d for a, d in CHIP_DO if re.search(a, t)), '')
+
+
 def signal_chips(md):
     """시장 블록 표 → 켜진 신호만 부담·기회 두 줄 칩(11/21 의장: 난잡한 표 대신)"""
     df = md_table(md)
@@ -457,14 +590,25 @@ def signal_chips(md):
         df = pd.DataFrame({'쪽': M['방향'].astype(str), '오늘': M['_on'].map({True: '신호 나옴', False: '신호 안 나옴'}), '질문': M['질문'].astype(str),
                            '공식': ' — ' + M['공식'].astype(str).str.replace(r'\((기회|부담)\)', '', regex=True).str.strip()})
     on = df[df['오늘'].str.strip() == '신호 나옴']
+    nb, no = on['쪽'].str.contains('부담').sum(), on['쪽'].str.contains('기회').sum()
+    dfn = on['공식'].astype(str).str.contains('방어 국면').any()
+    go = no > nb and not dfn   # rules.yaml 미스 리스크 여건_규칙 "기회 > 부담 and not 방어"
+    st.html(f"<div style='font-size:15px;font-weight:700;color:{'#1b8a2e' if go else '#c8372d'};margin:2px 0 6px'>"
+            f"오늘 할 일: {'현금 집행 여건 됨 → 분할 매수 기준(Opportunity Block 개수) 확인 뒤 집행' if go else '새 돈 넣지 않음 — 현금 집행 여건 아님'}</div>"
+            f"<div style='font-size:12px;color:#777;margin-bottom:6px'>좋은 신호 {no}개 vs 나쁜 신호 {nb}개, 방어 국면 {'예' if dfn else '아니오'}. "
+            "규칙: 좋은 신호가 나쁜 신호보다 많고 방어 국면이 아닐 때만 '됨'</div>")
     c1, c2 = st.columns(2, gap='large')
     for col, side, color, name in ((c1, '부담', RED, '나쁜 신호'), (c2, '기회', '#2e7d32', '좋은 신호')):
         x = on[on['쪽'].str.contains(side)]
         tot = df['쪽'].str.contains(side).sum()
-        chips = ''.join(
-            f"<div style='border-left:3px solid {color};padding:6px 10px;margin:6px 0;background:#fafafa'>"
-            f"<div style='font-size:14px;color:#333'>{str(r['공식']).split(' — ', 1)[-1].split(' — ')[0]}</div>"
-            f"<div style='font-size:12px;color:#999'>{r['질문']}</div></div>" for _, r in x.iterrows())
+        def _chip(r):
+            t = str(r['공식']).split(' — ', 1)[-1].split(' — ')[0]
+            do = chip_do(t)
+            return (f"<div style='border-left:3px solid {color};padding:6px 10px;margin:6px 0;background:#fafafa'>"
+                    f"<div style='font-size:14px;color:#333'>{unabbr(t)}</div>"
+                    + (f"<div style='font-size:13px;color:{color};font-weight:600;margin-top:2px'>→ {do}</div>" if do else '')
+                    + f"<div style='font-size:12px;color:#999'>{r['질문']}</div></div>")
+        chips = ''.join(_chip(r) for _, r in x.iterrows())
         col.html(f"<div style='font-size:13px;color:#888'>{name}</div>"
                  f"<div style='font-size:30px;color:{color};line-height:1.2'>{len(x)}<span style='font-size:14px;color:#999'> / {tot}개 신호 나옴</span></div>"
                  + (chips or "<div style='color:#999;font-size:13px;margin-top:6px'>없음</div>"))
@@ -598,6 +742,8 @@ def render(body):
         else:
             merged.append(b)
     bl = merged
+    _pos = [b for b in bl if b[0] == 'titled' and '포지셔닝' in b[1]]   # 11/23 의장: 미국 포지셔닝은 칸 맨 위
+    bl = _pos + [b for b in bl if b not in _pos]
     for b in bl:
         if b[0] == 'item':
             _, n, title, val, why = b
@@ -648,7 +794,7 @@ def render(body):
             continue
         if b[0] == 'titled' and b[1].startswith('시장 블록'):
             with st.container(border=True):
-                st.markdown('<div class="box-t">오늘 켜진 시장 신호</div>', unsafe_allow_html=True)
+                st.markdown('<div class="box-t">오늘 신호 나온 시장 공식</div>', unsafe_allow_html=True)
                 if not signal_chips(b[2]):
                     table_chart(b[2])
             continue
@@ -657,6 +803,11 @@ def render(body):
             if d7 is not None:
                 fg_seven(d7)
                 continue
+        if b[0] == 'titled' and '포지셔닝' in b[1]:
+            flush()
+            with st.container(border=True):
+                pos_board(b[1], b[2])
+            continue
         if b[0] == 'titled':   # 11/20 의장: 제목·그래프·표를 한 상자로
             with st.container(border=True):
                 st.markdown(f'<div class="box-t">{b[1]}</div>', unsafe_allow_html=True)
@@ -868,7 +1019,7 @@ def block_bottom():
                 f"<td>{k} {dot(bool(r['표'].loc[i].오늘), 8)} {r['표'].loc[i].사례}번 중 {round(r['표'].loc[i].이김 * r['표'].loc[i].사례)}번, 최악 {r['표'].loc[i].최악 * 100:+.1f}%</td>" for k, r in S.items()) + '</tr>'
                 for i, t in sp['표'].iterrows())
             st.markdown('<div class="note">- Opportunity Block = blocks.yaml에서 과거 자료로 다시 계산되는 지수 판 공식 20개(B02 2 · B06 4 · B11·B16 7 · B13 1 · B17 5 · 8개 공식 바닥 확률). 문턱은 blocks.yaml 그대로.<br>'
-                        '- 기준 S&amp;P 11개·나스닥 13개(나스닥이 −20% 넘게 빠졌으면 8개): 2006-08 이후 두 지수, 하락 한 번 = 한 건, 신호가 처음 켜진 금요일 다음 주 월요일부터 3주 월요일 종가에 1/3씩 사서 마지막 매수 13주 뒤. S&amp;P는 14개 이상이면 오히려 나빠짐.</div>'
+                        '- 기준 S&amp;P 11개·나스닥 13개(나스닥이 −20% 넘게 빠졌으면 8개): 2006-08 이후 두 지수, 하락 한 번 = 한 건, 신호가 처음 나온 금요일 다음 주 월요일부터 3주 월요일 종가에 1/3씩 사서 마지막 매수 13주 뒤. S&amp;P는 14개 이상이면 오히려 나빠짐.</div>'
                         '<table class="it">' + rows + '</table>', unsafe_allow_html=True)
 
 
