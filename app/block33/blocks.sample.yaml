@@ -12,7 +12,7 @@
   B09: {질문: "S&P500·코스피 밸류에이션은?", 영문: "forward P/E, 50-day disparity"}
   B10: {질문: "세계는 평화로운가?", 영문: "GPR index, Caldara·Iacoviello"}
 종목:
-  B11: {질문: "덜 흔들리고 잘 버티나?", 영문: "low volatility, low beta (BAB), expected shortfall"}
+  B11: {질문: "이 종목이 바닥 즈음인가?", 영문: "stock bottom zone: 50-day disparity, RSI, Bollinger %B, CCI + below 200DMA"}
   B12: {질문: "주도주인가? (고점 −10% 이내 + 3·6달 수익률 모두 플러스)", 영문: "52-week high momentum"}
   B13: {질문: "빠진 것이 이례적인가?", 영문: "sigma check (p-value), idiosyncratic move(베타 감안 잔차 수익률)"}
   B14: {질문: "시장 빠지니까 덩달아 빠졌다?", 영문: "EPS revision + sigma check"}

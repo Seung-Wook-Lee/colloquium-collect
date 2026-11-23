@@ -1034,7 +1034,7 @@ def block_bottom():
             rows = ''.join(f"<tr><td class='k'>{t.신호}</td>" + ''.join(
                 f"<td>{k} {dot(bool(r['표'].loc[i].오늘), 8)} {r['표'].loc[i].사례}번 중 {round(r['표'].loc[i].이김 * r['표'].loc[i].사례)}번, 최악 {r['표'].loc[i].최악 * 100:+.1f}%</td>" for k, r in S.items()) + '</tr>'
                 for i, t in sp['표'].iterrows())
-            st.markdown('<div class="note">- Opportunity Block = blocks.yaml에서 과거 자료로 다시 계산되는 지수 판 공식 20개(B02 2 · B06 4 · B11·B16 7 · B13 1 · B17 5 · 8개 공식 바닥 확률). 문턱은 blocks.yaml 그대로.<br>'
+            st.markdown('<div class="note">- Opportunity Block = blocks.yaml에서 과거 자료로 다시 계산되는 지수 판 공식 20개(B02 2 · B06 4 · 시장바닥·B16 7 · B13 1 · B17 5 · 8개 공식 바닥 확률). 문턱은 blocks.yaml 그대로.<br>'
                         '- 기준 S&amp;P 11개·나스닥 13개(나스닥이 −20% 넘게 빠졌으면 8개): 2006-08 이후 두 지수, 하락 한 번 = 한 건, 신호가 처음 나온 금요일 다음 주 월요일부터 3주 월요일 종가에 1/3씩 사서 마지막 매수 13주 뒤. S&amp;P는 14개 이상이면 오히려 나빠짐.</div>'
                         '<table class="it">' + rows + '</table>', unsafe_allow_html=True)
 
