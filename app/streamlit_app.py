@@ -592,7 +592,9 @@ def render(body):
     merged = []
     for b in bl:   # '**제목**' 바로 뒤 표 → 한 묶음
         if b[0] == 'table' and merged and merged[-1][0] == 'text' and merged[-1][1].strip().startswith('**') and merged[-1][1].strip().endswith('**'):
-            merged[-1] = ('titled', merged[-1][1].strip().strip('*'), b[1])
+            _tt = merged[-1][1].strip().strip('*')
+            _tt = {'포지셔닝': '미국 포지셔닝(S&P500·나스닥100 기준)'}.get(_tt, _tt)   # 11/23 의장: 어느 나라 것인지 제목에(옛 원고도 바로)
+            merged[-1] = ('titled', _tt, b[1])
         else:
             merged.append(b)
     bl = merged
