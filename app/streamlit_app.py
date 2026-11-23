@@ -730,8 +730,9 @@ def buy_plan():
     return BP.judge()
 
 
-TURN_NAMES = ['QQQ:RSP 앵커드 VWAP', 'S&P 2023~2026 + CTM', 'S&P 1994~2002 + CTM (비교용 고정)', 'NVDA AVWAP·피보나치', 'S&P 1999~2000 이평 묶음 (비교용 고정)',
-              'S&P 2026 이평 묶음', 'SPYG:BIL 일목', 'IWF:IWD 월봉 + 2016 추세선', 'MGK 주봉 + CTM-MGK']
+TURN_NAMES = ['기술주 쏠림: 나스닥100 vs 동일가중 S&P (QQQ:RSP)', '지금 S&P 500 (2023~2026) + 추세 점수(CTM)', '닷컴 붕괴 때 S&P 500 (1994~2002) · 비교용',
+              'NVDA 지지선 (VWAP·피보나치)', '2000년 고점 때 S&P 500 이평 묶음 · 비교용', '지금 S&P 500 이평 묶음',
+              '성장주 vs 현금 (SPYG:BIL)', '성장주 vs 가치주 월봉 (IWF:IWD)', '빅테크 MGK 주봉 + 추세 점수(CTM)']   # 11/23 의장: 쉽고 돋보이게
 
 
 @st.cache_data(ttl=3 * 3600, show_spinner=False)
@@ -750,11 +751,28 @@ def _turn_lines(T):
     """11/23 의장: 그림 밑에 '대상 값 · 기준선 값 · 차이 · 상태(위/아래/닿음/돌파)' 표. 돌파는 돌파한 봉부터 4봉, 닿음은 선과 ±1% 안."""
     if not len(T):
         return
+    # 11/23 의장 "너무 복잡하지 않게": 대상마다 돌파·닿은 선 + 바로 위 선 1개·바로 아래 선 1개만(전체는 드라이브 변곡점_선.csv)
+    keep, cnt = [], []
+    for w, g in T.groupby('대상', sort=False):
+        d = pd.to_numeric(g['차이'].astype(str).str.rstrip('%점'), errors='coerce')
+        stt = g['상태'].astype(str)
+        hot = d[stt.str.contains('돌파|닿음')].abs().nsmallest(2)   # 돌파·닿은 선 중 가장 가까운 2개
+        up, dn = d[d < 0], d[d >= 0]   # 차이<0 = 선이 위에 있음
+        idx = set(hot.index)
+        if len(up): idx.add(up.idxmax())
+        if len(dn): idx.add(dn.idxmin())
+        keep += [i for i in g.index if i in idx]
+        c = ', '.join(f'{k} {v}개' for k, v in stt.value_counts().items() if '돌파' in k or '닿음' in k)
+        if c:
+            cnt.append(f'{w} 선 {len(g)}개 중 {c}')
+    T = T.loc[keep]
     r0 = T.iloc[0]
     rows = ''.join(f"<tr><td>{r['기준선']}</td><td style='text-align:right'>{r['선 값']}</td><td style='text-align:right'>{r['차이']}</td>"
                    f"<td style='color:{TURN_COL.get(r['상태'], '#333')};font-weight:600'>{r['상태']}</td></tr>"
                    for _, r in T.iterrows())
     who = ' · '.join(f"{w} <b>{v}</b>" for w, v in T.drop_duplicates('대상')[['대상', '대상 값']].values)
+    if cnt:
+        who += '<br><span style="color:#777">' + ' · '.join(cnt) + '</span>'
     st.html(f"<div style='font-size:11px;color:#333'>{r0['기준일']} 기준 · {who}"
             "<table style='font-size:11px;border-collapse:collapse;width:100%;margin-top:2px'>"
             "<tr style='color:#777'><td>기준선</td><td style='text-align:right'>선 값</td><td style='text-align:right'>차이</td><td>상태</td></tr>"
@@ -769,7 +787,7 @@ def turning_board(day):
         if _turn_png(dd, 1):
             break
     else:
-        st.info('변곡점 판 그림이 아직 없습니다.')
+        st.info('바닥 찾기 그래프가 아직 없습니다.')
         return
     try:   # 11/22 의장: S&P 64·109주선 상태 4가지(위 / 하향 돌파 / 아래 / 상향 돌파)
         _S = read_csv(dd, '이평상태.csv')
@@ -782,10 +800,11 @@ def turning_board(day):
         _LN = read_csv(dd, '변곡점_선.csv')
     except Exception:   # noqa: BLE001
         _LN = None
-    with st.expander(f'변곡점 판 — 그림 9개 ({dd[:4]}-{dd[4:6]}-{dd[6:]})', expanded=True):
+    st.html(f"<div style='font-size:18px;font-weight:800;color:#1c1f5c;margin:6px 0 2px'>바닥 찾기 그래프 모음 <span style='font-size:12px;color:#777;font-weight:400'>{dd[:4]}-{dd[4:6]}-{dd[6:]}</span></div>")   # 11/23 의장: 제일 위 제목
+    with st.expander('그래프 9개 펼치기·접기', expanded=True):
         for n, nm in enumerate(TURN_NAMES, 1):   # 11/22 의장: "늘 같이 준 그래프와 비교할 수 있게 옆에" → 왼쪽 재현, 오른쪽 의장이 준 원본
             b = _turn_png(dd, n); o = Path(__file__).resolve().parent / 'assets' / 'turning_orig' / f'orig_{n}.png'
-            st.caption(f'{n}. {nm}')
+            st.html(f"<div style='font-size:15px;font-weight:700;color:#1c1f5c;border-left:4px solid #1f5fbf;padding-left:8px;margin:14px 0 2px'>{n}. {nm}</div>")   # 11/23 의장: 돋보이게
             c1, c2 = st.columns(2, gap='small')
             with c1:
                 st.caption('오늘 그래프')
