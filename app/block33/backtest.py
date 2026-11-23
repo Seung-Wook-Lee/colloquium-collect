@@ -273,7 +273,7 @@ def main(d, cfg=None, step='W-FRI', workers=None):
             seen = set(old['번호'])
             half = C.iloc[:max(len(C) // 2, 1)]
             miss = [n for n, t, ly in zip(U['번호'], U[tc] if tc else [None] * len(U), U.get('층', pd.Series([''] * len(U))))
-                    if n not in seen and str(ly) != 'S0' and t in half.columns and half[t].notna().any()]
+                    if n not in seen and t in half.columns and half[t].notna().any()]   # 11/23 의장 'QQQM·SPYM 블록 다 돌려' → 기준층(S0)도 이력에
             if miss:
                 print(f'이력에 없는 종목 {len(miss)}개({", ".join(map(str, miss[:10]))}) → 처음부터 다시 계산')
                 old = pd.DataFrame()
@@ -283,13 +283,13 @@ def main(d, cfg=None, step='W-FRI', workers=None):
         new = pool.map(_one, [(d, L, t, B, mask) for t in todo])
     Z = pd.concat([old[old['날짜'].astype(str) != str(dates[-1].date())]] + new, ignore_index=True) if len(old) else pd.concat(new, ignore_index=True)
     Z['날짜'] = pd.to_datetime(Z['날짜']).dt.date
-    Z = Z[Z['층'] != 'S0']
     fw = pd.DataFrame([forward(L, H, tk, pd.Timestamp(t)) for tk, t in zip(Z['ticker'], Z['날짜'])], index=Z.index)
     Z = pd.concat([Z.drop(columns=[c for c in fw.columns if c in Z]), fw], axis=1)
     Z['_설정'] = ''
     Z.loc[Z.index[:1], '_설정'] = sig   # 설정 표시는 첫 줄에만(파일 크기)
     Z.round(3).to_csv(cache, index=False, encoding='utf-8-sig')
     SB = B['종목']
+    Z = Z[Z['층'] != 'S0']   # 이력 파일엔 기준층(QQQM·SPYM 등)도 남기고, 종목 성적표·조합 시험(종목 고르기)에서만 뺀다
     R = report(Z, SB, H)
     R.to_csv(os.path.join(d, '..', '블록성적.csv'), index=False, encoding='utf-8-sig')
     W, last = walk(Z, SB, H, int(BT.get('첫시험연도', pd.Timestamp(dates[0]).year + 2)))
