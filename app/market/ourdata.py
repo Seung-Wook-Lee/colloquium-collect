@@ -63,7 +63,7 @@ def _px10():
 
 def _extra():
     if 'ex' not in _cache:
-        p = _find('추가자료_종가.csv')
+        p = _find('추가자료_종가.csv') or _find('추가자료_종가.csv.gz')
         _cache['ex'] = pd.read_csv(p, index_col=0, parse_dates=True, encoding='utf-8-sig') if p else pd.DataFrame()
     return _cache['ex']
 
