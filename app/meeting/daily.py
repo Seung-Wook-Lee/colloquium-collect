@@ -284,6 +284,16 @@ def bottom(W, use_drive, B, S):
                     log(f"[바닥] {r['기준지수']} 이번 하락의 바닥일 확률 {r.get('확률')}% (낙폭 {r.get('지금낙폭')}%, {r.get('주수')}주) · 검정 AUC {r.get('검정_AUC')}")
             except Exception as e:   # noqa: BLE001
                 log(f'[바닥] 실패: {str(e)[:160]}')
+        try:   # 11/23 의장(11/20 금요일 놓침): 분할 매수 판정(market/buy_plan.py)도 매일 → 블록2 gate가 읽음
+            import buy_plan as BP
+            J = BP.judge()
+            pd.DataFrame([dict(지수=r['지수'], 판정=r['판정'], 켜진수=r['켜진수'], 전체=r['전체'], 기준=r['기준'], 낙폭=round(r['낙폭'], 1),
+                               사례=(r['근거'] or {}).get('사례'), 이김=(r['근거'] or {}).get('이김'), 수익중앙값=(r['근거'] or {}).get('수익중앙값'),
+                               신호=(r['근거'] or {}).get('신호'), 날짜=J['날짜']) for r in J['지수']]).to_csv(f'{W}/분할판정.csv', index=False, encoding='utf-8-sig')
+            for r in J['지수']:
+                log(f"[분할판정] {r['지수']} {r['판정']} (Opportunity Block {r['켜진수']}/{r['전체']}, 기준 {r['기준']})")
+        except Exception as e:   # noqa: BLE001
+            log(f'[분할판정] 실패: {str(e)[:160]}')
         for idx in (('^GSPC', '^NDX') if '2-13' not in X else ()):
             try:   # 11/20 의장: 조정 단계표(5·10·15·20·30%, 1년 횟수, 다음 단계 확률, 처음 닿은 날 사면 수익률)
                 import correction as COR
@@ -296,7 +306,7 @@ def bottom(W, use_drive, B, S):
                 COR.run(W, idx, {**((B.get('바닥') or {}).get('조정') or {}), '한국_배수_년': (B.get('결론') or {}).get('한국_배수_년')})
             except Exception as e:   # noqa: BLE001
                 log(f'[조정단계] {idx} 실패: {str(e)[:120]}')
-        return {os.path.basename(k): open(k, 'rb').read() for k in glob.glob(f'{W}/바닥확률*.csv') + glob.glob(f'{W}/조정*.csv')}
+        return {os.path.basename(k): open(k, 'rb').read() for k in glob.glob(f'{W}/바닥확률*.csv') + glob.glob(f'{W}/분할판정*.csv') + glob.glob(f'{W}/조정*.csv')}
     except Exception as e:
         log(f'[바닥] 실패 → 건너뜀: {str(e)[:160]}')
         return {}
