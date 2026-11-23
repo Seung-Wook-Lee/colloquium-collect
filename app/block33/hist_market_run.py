@@ -29,6 +29,11 @@ r = subprocess.run([sys.executable, f'{REPO}/collect/data/fetch_13f.py', W, f'{W
 print('[13F]', r.returncode, (r.stdout + r.stderr).strip()[-500:])
 if os.path.exists(f'{W}/장기펀드13F_이력.csv'):
     drive.put(f'{D}/1_data/장기/장기펀드13F_이력.csv', open(f'{W}/장기펀드13F_이력.csv', 'rb').read()); print('드라이브 올림 장기펀드13F_이력.csv')
+# 11/24 B22 미국 공매도 잔고 과거 기록(FINRA)
+r = subprocess.run([sys.executable, f'{REPO}/collect/data/hist_short.py', W], capture_output=True, text=True, timeout=3000)
+print('[공매도]', r.returncode, (r.stdout + r.stderr).strip()[-600:])
+if os.path.exists(f'{W}/공매도_미국_이력.csv.gz'):
+    drive.put(f'{D}/1_data/장기/공매도_미국_이력.csv.gz', open(f'{W}/공매도_미국_이력.csv.gz', 'rb').read()); print('드라이브 올림 공매도_미국_이력.csv.gz')
 y = os.path.join(os.environ.get('QC_PRIVATE', ''), 'blocks.yaml')
 r = subprocess.run([sys.executable, '-W', 'ignore', f'{HERE}/hist_market.py', W, y], capture_output=True, text=True, timeout=5000)
 print(r.stdout[-3000:], r.stderr[-2000:])

@@ -26,7 +26,8 @@ import features as F  # noqa: E402
 import hist_fund as HF
 import hist_sector as HS
 import hist_flow as HK
-import hist_13f as H13  # noqa: E402  11/23 과거 재무 칸(SEC·DART 공시일 기준)
+import hist_13f as H13
+import hist_short as HSH  # noqa: E402  11/23 과거 재무 칸(SEC·DART 공시일 기준)
 import nyx  # noqa: E402
 import orders as O  # noqa: E402
 from engine import _ev  # noqa: E402
@@ -168,6 +169,7 @@ def _one(args):
         f = HS.apply(f, t, d)   # B18 업종 ETF 60주선 이격(역도산 주봉 창고)
         f = HK.apply(f, t, d)   # B19·B14·B22 한국 수급(한투 일별 투자자)
         f = H13.apply(f, t, d)   # B21 장기 펀드 13F(공시일 기준)
+        f = HSH.apply(f, t, d)   # B22 미국 공매도(FINRA 결제일, 공표 뒤)
         S = scores(f, B['종목'], mask)
         S.insert(0, '날짜', t.date()); S.insert(1, '번호', f['번호']); S.insert(2, '종목', f['종목'])
         S.insert(3, '시장', f['시장']); S.insert(4, '구분', f['구분']); S.insert(5, '층', f['layer']); S.insert(6, '방어국면', f['DEF'])
@@ -274,6 +276,8 @@ def main(d, cfg=None, step='W-FRI', workers=None):
         mask = mask - HK.VARS; keep = keep | (HK.VARS & formula_vars(B['종목']))   # 한국 수급은 일별 기록으로 그 주 값
     if os.path.exists(f'{d}/장기/장기펀드13F_이력.csv'):
         mask = mask - H13.VARS; keep = keep | (H13.VARS & formula_vars(B['종목']))   # B21 13F는 공시일 기준 그 주 값
+    if os.path.exists(f'{d}/장기/공매도_미국_이력.csv.gz'):
+        mask = mask - HSH.VARS; keep = keep | (HSH.VARS & formula_vars(B['종목']))   # B22 공매도는 FINRA 이력으로 그 주 값
     print('비운 칸(과거 값 없음):', ', '.join(sorted(mask)))
     cache = os.path.join(d, '..', '블록점수이력.csv')
     old = pd.read_csv(cache, encoding='utf-8-sig') if os.path.exists(cache) else pd.DataFrame()
