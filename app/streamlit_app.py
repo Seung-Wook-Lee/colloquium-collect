@@ -658,6 +658,18 @@ def ko(v):
     return t
 
 
+def _dothead(used):
+    """11/23 의장: 그래프처럼 위에 열 이름을 작은 글씨로(시장보다 약함 …)."""
+    return ''.join(f'<th style="text-align:center;font-size:10px !important;color:#888;white-space:normal;word-break:keep-all;width:58px;line-height:1.25">{n}</th>' for n in used)
+
+
+def _dotcells(used, hits):
+    """해당되면 그 열 칸에 붉은 원."""
+    return ''.join('<td style="text-align:center;vertical-align:middle">'
+                   + ('<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#c8372d"></span>' if n in hits else '')
+                   + '</td>' for n in used)
+
+
 def lines_(v):
     """내용 한 칸: 쉼표·가운뎃점으로 이어 쓴 것을 줄바꿈 + '- '로(11/21 의장). 빠지는 이유는 색 점. '$'는 &#36;(수식으로 안 깨지게)."""
     v = ko(v).replace('$', '&#36;').replace('빠지는 이유: ', '')
@@ -674,10 +686,10 @@ def lines_(v):
     for p in parts:
         hit = next((w for w in WHY_DOT if p == w[0]), None)
         if hit:
-            dots.append(hit); USED_DOTS.add(hit[0])
+            dots.append(hit[0])
         else:
             keep.append(p)
-    dots = ''.join(dot(*w) for w in WHY_DOT if w in dots)   # 원 순서는 범례 순서로 고정
+    # 11/23 의장 "촌스럽다": 글자 원 대신 → 표 위 열 이름(작은 글씨) + 해당 칸에 붉은 원(flush의 _dotcols)
     if news:
         keep.append(f'<span style="color:#2b6cb0">기사</span> {news.strip()}')
     if len(keep) <= 1:
@@ -713,24 +725,25 @@ def render(body):
             mv = [re.match(r'^(.*) ([+-]?\d+(?:\.\d+)?%)$', r[0]) for r in rows]
             m20 = [re.match(r'^20일 ([+-]?\d+(?:\.\d+)?%)\s*(?:·\s*)?(.*)$', str(r[1]), re.S) for r in rows]
             if all(mv) and all(m20):   # 11/21 10:17 의장: 등락은 종목 이름에서 떼어 오른쪽 칸에, '20일'은 제목에 한 번만
+                L_ = [lines_(b.group(2)) if b.group(2).strip() else ('', []) for b in m20]
+                used = [w[0] for w in WHY_DOT if any(w[0] in d for _, d in L_)]
                 body = ''
-                for a, b in zip(mv, m20):
-                    c, d = lines_(b.group(2)) if b.group(2).strip() else ('', '')
+                for a, b, (c, d) in zip(mv, m20, L_):
                     body += (f'<tr><td class="k">{circ(a.group(1))}</td><td class="n">{a.group(2)}</td><td class="n">{b.group(1)}</td>'
-                             f'<td class="v">{c}</td><td class="d">{d}</td></tr>')
-                st.markdown('<table class="it"><tr><th></th><th class="n">전일</th><th class="n">20일</th><th></th><th></th></tr>' + body + '</table>',
+                             f'<td class="v">{c}</td>{_dotcells(used, d)}</tr>')
+                st.markdown('<table class="it"><tr><th></th><th class="n">전일</th><th class="n">20일</th><th></th>' + _dothead(used) + '</tr>' + body + '</table>',
                             unsafe_allow_html=True)
                 rows.clear()
             def _c(r, x):
                 col = SIGCOL.get(sigrow.get(r[0], ''))
                 return f'<span style="color:{col};font-weight:700">{x}</span>' if col else x
-            t = '' if not rows else '<table class="it">' + ''.join(f'<tr><td class="k">{_c(r, circ(r[0]))}</td><td class="v">{_c(r, a)}</td><td class="d">{b}</td></tr>'
-                                                for r in rows for a, b in [lines_(r[1])]) + '</table>'
+            L_ = [lines_(r[1]) for r in rows]
+            used = [w[0] for w in WHY_DOT if any(w[0] in d for _, d in L_)]
+            head = ('<tr><th></th><th></th>' + _dothead(used) + '</tr>') if used else ''
+            t = '' if not rows else '<table class="it">' + head + ''.join(f'<tr><td class="k">{_c(r, circ(r[0]))}</td><td class="v">{_c(r, a)}</td>{_dotcells(used, b)}</tr>'
+                                                for r, (a, b) in zip(rows, L_)) + '</table>'
             if t:
                 st.markdown(t, unsafe_allow_html=True)
-            if USED_DOTS:
-                st.markdown('<div class="note">' + ' &nbsp; '.join(dot(n, c, l) + ' ' + n for n, c, l in WHY_DOT if n in USED_DOTS) + '</div>', unsafe_allow_html=True)
-                USED_DOTS.clear()
             rows.clear()
 
     merged = []
