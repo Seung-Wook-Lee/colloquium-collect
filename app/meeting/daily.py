@@ -131,6 +131,16 @@ def pull_advisors(IN, use_drive):
     log(f'[받기] 외부자문사 MP {got}개')
 
 
+def _dedup_univ(fp):
+    """11/23: 같은 티커가 두 번호로 두 줄이면(예: G41·G177 SPYM) 가격표 칸이 겹쳐 3-30이 멈추고 '번호 중복'이 남 → 앞 번호 한 줄만 쓴다(드라이브 원본은 그대로)."""
+    U = pd.read_csv(fp, dtype=str, encoding='utf-8-sig')
+    t = U['yfinance 티커']
+    dup = t.notna() & t.duplicated(keep='first')
+    if dup.any():
+        log('[받기] 유니버스 같은 티커 두 줄 → 뒤 번호 뺌: ' + ', '.join(f"{n}({k})" for n, k in zip(U.loc[dup, '번호'], t[dup])))
+        U.loc[~dup].to_csv(fp, index=False, encoding='utf-8-sig')
+
+
 def pull_univ(IN):
     """유니버스: 드라이브 콜로키움/포트폴리오 최신 csv(층 칸이 있을 때만), 없으면 이어 쓰는 사본."""
     import drive
@@ -142,6 +152,7 @@ def pull_univ(IN):
             open(tmp, 'wb').write(data)
             if '층' in pd.read_csv(tmp, encoding='utf-8-sig', nrows=1).columns:
                 os.replace(tmp, f'{IN}/유니버스.csv'); log(f'[받기] 유니버스 {names[-1]}')
+                _dedup_univ(f'{IN}/유니버스.csv')
                 return
             os.remove(tmp)
     except Exception as e:
