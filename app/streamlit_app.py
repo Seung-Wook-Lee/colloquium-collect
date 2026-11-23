@@ -743,6 +743,24 @@ def _turn_png(day, n):
     return drive.get(f'{D_DATA}/{rel}')
 
 
+TURN_COL = {'상향 돌파': '#2e7d32', '하향 돌파': '#c8372d', '위에서 닿음': '#e67e22', '아래에서 닿음': '#e67e22', '위': '#333', '아래': '#333'}
+
+
+def _turn_lines(T):
+    """11/23 의장: 그림 밑에 '대상 값 · 기준선 값 · 차이 · 상태(위/아래/닿음/돌파)' 표. 돌파는 돌파한 봉부터 4봉, 닿음은 선과 ±1% 안."""
+    if not len(T):
+        return
+    r0 = T.iloc[0]
+    rows = ''.join(f"<tr><td>{r['기준선']}</td><td style='text-align:right'>{r['선 값']}</td><td style='text-align:right'>{r['차이']}</td>"
+                   f"<td style='color:{TURN_COL.get(r['상태'], '#333')};font-weight:600'>{r['상태']}</td></tr>"
+                   for _, r in T.iterrows())
+    who = ' · '.join(f"{w} <b>{v}</b>" for w, v in T.drop_duplicates('대상')[['대상', '대상 값']].values)
+    st.html(f"<div style='font-size:11px;color:#333'>{r0['기준일']} 기준 · {who}"
+            "<table style='font-size:11px;border-collapse:collapse;width:100%;margin-top:2px'>"
+            "<tr style='color:#777'><td>기준선</td><td style='text-align:right'>선 값</td><td style='text-align:right'>차이</td><td>상태</td></tr>"
+            f"{rows}</table></div>")
+
+
 def turning_board(day):
     """11/22 의장 '변곡점 판': 의장이 올린 그림 9개를 의장이 정한 순서대로, 원본 그대로 매일 다시 그린 것(daily.py → block33/turning.py)."""
     d0 = dt.datetime.strptime(day, '%Y%m%d').date()
@@ -760,6 +778,10 @@ def turning_board(day):
                 f"{r['선']}: <b>{r['상태']}</b> ({float(r['차이']):+.1f}%, 선 {float(r['선값']):,.0f})" for _, r in _S.iterrows() if pd.notna(r['상태'])) + '</div>')
     except Exception:   # noqa: BLE001
         pass
+    try:   # 11/23 의장: 그림마다 밑에 대상 값·기준선 값·닿음/돌파
+        _LN = read_csv(dd, '변곡점_선.csv')
+    except Exception:   # noqa: BLE001
+        _LN = None
     with st.expander(f'변곡점 판 — 그림 9개 ({dd[:4]}-{dd[4:6]}-{dd[6:]})', expanded=True):
         for n, nm in enumerate(TURN_NAMES, 1):   # 11/22 의장: "늘 같이 준 그래프와 비교할 수 있게 옆에" → 왼쪽 재현, 오른쪽 의장이 준 원본
             b = _turn_png(dd, n); o = Path(__file__).resolve().parent / 'assets' / 'turning_orig' / f'orig_{n}.png'
@@ -771,6 +793,8 @@ def turning_board(day):
                     st.image(b, use_container_width=True)
                 else:
                     st.caption('그림 없음')
+                if _LN is not None and len(_LN):
+                    _turn_lines(_LN[_LN['그림'].astype(int) == n])
             with c2:
                 st.caption('비교 그래프')
                 if o.exists():

@@ -463,6 +463,8 @@ def main():
         for _n in range(1, 10):
             if os.path.exists(f'{_td}/turn_{_n}.png'):
                 outs[f'{PFX}변곡점_{_n}.png'] = open(f'{_td}/turn_{_n}.png', 'rb').read()
+        if os.path.exists(f'{_td}/turn_lines.csv'):   # 11/23 의장: 그림마다 대상 값·기준선 값·닿음/돌파 표
+            outs[f'{PFX}변곡점_선.csv'] = open(f'{_td}/turn_lines.csv', 'rb').read()
         log('[변곡점 판] ' + ' '.join(f'{k}:{v}' for k, v in _r.items()))
     except Exception as e:   # noqa: BLE001
         log(f'[변곡점 판] 실패: {str(e)[:160]}')
