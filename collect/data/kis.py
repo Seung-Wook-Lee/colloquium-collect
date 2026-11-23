@@ -160,3 +160,30 @@ def daily_index_us(code='SOX', days=3650):
                 rows.append((o['stck_bsop_date'], _f(o.get('ovrs_nmix_prpr')), _f(o.get('ovrs_nmix_hgpr')), _f(o.get('ovrs_nmix_lwpr')), _f(o.get('acml_vol'))))
         end = s - dt.timedelta(days=1)
     return _frame(rows)
+
+
+def credit_kr(code, days=3650, probe=False):
+    """국내 종목 신용잔고 일별추이 — FHPST04760000. DataFrame(index=날짜, 융자잔고주수·잔고율·융자금액). 한 번에 약 30줄, 날짜를 뒤로 옮기며 받는다."""
+    end, start, rows, seen = dt.date.today(), dt.date.today() - dt.timedelta(days=days), [], set()
+    while end > start:
+        j = _get('/uapi/domestic-stock/v1/quotations/daily-credit-balance', 'FHPST04760000',
+                 {'fid_cond_mrkt_div_code': 'J', 'fid_cond_scr_div_code': '20476', 'fid_input_iscd': code,
+                  'fid_input_date_1': end.strftime('%Y%m%d')})
+        out = (j or {}).get('output') or []
+        if probe:
+            print('신용잔고 응답 칸', code, list(out[0].keys()) if out else j)
+            probe = False
+        ds = []
+        for o in out:
+            d = o.get('deal_date') or o.get('stck_bsop_date')
+            if not d or d in seen:
+                continue
+            seen.add(d); ds.append(d)
+            rows.append((d, _f(o.get('whol_loan_rmnd_stcn')), _f(o.get('whol_loan_rmnd_rate')), _f(o.get('whol_loan_rmnd_amt'))))
+        if not ds:
+            break
+        end = dt.datetime.strptime(min(ds), '%Y%m%d').date() - dt.timedelta(days=1)
+    if not rows:
+        return pd.DataFrame(columns=['융자잔고주수', '잔고율', '융자금액'])
+    D = pd.DataFrame(rows, columns=['날짜', '융자잔고주수', '잔고율', '융자금액'])
+    D['날짜'] = pd.to_datetime(D['날짜']); return D.set_index('날짜').sort_index()
