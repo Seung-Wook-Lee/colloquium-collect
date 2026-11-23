@@ -50,3 +50,7 @@ print('\n'.join(rep)); print('합친 표', D.shape, D.index.min(), D.index.max()
 if drive.ready() and len(D):
     drive.put(PATH, D.to_csv(encoding='utf-8-sig').encode('utf-8-sig'))
     print('드라이브 저장', PATH)
+    # 작은 압축본(유효숫자 6자리): 프로젝트 폴더로 내려받아 ourdata가 읽는다
+    import gzip
+    drive.put(PATH + '.gz', gzip.compress(D.to_csv(float_format='%.6g', encoding='utf-8-sig').encode('utf-8-sig')))
+    print('드라이브 저장', PATH + '.gz')
