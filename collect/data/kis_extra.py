@@ -20,7 +20,12 @@ if drive.ready():
     if b:
         old = pd.read_csv(io.BytesIO(b), index_col=0, parse_dates=True, encoding='utf-8-sig')
 days = 3650 if old is None else 400
-full = lambda k: old is None or k not in old.columns  # 새로 더한 항목은 10년치
+def full(k):
+    """새로 더한 항목이거나 중간에 빈 날이 많으면(영업일의 85% 미만) 10년치를 다시 받아 메운다."""
+    if old is None or k not in old.columns:
+        return True
+    s = old[k].dropna()
+    return len(s) < 0.85 * len(pd.bdate_range(s.index.min(), s.index.max()))
 cols, rep = {}, []
 for t in (L.get('미국') or {}):
     d = kis.daily_us(t, days=3650 if full(t) else 400, pages=30 if full(t) else 5)
