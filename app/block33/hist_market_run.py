@@ -20,7 +20,7 @@ for src, dst in (('history/시장위험_장기.csv', '시장위험_장기.csv'),
         b = drive.get(f'{D}/1_data/장기/{dst}')   # 이번에 못 받으면 지난번 보관본
         if b: open(f'{W}/{dst}', 'wb').write(b); print('지난 보관본 사용', dst)
 for src, dst in ((f'{D}/1_data/가격10년_종가.csv.gz', '가격10년_종가.csv.gz'), (f'{D}/1_data/지수_장기.csv.gz', '지수_장기.csv.gz'),
-                 (f'{D}/00_퀀트입력/유니버스.csv', '유니버스.csv')):
+                 ('콜로키움/포트폴리오/' + max((f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv')), default='없음'), '유니버스.csv')):   # 회의 원고(daily.pull_univ)와 같은 최신 유니버스
     b = drive.get(src)
     if b: open(f'{W}/{dst}', 'wb').write(b)
     print(dst, '받음' if b else '없음')
