@@ -734,7 +734,8 @@ TURN_NAMES = ['기술주 쏠림: 나스닥100 vs 동일가중 S&P (QQQ:RSP)', '�
               'NVDA 지지선 (VWAP·피보나치)', '2000년 고점 때 S&P 500 이평 묶음 · 비교용', '지금 S&P 500 이평 묶음',
               '성장주 vs 현금 (SPYG:BIL)', '성장주 vs 가치주 월봉 (IWF:IWD)', '빅테크 MGK 주봉 + 추세 점수(CTM)']   # 11/23 의장: 쉽고 돋보이게
 
-TURN_NO = ['1', '2', '2-1', '3', '4', '5', '6', '7', '8']   # 11/23 의장: 닷컴 붕괴 그림은 2번과 비교하는 것 → '2-1'
+# 11/23 의장: 비교용 그림은 지금 그림 바로 밑에 'n-1' — 닷컴 붕괴는 2-1, 2000년 이평 묶음은 지금 이평 묶음(4) 밑 4-1. 파일 번호(_변곡점_N.png)는 그대로.
+TURN_SHOW = [(1, '1'), (2, '2'), (3, '2-1'), (4, '3'), (6, '4'), (5, '4-1'), (7, '5'), (8, '6'), (9, '7')]
 
 
 @st.cache_data(ttl=3 * 3600, show_spinner=False)
@@ -804,9 +805,10 @@ def turning_board(day):
         _LN = None
     st.html(f"<div style='font-size:18px;font-weight:800;color:#1b5e20;margin:6px 0 2px'>바닥 찾기 그래프 모음 <span style='font-size:12px;color:#777;font-weight:400'>{dd[:4]}-{dd[4:6]}-{dd[6:]}</span></div>")   # 11/23 의장: 제일 위 제목
     with st.expander('그래프 9개 펼치기·접기', expanded=True):
-        for n, nm in enumerate(TURN_NAMES, 1):   # 11/22 의장: "늘 같이 준 그래프와 비교할 수 있게 옆에" → 왼쪽 재현, 오른쪽 의장이 준 원본
+        for n, no in TURN_SHOW:
+            nm = TURN_NAMES[n - 1]   # 11/22 의장: "늘 같이 준 그래프와 비교할 수 있게 옆에" → 왼쪽 재현, 오른쪽 의장이 준 원본
             b = _turn_png(dd, n); o = Path(__file__).resolve().parent / 'assets' / 'turning_orig' / f'orig_{n}.png'
-            st.html(f"<div style='font-size:15px;font-weight:700;color:#1b5e20;border-left:4px solid #2e7d32;padding-left:8px;margin:14px 0 2px'>{TURN_NO[n - 1]}. {nm}</div>")   # 11/23 의장: 돋보이게, 녹색(그린 라이트)
+            st.html(f"<div style='font-size:15px;font-weight:700;color:#1b5e20;border-left:4px solid #2e7d32;padding-left:8px;margin:14px 0 2px'>{no}. {nm}</div>")   # 11/23 의장: 돋보이게, 녹색(그린 라이트)
             c1, c2 = st.columns(2, gap='small')
             with c1:
                 st.caption('오늘 그래프')
