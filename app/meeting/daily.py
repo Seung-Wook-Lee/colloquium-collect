@@ -196,7 +196,7 @@ def fetch(W, IN):
                 if os.path.exists(bak):
                     os.remove(bak)
                 for ln in r.stdout.splitlines():   # 11/21: 한투 보충 결과를 실행 기록에 남김
-                    if '한투' in ln:
+                    if '한투' in ln or 'DART' in ln:   # 11/23: 한투가 안 될 때 DART로 채운 수도 기록에
                         log(f'[보조 자료] {out}: {ln[:300]}')
             done.append(out)
         except Exception as e:
