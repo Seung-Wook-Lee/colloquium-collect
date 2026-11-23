@@ -723,6 +723,23 @@ def market(d):
             if len(V2) >= 6: m['SPX_EPS_UP'] = float(V2['선행EPS'].iloc[-1] - V2['선행EPS'].iloc[-6])
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('지수밸류', e)
+    PE = _r(d, '지수선행PE')
+    try:   # 11/23 의장 "PER 찾아봐": 우리 수집 b09_valuation(매주 토요일, S&P500 503종목 야후 12개월 선행 EPS 합산)이 지수밸류.csv(손 입력)보다 새로우면 이걸 쓴다
+        if len(PE):
+            s = PE[PE['지수'] == 'S&P500'].copy()
+            s['날짜'] = pd.to_datetime(s['날짜']); s = s.dropna(subset=['선행PE']).sort_values('날짜')
+            old = pd.to_datetime(V2['날짜'].iloc[-1]) if len(V2) else pd.Timestamp('1900-01-01')
+            if len(s) and s['날짜'].iloc[-1] > old:
+                ix = pd.read_csv(f'{d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)['^GSPC'].dropna()
+                ep = [float(ix.loc[:t].iloc[-1]) / float(p) for t, p in zip(s['날짜'], s['선행PE'])]   # 그날 S&P500 종가 ÷ 선행PE = 지수 선행 EPS
+                m['SPX_EPS'], m['SPX_EPS_DATE'] = round(ep[-1], 1), f"{s['날짜'].iloc[-1]:%Y-%m-%d}"
+                m['SPX_EPS_SRC'] = f"우리 수집 {s['방법'].iloc[-1]}({int(s['받은 종목수'].iloc[-1])}/{int(s['종목수'].iloc[-1])}종목)"
+                m['SPX_CLOSE'], m['SPX_CLOSE_DATE'] = float(ix.iloc[-1]), f'{ix.index[-1]:%Y-%m-%d}'
+                m['SPX_FPER'] = round(m['SPX_CLOSE'] / m['SPX_EPS'], 2)
+                m['SPX_EPS_UP'] = float(ep[-1] - ep[-6]) if len(ep) >= 6 else None   # 같은 출처끼리만 비교
+                if m['SPX_EPS_UP'] is None: m.pop('SPX_EPS_UP')
+    except Exception as e:   # noqa: BLE001
+        _fail('지수선행PE', e)
     P = _px(d)
     try:
         if len(P):   # 분산 깨짐: 종목 간 평균 상관(20일) − 1년 평균

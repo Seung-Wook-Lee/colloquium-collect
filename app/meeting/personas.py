@@ -533,8 +533,12 @@ def rio(c):
         # 11/23 의장 "PER이 11/13 블룸버그라고? 지금이 23일인데": PER은 오늘 S&P500 종가 ÷ 선행 EPS로 매일 다시 계산(EPS는 마지막으로 받은 값, 날짜 밝힘)
         fper, spx = c.m.get('SPX_FPER'), c.m.get('SPX_CLOSE')
         if spx is not None and fper is not None:
-            out.append(L('지수 밸류', f"S&P500 선행 PER {n(fper, 1, '배')} (S&P500 {n(spx, 0)} ÷ 선행 EPS {n(v['선행EPS'], 1)})",
-                         f"S&P500 {c.m.get('SPX_CLOSE_DATE', '')} 종가 · 선행 EPS는 {v['날짜']} {v['출처']} — EPS 새 값 받아야 함"))
+            if c.m.get('SPX_EPS') is not None:   # 11/23: 우리 수집 구성종목 합산 EPS(매주 토요일)
+                out.append(L('지수 밸류', f"S&P500 선행 PER {n(fper, 1, '배')} (S&P500 {n(spx, 0)} ÷ 선행 EPS {n(c.m['SPX_EPS'], 1)})",
+                             f"S&P500 {c.m.get('SPX_CLOSE_DATE', '')} 종가 · 선행 EPS는 {c.m['SPX_EPS_DATE']} {c.m['SPX_EPS_SRC']}"))
+            else:
+                out.append(L('지수 밸류', f"S&P500 선행 PER {n(fper, 1, '배')} (S&P500 {n(spx, 0)} ÷ 선행 EPS {n(v['선행EPS'], 1)})",
+                             f"S&P500 {c.m.get('SPX_CLOSE_DATE', '')} 종가 · 선행 EPS는 {v['날짜']} {v['출처']} — EPS 새 값 받아야 함"))
         else:
             out.append(L('지수 밸류', f"S&P500 선행 PER {n(v['선행PER'], 1, '배')}, 선행 EPS {n(v['선행EPS'], 1)}", f"{v['날짜']} {v['출처']}"))
     if c.m.get('KS_GAP50') is not None:

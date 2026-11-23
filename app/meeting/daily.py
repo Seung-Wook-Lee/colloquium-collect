@@ -352,6 +352,15 @@ def main():
         pull_univ(IN)
         carry_up += pull_teamq(IN)
     pull_carry(IN, use_drive)
+    if use_drive:   # 11/23 의장 "PER 찾아봐" → 우리 수집(b09_valuation)이 매주 토요일 S&P500 구성종목 503개 선행 EPS를 합산한 00_지수선행PE.csv를 먼저 쓴다
+        try:
+            import drive
+            raw = drive.get(f'{D_DATA}/00_누적/00_지수선행PE.csv')
+            if raw:
+                open(f'{IN}/지수선행PE.csv', 'wb').write(raw)
+                log('[받기] 지수선행PE.csv (수집 00_누적, 구성종목 합산)')
+        except Exception as e:   # noqa: BLE001
+            log(f'[받기] 지수선행PE.csv 실패: {e}')
     if not os.path.isdir(f'{IN}/외부자문사'):
         pull_advisors(IN, use_drive)
 
