@@ -12,7 +12,7 @@ import os
 import numpy as np
 import pandas as pd
 
-VARS = {'ev_ebitda', 'op_yoy', 'opm_yoy', 'opm2', 'rev_yoy', 'earn_ok', 'roe', 'fcf', 'fcf_yield', 'debt_ebitda', 'z', 'fscore',
+VARS = {'mcap_kr', 'ev_ebitda', 'op_yoy', 'opm_yoy', 'opm2', 'rev_yoy', 'earn_ok', 'roe', 'fcf', 'fcf_yield', 'debt_ebitda', 'z', 'fscore',
         'per_ttm', 'pbr', 'per_rank', 'pbr_rank', 'per_pct3'}
 _EV = None
 
@@ -86,6 +86,7 @@ def apply(f, t, close, d, mem=()):
     f['kind'] = g('kind').values
     eb = g('ebitda')
     f['debt_ebitda'] = np.where(eb > 0, g('debt') / eb, np.where(eb.notna(), 99, np.nan))
+    f['mcap_kr'] = (mcap / 1e8).where(f['ticker'].astype(str).str.contains(r'\.(?:KS|KQ)$')).values   # B19 한국 시가총액(억원) 그 주 값
     f['ev_ebitda'] = ((mcap + g('debt').fillna(0)) / eb.where(eb > 0)).values   # 11/24 B15 동료 EV/EBITDA(선행 PER 자리)
     f['fcf_yield'] = (g('fcf') / mcap * 100).values
     ta = g('ta')
