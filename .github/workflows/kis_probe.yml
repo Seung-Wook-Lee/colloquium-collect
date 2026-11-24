@@ -25,3 +25,5 @@ jobs:
         env:
           KRX_ID: ${{ secrets.KRX_ID }}
           KRX_PW: ${{ secrets.KRX_PW }}
+      - run: pip install pdfplumber && python tools/fund_disclosure_probe.py
+        if: always()
