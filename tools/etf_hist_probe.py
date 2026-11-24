@@ -35,6 +35,8 @@ def ishares():
     r = requests.get('https://www.ishares.com/us/products/239705/ishares-phlx-semiconductor-etf/1467271812596.ajax',
                      params={'fileType': 'xls', 'fileName': 'SOXX_fund', 'dataType': 'fund'}, headers=UA, timeout=60)
     t = r.content.decode('utf-8-sig', 'ignore')
+    import re
+    return r.status_code, r.headers.get('content-type'), t[:200], [t[m.start()-300:m.start()+400] for m in re.finditer('Shares Outstanding', t)][:3]
     i = t.find('ss:Name="Historical"')
     import re
     rows = re.findall(r'<ss:Row>(.*?)</ss:Row>', t[i:], flags=re.S)
@@ -55,6 +57,5 @@ def invesco():
     return r.status_code, r.text[:300]
 
 
-import time; time.sleep(65)   # 한투 토큰은 1분에 1번
-for n, f in [('한투 NAV 비교추이(일)', kis), ('iShares 과거(좌수)', ishares)]:
+for n, f in [('iShares 과거(좌수)', ishares)]:
     show(n, f)
