@@ -35,8 +35,11 @@ def ishares():
     r = requests.get('https://www.ishares.com/us/products/239705/ishares-phlx-semiconductor-etf/1467271812596.ajax',
                      params={'fileType': 'xls', 'fileName': 'SOXX_fund', 'dataType': 'fund'}, headers=UA, timeout=60)
     t = r.content.decode('utf-8-sig', 'ignore')
-    i = t.find('Historical')
-    return r.status_code, len(t), t[i:i + 700]
+    i = t.find('ss:Name="Historical"')
+    import re
+    rows = re.findall(r'<ss:Row>(.*?)</ss:Row>', t[i:], flags=re.S)
+    cell = lambda x: re.findall(r'<ss:Data[^>]*>(.*?)</ss:Data>', x, flags=re.S)
+    return r.status_code, i, len(rows), [cell(x) for x in rows[:3]], [cell(x) for x in rows[-2:]]
 
 
 def ssga():
@@ -52,6 +55,6 @@ def invesco():
     return r.status_code, r.text[:300]
 
 
-for n, f in [('KRX 상장좌수 일별', krx), ('한투 NAV 비교추이(일)', kis), ('iShares 과거(좌수)', ishares),
-             ('SSGA navhist', ssga), ('Invesco', invesco)]:
+import time; time.sleep(65)   # 한투 토큰은 1분에 1번
+for n, f in [('한투 NAV 비교추이(일)', kis), ('iShares 과거(좌수)', ishares)]:
     show(n, f)
