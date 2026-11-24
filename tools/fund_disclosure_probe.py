@@ -45,6 +45,26 @@ if mm:
     base = mm.group(1); base = base if base.startswith('http') else 'https://www.nbim.no' + base
     r = show('NBIM init.json', base + 'init.json')
     if r is not None and r.status_code == 200: print('   init', r.text[:1500])
+import json
+B = 'https://www.nbim.no/api/investments/v2/'
+ini = requests.get(B + 'init.json', headers=H, timeout=30).json()['data']
+print('   기간', [(d['label'], d['fileName']) for d in ini['details']][-5:], len(ini['details']))
+r = requests.get(B + '2017-12-31.json?v=' + ini['details'][0]['v'], headers=H, timeout=120)
+print('   2017', r.status_code, len(r.content))
+try:
+    j = r.json(); d = j.get('data', j)
+    def walk(o, depth=0, path=''):
+        if depth > 4: return
+        if isinstance(o, dict):
+            print('   ' + '  ' * depth + path, 'dict', list(o.keys())[:15])
+            for k in list(o.keys())[:4]: walk(o[k], depth + 1, path + '.' + k)
+        elif isinstance(o, list):
+            print('   ' + '  ' * depth + path, 'list', len(o), str(o[0])[:300] if o else '')
+            if o: walk(o[0], depth + 1, path + '[0]')
+    walk(d)
+    t = r.text; i = t.find('Samsung'); print('   samsung', t[max(0, i - 400):i + 300])
+except Exception as e:  # noqa: BLE001
+    print('   json 실패', e, r.text[:300])
 show('CPP 해외 F25', 'https://www.cppinvestments.com/wp-content/uploads/2025/05/Foreign-Publicly-Traded-Equity-Holdings_ibfs-Q4F25.html')
 show('CPP 해외 F24', 'https://www.cppinvestments.com/wp-content/uploads/2024/05/Foreign-Publicly-Traded-Equity-Holdings_ibfs-Q4F24.html')
 show('국민연금 국내주식(공공데이터)', 'https://www.data.go.kr/data/3070507/fileData.do')
