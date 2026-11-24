@@ -453,7 +453,9 @@ def stocks(d):
         _fail('f["turn_ok"] = (t2 | (f.get("above50", p', e)
     # 한 분기 꺾임 봐주기: 앞 분기 이익 전년비 증가 + 추정치 상향(자료 없으면 0)
     try:
-        f['earn_relief'] = ((f.get('prev_op_yoy', np.nan) > 0) & (f['est30'] > 0) & (f['up30'] >= f['dn30'])).astype(int) if 'est30' in f else 0
+        # 11/24 의장 '애널 추정치 뺌': 한 분기 꺾임 구제(앞 분기 증가 + 추정치 상향)는 추정치를 써서 0으로(과거 이력 earn_ok와 같은 규칙)
+        # f['earn_relief'] = ((f.get('prev_op_yoy', np.nan) > 0) & (f['est30'] > 0) & (f['up30'] >= f['dn30'])).astype(int) if 'est30' in f else 0
+        f['earn_relief'] = 0
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('f["earn_relief"] = ((f.get("prev_op_yoy"', e)
     # 11/19 의장: 매출이 늘고 있으면 이익 감소만으로 거르지 않는다(이익률 조건은 거르기에서 뺌). 이익 자료 없으면 비움
