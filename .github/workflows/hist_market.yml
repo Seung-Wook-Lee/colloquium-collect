@@ -1,6 +1,8 @@
 name: 시장 블록 과거 값(B01~B10)
 on:
   workflow_dispatch:
+    inputs:
+      only: {description: '한 단계만(nbim) — 비우면 전체', required: false, default: ''}
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -21,6 +23,7 @@ jobs:
       - run: pip install -q pandas numpy requests yfinance pyyaml xlrd openpyxl hmmlearn scipy
       - run: python app/block33/hist_market_run.py
         env:
+          HM_ONLY: ${{ github.event.inputs.only }}
           FRED_KEY: ${{ secrets.FRED_KEY }}
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}

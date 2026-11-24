@@ -8,6 +8,18 @@ sys.path[:0] = [os.path.join(REPO, 'collect')]
 import drive  # noqa: E402
 D = '콜로키움 수집데이터'; W = os.path.join(REPO, 'work_hm'); os.makedirs(W, exist_ok=True)
 os.makedirs(os.path.join(REPO, 'history'), exist_ok=True)
+
+
+def nbim():   # 11/24 의장 "확보해보시고": B21 펀드 자체 공시 — 노르웨이 국부펀드 보유 이력(1998~, 반기)
+    r = subprocess.run([sys.executable, f'{REPO}/collect/data/fetch_nbim.py', W], capture_output=True, text=True, timeout=2400)
+    print('[노르웨이]', r.returncode, (r.stdout + r.stderr).strip()[-800:])
+    if os.path.exists(f'{W}/노르웨이_보유_이력.csv.gz'):
+        drive.put(f'{D}/1_data/장기/노르웨이_보유_이력.csv.gz', open(f'{W}/노르웨이_보유_이력.csv.gz', 'rb').read()); print('드라이브 올림 노르웨이_보유_이력.csv.gz')
+
+
+if os.environ.get('HM_ONLY') == 'nbim':   # 이 단계만 손으로 돌릴 때
+    nbim(); sys.exit(0)
+nbim()
 for s in ('fetch_risk.py', 'fetch_cpce.py', 'ccc_history.py'):
     r = subprocess.run([sys.executable, f'collect/research/{s}'], cwd=REPO, capture_output=True, text=True, timeout=3000)
     print(f'[{s}]', r.returncode, (r.stdout + r.stderr).strip()[-600:])
