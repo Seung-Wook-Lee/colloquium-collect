@@ -34,6 +34,11 @@ r = subprocess.run([sys.executable, f'{REPO}/collect/data/hist_short.py', W], ca
 print('[공매도]', r.returncode, (r.stdout + r.stderr).strip()[-600:])
 if os.path.exists(f'{W}/공매도_미국_이력.csv.gz'):
     drive.put(f'{D}/1_data/장기/공매도_미국_이력.csv.gz', open(f'{W}/공매도_미국_이력.csv.gz', 'rb').read()); print('드라이브 올림 공매도_미국_이력.csv.gz')
+# 11/24 B20 ETF 좌수 과거 기록(State Street 공식 이력)
+r = subprocess.run([sys.executable, f'{REPO}/collect/data/hist_etf_flow.py', W], capture_output=True, text=True, timeout=1500)
+print('[ETF좌수]', r.returncode, (r.stdout + r.stderr).strip()[-600:])
+if os.path.exists(f'{W}/ETF좌수_이력.csv.gz'):
+    drive.put(f'{D}/1_data/장기/ETF좌수_이력.csv.gz', open(f'{W}/ETF좌수_이력.csv.gz', 'rb').read()); print('드라이브 올림 ETF좌수_이력.csv.gz')
 y = os.path.join(os.environ.get('QC_PRIVATE', ''), 'blocks.yaml')
 r = subprocess.run([sys.executable, '-W', 'ignore', f'{HERE}/hist_market.py', W, y], capture_output=True, text=True, timeout=5000)
 print(r.stdout[-3000:], r.stderr[-2000:])
