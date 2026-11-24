@@ -1,0 +1,40 @@
+name: 드라이브 파일 받기(큰 파일 → 산출물)
+
+# 11/24: 10MB 넘는 드라이브 파일(블록점수이력 등)을 작업 창으로 가져오는 창구. 읽기만 함(드라이브에 쓰지 않음).
+on:
+  workflow_dispatch:
+    inputs:
+      path: {description: '드라이브 경로(콜로키움 수집데이터/...) 또는 00_퀀트입력 안 파일명', required: true}
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pyyaml
+      - name: 받기
+        env:
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+          P: ${{ github.event.inputs.path }}
+        run: |
+          mkdir -p out
+          python - <<'PY'
+          import os, sys, gzip
+          sys.path.insert(0, 'app/meeting')
+          import daily as DL, drive
+          p = os.environ['P']
+          if '/' not in p: p = f'{DL.CARRY}/{p}'
+          b = drive.get(p)
+          if b is None: sys.exit(f'없음: {p}')
+          open('out/' + os.path.basename(p) + '.gz', 'wb').write(gzip.compress(b))
+          print(p, len(b))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drive_file
+          path: out/
