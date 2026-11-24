@@ -35,6 +35,16 @@ if r is not None:
     for m in sorted(set(re.findall(r'["\'`](/?(?:api|holding|investments)[^"\'`]{0,150})["\'`]', t)))[:60]: print('   js', m)
     for k in ('Holding', 'holding', '.json', 'xlsx', 'csv', 'fetch'):
         for m in [t[max(0,x.start()-100):x.start()+150] for x in re.finditer(re.escape(k), t)][:6]: print('   ctx', k, m.replace(chr(10),' '))
+pg = requests.get('https://www.nbim.no/en/investments/all-investments/', headers=H, timeout=30).text
+for m in re.findall(r'.{0,50}metaData.{0,600}', pg)[:3]: print('   meta', m.replace(chr(10), ' '))
+js = requests.get('https://www.nbim.no/static/investment/assets/index.js', headers=H, timeout=60).text
+for k in ('downloadAll', 'assetType:"eq",extension', 'historyFileName', '.xlsx`', '.csv`', 'download'):
+    for x in list(re.finditer(re.escape(k), js))[:4]: print('   dl', k, js[max(0, x.start()-250):x.start()+250].replace(chr(10), ' '))
+mm = re.search(r'dataPath["\']?\s*:\s*["\']([^"\']+)', pg)
+if mm:
+    base = mm.group(1); base = base if base.startswith('http') else 'https://www.nbim.no' + base
+    r = show('NBIM init.json', base + 'init.json')
+    if r is not None and r.status_code == 200: print('   init', r.text[:1500])
 show('CPP 해외 F25', 'https://www.cppinvestments.com/wp-content/uploads/2025/05/Foreign-Publicly-Traded-Equity-Holdings_ibfs-Q4F25.html')
 show('CPP 해외 F24', 'https://www.cppinvestments.com/wp-content/uploads/2024/05/Foreign-Publicly-Traded-Equity-Holdings_ibfs-Q4F24.html')
 show('국민연금 국내주식(공공데이터)', 'https://www.data.go.kr/data/3070507/fileData.do')
