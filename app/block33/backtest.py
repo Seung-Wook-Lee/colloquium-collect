@@ -263,6 +263,8 @@ def walk(Z, SB, H, first_test_year):
 def main(d, cfg=None, step='W-FRI', workers=None):
     d = os.path.abspath(d)   # 기준일 폴더의 링크가 상대 경로로 깨지지 않게
     B = QCC.load_blocks(cfg)
+    for b in B.get('_꺼짐_종목', []):   # 11/24 의장 "B27은 일단 비워 놓읍시다": 켜기 목록에서 뺀 블록은 이력에도 점수 없음(엔진 '적용 안 함'과 같게)
+        B['종목'].pop(b, None)
     global TOPN
     BT = B.get('성적표', {}); TOPN = int(BT.get('상위', 5))
     H = {str(k): v for k, v in BT.get('기간', {4: 20, 12: 60, 26: 130, 52: 260}).items()}

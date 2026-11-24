@@ -250,6 +250,7 @@ def stocks(d):
                               'fcf_y': _num(H['FCF']), 'mcap': _num(H['시총'])})
             f = f.merge(h, on='번호', how='left')
             f['debt_ebitda'] = np.where(f['ebitda'] > 0, f['debt'] / f['ebitda'], np.where(f['ebitda'].notna(), 99, np.nan))
+            f['ev_ebitda'] = (f['mcap'] + f['debt'].fillna(0)) / f['ebitda'].where(f['ebitda'] > 0)   # 11/24 B15 동료 EV/EBITDA
             for k in ('fcf', 'fcf_yield'):
                 if k not in f: f[k] = np.nan
             f['fcf'] = f['fcf'].combine_first(f['fcf_y'])

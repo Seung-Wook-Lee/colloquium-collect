@@ -5,14 +5,14 @@ backtest.py는 그 주까지의 가격만 다시 계산하고, 재무 칸(B15·B
   B23: op_yoy·rev_yoy·opm_yoy·opm2·earn_ok (분기 전년 같은 분기 대비, 영업이익 없으면 순이익)
   B25: fscore(피오트로스키 9항목, 4분기 합 기준)·fcf(영업현금흐름−설비투자, 4분기 합)·roe(순이익 4분기 합÷자본)
   B26: z(알트만: 1.2 운전자본/자산 + 1.4 이익잉여금/자산 + 3.3 영업이익/자산 + 0.6 시총/부채 + 1.0 매출/자산)·debt_ebitda
-  B15: per_ttm·pbr(층 안 순위)·fcf_yield·per_pct3 (fper·peer_fper는 과거 추정치가 없어 비움 → 공식 6개 중 4개)
+  B15: per_ttm·pbr(층 안 순위)·fcf_yield·per_pct3 ·ev_ebitda (fper·peer_fper는 과거 추정치가 없어 → 11/24 per_dn52·peer_ev로 대신, eps_proxy)
 쓰는 곳: backtest._one → apply(f, t, close)"""
 import os
 
 import numpy as np
 import pandas as pd
 
-VARS = {'op_yoy', 'opm_yoy', 'opm2', 'rev_yoy', 'earn_ok', 'roe', 'fcf', 'fcf_yield', 'debt_ebitda', 'z', 'fscore',
+VARS = {'ev_ebitda', 'op_yoy', 'opm_yoy', 'opm2', 'rev_yoy', 'earn_ok', 'roe', 'fcf', 'fcf_yield', 'debt_ebitda', 'z', 'fscore',
         'per_ttm', 'pbr', 'per_rank', 'pbr_rank', 'per_pct3'}
 _EV = None
 
@@ -86,6 +86,7 @@ def apply(f, t, close, d, mem=()):
     f['kind'] = g('kind').values
     eb = g('ebitda')
     f['debt_ebitda'] = np.where(eb > 0, g('debt') / eb, np.where(eb.notna(), 99, np.nan))
+    f['ev_ebitda'] = ((mcap + g('debt').fillna(0)) / eb.where(eb > 0)).values   # 11/24 B15 동료 EV/EBITDA(선행 PER 자리)
     f['fcf_yield'] = (g('fcf') / mcap * 100).values
     ta = g('ta')
     f['z'] = (1.2 * g('wc') / ta + 1.4 * g('re').fillna(0) / ta + 3.3 * g('op4') / ta + 0.6 * mcap / g('tl') + 1.0 * g('rev4') / ta).values
