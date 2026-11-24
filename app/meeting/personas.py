@@ -481,7 +481,7 @@ def macro_table(c):
         X = X.sort_values(['_on', '_s'], ascending=[False, False]).drop_duplicates('_k')
         X = X.sort_values(['블록', '_on'], ascending=[True, False]).reset_index(drop=True)
         # 11/21 의장 "좋다 나쁘다 판단하지 말고, 블록이 같으면 한 번만, 질문 | 지표 이름 | 숫자 | 공식"
-        EXPR = {'VIX_VIX3M': 'VIX − VIX3M', 'SOFR_IORB': 'SOFR − IORB', 'T10Y2Y': '10Y − 2Y', 'KR_BEAR': '한국 하락 국면 확률', 'US_BEAR': '미국 하락 국면 확률'}
+        EXPR = {'VIX_VIX3M': 'VIX − VIX3M', 'SOFR_IORB': 'SOFR − IORB', 'T10Y2Y': '10Y − 2Y', 'KR_BEAR': '한국 하락 국면 확률', 'US_BEAR': '미국 하락 국면 확률', 'HY': '하이일드 스프레드'}   # 11/24 의장 'HY라고 쓰지 말라'
         rows = ['| 블록 | 질문 | 지표 | 오늘 | 공식 |', '|---|---|---|---|---|']
         prev = None
         for i, r in X.iterrows():
