@@ -1014,6 +1014,33 @@ def conclusion(c):
             continue
         st = '약세' if g[0] == '방어' else '강세'
         num_ = [f"국면 {g[0]}", f"지수 4국면 {g[3] or '자료 없음'}"]
+        # 11/24 의장 "어제 미국 주가 엄청 올랐는데 1번 멘트가 영": 전날 지수가 문턱(rules.yaml 결론.급변_하루) 넘게 움직이면 그 움직임을 맨 앞에
+        mv = []
+        for it in (('S&P500', '나스닥') if mk == '미국' else ('코스피', '코스닥')):
+            r_ = c.mac_row(it)
+            if r_ is None:
+                continue
+            v_, pv_ = num(r_['값']), num(r_.get('전일 값'))
+            if v_ and pv_:
+                mv.append((it, (v_ / pv_ - 1) * 100))
+        th = float(R.get('급변_하루', 2.0))
+        big = [x for x in mv if abs(x[1]) >= th]
+        if big:
+            up = sum(x[1] for x in big) > 0
+            rec = ''
+            try:
+                if mv[0][0] in LAST_PX:
+                    _, rr = _milestones(LAST_PX[mv[0][0]], LAST_PX.get('_gap', 20))
+                    rr = [x for x in rr if '하루' in x]
+                    rec = f"({rr[0]})" if rr else ''
+            except Exception:   # noqa: BLE001
+                rec = ''
+            st = f"{st} 국면 속 {'급반등' if up else '급락'}: " + ', '.join(f"{it} {p(d_, 2)}" for it, d_ in mv) + rec
+        if isinstance(c.m, dict) and mk == '미국':   # CTM 신호(블록33 B01)가 나온 날은 근거에 단계도
+            if c.m.get('CTM_RED') == 1:
+                num_.insert(0, 'CTM 빨간불(현금 전환) 신호 나옴')
+            elif c.m.get('CTM_GREEN') == 1:
+                num_.insert(0, f"CTM 초록불(반등 시작) {c.m.get('CTM_GREEN_STAGE')}단계/3 신호 나옴")
         if mk == '미국':
             for ix, nm_ in (('^NDX', '나스닥100'), ('^GSPC', 'S&P500')):
                 if V['bp'].get(ix) is not None:
