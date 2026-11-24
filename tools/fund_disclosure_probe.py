@@ -33,7 +33,8 @@ r = show('NBIM 앱 js', 'https://www.nbim.no/static/investment/assets/index.js')
 if r is not None:
     t = r.text
     for m in sorted(set(re.findall(r'["\'`](/?(?:api|holding|investments)[^"\'`]{0,150})["\'`]', t)))[:60]: print('   js', m)
-    for m in re.findall(r'.{120}(?:fetch\(|\.get\(`|baseURL|/v1/|/v2/|/v3/|apiUrl|ApiUrl|endpoint).{160}', t)[:30]: print('   ctx', m.replace(chr(10),' '))
+    for k in ('Holding', 'holding', '.json', 'xlsx', 'csv', 'fetch'):
+        for m in [t[max(0,x.start()-100):x.start()+150] for x in re.finditer(re.escape(k), t)][:6]: print('   ctx', k, m.replace(chr(10),' '))
 show('CPP 해외 F25', 'https://www.cppinvestments.com/wp-content/uploads/2025/05/Foreign-Publicly-Traded-Equity-Holdings_ibfs-Q4F25.html')
 show('CPP 해외 F24', 'https://www.cppinvestments.com/wp-content/uploads/2024/05/Foreign-Publicly-Traded-Equity-Holdings_ibfs-Q4F24.html')
 show('국민연금 국내주식(공공데이터)', 'https://www.data.go.kr/data/3070507/fileData.do')
