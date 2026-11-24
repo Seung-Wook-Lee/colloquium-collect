@@ -29,6 +29,11 @@ if r is not None:
         if any(k in m.lower() for k in ('download', 'holding', 'api', '.js', 'csv', 'xlsx', 'investments')): print('   ', m[:200])
     for m in sorted(set(re.findall(r'https?://[^"\' <>]+', t)))[:60]: print('   url', m[:200])
     for m in re.findall(r'.{80}(?:csv|xlsx).{80}', t)[:20]: print('   ctx', m)
+r = show('NBIM 앱 js', 'https://www.nbim.no/static/investment/assets/index.js')
+if r is not None:
+    t = r.text
+    for m in sorted(set(re.findall(r'["\'`](/?(?:api|holding|investments)[^"\'`]{0,150})["\'`]', t)))[:60]: print('   js', m)
+    for m in sorted(set(re.findall(r'https?://[^"\'` ]{5,150}', t)))[:40]: print('   jsurl', m)
 show('CPP 해외 F25', 'https://www.cppinvestments.com/wp-content/uploads/2025/05/Foreign-Publicly-Traded-Equity-Holdings_ibfs-Q4F25.html')
 show('CPP 해외 F24', 'https://www.cppinvestments.com/wp-content/uploads/2024/05/Foreign-Publicly-Traded-Equity-Holdings_ibfs-Q4F24.html')
 show('국민연금 국내주식(공공데이터)', 'https://www.data.go.kr/data/3070507/fileData.do')
