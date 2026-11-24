@@ -23,12 +23,13 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 COLLECT = os.path.join(os.path.dirname(os.path.dirname(HERE)), 'collect')   # 11/21 두 폴더: 수집(collect)·스튜디오(app)
 sys.path.insert(0, COLLECT)   # nyx.py(닉스 지표), blocks/b09_exc.py(예외 검정)
 import features as F  # noqa: E402
-import hist_fund as HF
+import hist_fund as HF  # 11/23 과거 재무 칸(SEC·DART 공시일 기준)
 import hist_sector as HS
 import hist_flow as HK
 import hist_13f as H13
 import hist_short as HSH  # noqa: E402
-import hist_etf as HE  # noqa: E402  11/23 과거 재무 칸(SEC·DART 공시일 기준)
+import hist_etf as HE  # noqa: E402
+import eps_proxy as EP  # noqa: E402
 import nyx  # noqa: E402
 import orders as O  # noqa: E402
 from engine import _ev  # noqa: E402
@@ -172,6 +173,7 @@ def _one(args):
         f = H13.apply(f, t, d)   # B21 장기 펀드 13F(공시일 기준)
         f = HSH.apply(f, t, d)   # B22 미국 공매도(FINRA 결제일, 공표 뒤)
         f = HE.apply(f, t, d)   # B20 ETF 자금(State Street 좌수 이력)
+        f = EP.apply(f, t, d)   # B24 실제 이익 공식(EPS TTM, 공시일 기준) — 그 주 기준으로 다시
         S = scores(f, B['종목'], mask)
         S.insert(0, '날짜', t.date()); S.insert(1, '번호', f['번호']); S.insert(2, '종목', f['종목'])
         S.insert(3, '시장', f['시장']); S.insert(4, '구분', f['구분']); S.insert(5, '층', f['layer']); S.insert(6, '방어국면', f['DEF'])
@@ -282,6 +284,8 @@ def main(d, cfg=None, step='W-FRI', workers=None):
         mask = mask - HSH.VARS; keep = keep | (HSH.VARS & formula_vars(B['종목']))   # B22 공매도는 FINRA 이력으로 그 주 값
     if os.path.exists(f'{d}/장기/ETF좌수_이력.csv.gz'):
         mask = mask - HE.VARS; keep = keep | (HE.VARS & formula_vars(B['종목']))   # B20 ETF 자금은 좌수 이력으로 그 주 값(이력 없는 ETF는 비움)
+    if os.path.exists(f'{d}/장기/PER_EPS_주별.csv.gz'):
+        mask = mask - EP.VARS; keep = keep | (EP.VARS & formula_vars(B['종목']))   # B24 실제 이익 공식은 EPS TTM 이력으로 그 주 값
     print('비운 칸(과거 값 없음):', ', '.join(sorted(mask)))
     cache = os.path.join(d, '..', '블록점수이력.csv')
     old = pd.read_csv(cache, encoding='utf-8-sig') if os.path.exists(cache) else pd.DataFrame()

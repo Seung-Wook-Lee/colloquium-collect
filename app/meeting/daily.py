@@ -361,6 +361,15 @@ def main():
         pull_univ(IN)
         carry_up += pull_teamq(IN)
     pull_carry(IN, use_drive)
+    if use_drive:   # 11/24 B24 실제 이익 공식(eps_proxy)이 오늘 판정에도 쓰는 EPS TTM 주별(1_data, 공시일 기준)
+        try:
+            import drive
+            os.makedirs(f'{IN}/장기', exist_ok=True)
+            b = drive.get(f'{D_DATA}/1_data/PER_EPS_주별.csv.gz')
+            if b: open(f'{IN}/장기/PER_EPS_주별.csv.gz', 'wb').write(b)
+            log('[받기] 1_data/PER_EPS_주별.csv.gz ' + ('받음' if b else '없음'))
+        except Exception as e:   # noqa: BLE001
+            log(f'[받기] PER_EPS_주별 실패: {e}')
     if use_drive:   # 11/23 의장 "PER 찾아봐" → 우리 수집(b09_valuation)이 매주 토요일 S&P500 구성종목 503개 선행 EPS를 합산한 00_지수선행PE.csv를 먼저 쓴다
         try:
             import drive
