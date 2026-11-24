@@ -4,13 +4,16 @@
   eps_chg90  = EPS TTM 13주 전 대비 변화(%)             ↔ est90(내년 EPS 추정 90일 변화)
   eps_up2    = EPS TTM 26주 전 < 13주 전 < 지금(두 번 연속 증가)  ↔ up30 ≥ dn30(상향 건수 ≥ 하향)
   peer_eps90 = 같은 층 개별주 안 eps_chg90 순위(0~1)      ↔ peer_est30(동료 중 추정치 상향 큰 쪽)
-오늘(features)과 과거(backtest) 모두 이 함수 하나로 계산한다(같은 식)."""
+오늘(features)과 과거(backtest) 모두 이 함수 하나로 계산한다(같은 식).
+11/24 12:12 의장 "B15도 다 채우고": 선행 PER(애널리스트 추정치, 과거 기록 없음) 공식 2개 자리에 과거부터 있는 자료로 같은 질문을 묻는 공식 2개.
+  per_dn52 = PER(TTM) 52주 전보다 낮음 + 실제 EPS(TTM) 52주 전보다 큼(이익이 늘어서 싸지는 중)   ↔ fper < per_ttm
+  peer_ev  = 같은 층 개별주 안 EV/EBITDA 낮은 순위(0~1, 1 = 가장 쌈). ev_ebitda는 hist_fund(과거)·features(오늘)가 채움 ↔ peer_fper"""
 import os
 
 import numpy as np
 import pandas as pd
 
-VARS = {'eps_chg90', 'eps_up2', 'peer_eps90'}
+VARS = {'eps_chg90', 'eps_up2', 'peer_eps90', 'per_dn52', 'peer_ev'}
 _P = {}
 
 
@@ -20,14 +23,14 @@ def load(d):
         return _P[p]
     P = None
     if os.path.exists(p):
-        P = pd.read_csv(p, usecols=['날짜', 'ticker', 'EPS_TTM'], parse_dates=['날짜']).dropna(subset=['EPS_TTM']).sort_values('날짜')
+        P = pd.read_csv(p, usecols=['날짜', 'ticker', 'EPS_TTM', 'PER'], parse_dates=['날짜']).dropna(subset=['EPS_TTM']).sort_values('날짜')
     _P[p] = P
     return P
 
 
-def _at(P, t, back, win=10):
+def _at(P, t, back, win=10, col='EPS_TTM'):
     x = P[(P['날짜'] <= t - pd.Timedelta(days=back)) & (P['날짜'] >= t - pd.Timedelta(days=back + win))]
-    return x.drop_duplicates('ticker', keep='last').set_index('ticker')['EPS_TTM']
+    return x.drop_duplicates('ticker', keep='last').set_index('ticker')[col]
 
 
 def apply(f, t, d):
@@ -43,4 +46,13 @@ def apply(f, t, d):
     f['eps_up2'] = ((a > b) & (b > c)).astype(float).where(a.notna() & b.notna() & c.notna()).values
     stk = f['구분'] == '개별주'
     f['peer_eps90'] = f['eps_chg90'].where(stk).groupby(f['layer']).rank(pct=True).values
+    e52 = k.map(_at(P, t, 364)).astype(float)
+    p0, p52 = k.map(_at(P, t, 0, col='PER')).astype(float), k.map(_at(P, t, 364, col='PER')).astype(float)
+    ok = p0.notna() & p52.notna() & a.notna() & e52.notna()
+    f['per_dn52'] = ((p0 > 0) & (p0 < p52) & (a > e52)).astype(float).where(ok).values
+    if 'ev_ebitda' in f:
+        ev = f['ev_ebitda'].where(stk & (f['ev_ebitda'] > 0))
+        f['peer_ev'] = (1 - ev.groupby(f['layer']).rank(pct=True) + 1 / ev.groupby(f['layer']).transform('count')).values
+    else:
+        f['peer_ev'] = np.nan
     return f
