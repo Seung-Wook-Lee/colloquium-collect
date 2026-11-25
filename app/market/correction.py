@@ -14,6 +14,9 @@ import sys
 import numpy as np
 import pandas as pd
 
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))   # stored.py(저장본 읽기)
+
 DEF = dict(단계=[5, 10, 15, 20, 30], 배수=[0.3, 0.6, 0.9, 1.2, 1.8], 최근해=10)
 START = {'^GSPC': '1927-12-01', '^NDX': '1985-10-01', '^KS11': '1996-07-01', '^KQ11': '1996-07-01'}
 NAME = {'^GSPC': 'S&P500', '^NDX': '나스닥100', '^KS11': '코스피', '^KQ11': '코스닥'}
@@ -32,8 +35,8 @@ def vol_ratio(p, years, ref=None):
 
 
 def prices(idx):
-    import yfinance as yf
-    return yf.download(idx, start=START.get(idx, '1985-01-01'), auto_adjust=True, progress=False)['Close'].squeeze().dropna()
+    import stored   # 11/25 의장: 저장본에서만
+    return stored.close(idx, start=START.get(idx, '1985-01-01'))
 
 
 def episodes(p):

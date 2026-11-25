@@ -303,9 +303,9 @@ def _records(cfg):
         gap = 20
     out = {}
     try:
-        import yfinance as yf
+        import stored   # 11/25 의장: 지수는 저장본에서만(회의 준비 코드가 하루 2번 갱신)
         tk = [YF[k] for k in cfg['지수'] if k in YF]
-        P = yf.download(tk, start='1990-01-01', auto_adjust=True, progress=False)['Close']
+        P = stored.close(tk, start='1990-01-01')
         for k in cfg['지수']:
             if YF.get(k) in P:
                 out[k] = _milestones(P[YF[k]], gap)
@@ -880,10 +880,12 @@ def _betas(c, rows):
             want[r['번호']] = (t, c.R['결론']['기준지수']['미국' if (r['시장'] == '미국' or '미국' in str(r['종목'])) else '한국'])
     if not want:
         return {}
-    try:
-        import yfinance as yf
-        P = yf.download(sorted({t for t, _ in want.values()} | {i for _, i in want.values()}), period='1y', auto_adjust=True, progress=False)['Close']
-    except Exception:   # noqa: BLE001 — 내려받기 실패면 유니버스 '베타(2년 주간)'
+    try:   # 11/25 의장: 종목은 저장본 가격2년, 지수는 저장본 시장위험(회의 준비 코드가 하루 2번 갱신) — 직접 받지 않음
+        import stored
+        px = pd.read_csv(f'{c.d}/가격2년.csv', index_col=0, parse_dates=True, encoding='utf-8-sig')
+        P = pd.concat([px[[t for t, _ in want.values() if t in px]], stored.close(sorted({i for _, i in want.values()}))], axis=1)
+        P = P[P.index >= P.index.max() - pd.Timedelta(days=366)]
+    except Exception:   # noqa: BLE001 — 저장본을 못 읽으면 유니버스 '베타(2년 주간)'
         if '베타(2년 주간)' in c.U:
             bb = c.U.drop_duplicates('번호').set_index('번호')['베타(2년 주간)']
             return {b: float(bb[b]) for b in want if b in bb and ok(bb[b])}

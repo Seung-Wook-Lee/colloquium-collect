@@ -19,27 +19,34 @@ if drive.ready():
     b = drive.get(PATH)
     if b:
         old = pd.read_csv(io.BytesIO(b), index_col=0, parse_dates=True, encoding='utf-8-sig')
-days = 3650 if old is None else 400
+# 11/25 의장 "저장된 것을 쓰도록, 없을 때만 받으라고": 저장본에 있는 칸은 그 칸 마지막 날 3일 전부터만 받는다.
+#   10년치는 저장본에 그 칸이 아예 없을 때만(빈 날이 많다고 다시 받던 규칙은 지움 — 매일 10년치를 다시 받았음).
 def full(k):
-    """새로 더한 항목이거나 중간에 빈 날이 많으면(영업일의 85% 미만) 10년치를 다시 받아 메운다."""
-    if old is None or k not in old.columns:
-        return True
-    s = old[k].dropna()
-    return len(s) < 0.85 * len(pd.bdate_range(s.index.min(), s.index.max()))
+    return old is None or k not in old.columns or old[k].dropna().empty
+
+
+def since(k):
+    """그 칸을 받을 날 수."""
+    if full(k):
+        return 3650
+    import datetime as _dt
+    return max(5, (_dt.date.today() - old[k].dropna().index.max().date()).days + 3)
+
+
 cols, rep = {}, []
 for t in (L.get('미국') or {}):
-    d = kis.daily_us(t, days=3650 if full(t) else 400, pages=30 if full(t) else 5)
+    d = kis.daily_us(t, days=since(t), pages=30 if full(t) else 1)
     rep.append(f'{t} {len(d)}일' + (f' {d.index[0]:%Y-%m-%d}~{d.index[-1]:%Y-%m-%d}' if len(d) else ' 못 받음'))
     if len(d):
         cols[t] = d['Close']; cols[f'{t}_LOW'] = d['Low']
 for c, nm in (L.get('국내지수') or {}).items():
     k = {'1001': 'KOSDAQ', '0001': 'KOSPI'}.get(str(c), f'KRX{c}')
-    d = kis.daily_index_kr(str(c), days=3650 if full(k) else 400)
+    d = kis.daily_index_kr(str(c), days=since(k))
     rep.append(f'{k} {len(d)}일' + (f' {d.index[0]:%Y-%m-%d}~{d.index[-1]:%Y-%m-%d}' if len(d) else ' 못 받음'))
     if len(d):
         cols[k] = d['Close']; cols[f'{k}_LOW'] = d['Low']
 for c, nm in (L.get('해외지수') or {}).items():
-    d = kis.daily_index_us(str(c), days=3650 if full(str(c)) else 400)
+    d = kis.daily_index_us(str(c), days=since(str(c)))
     rep.append(f'{c} {len(d)}일' + (f' {d.index[0]:%Y-%m-%d}~{d.index[-1]:%Y-%m-%d}' if len(d) else ' 못 받음'))
     if len(d):
         cols[str(c)] = d['Close']; cols[f'{c}_LOW'] = d['Low']

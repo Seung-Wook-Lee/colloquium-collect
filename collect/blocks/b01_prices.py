@@ -1,9 +1,8 @@
 # ======================================================================
-# [블록 1] 야후 시세 — 스튜디오 톰앤수 100 일봉
-#   하는 일  : 100종목 일봉(시가·고가·저가·종가·수정종가·거래량)을 받는다.
-#              처음 실행은 5년치, 이후에는 최근 1개월만 받아 누적 파일에 이어 붙인다.
-#              배당·분할로 수정주가가 바뀐 종목과 새로 편입된 종목은 5년치를 다시 받는다.
-#   소스     : yfinance (키 없음, 비공식이라 묶음 10종목·간격 2초·재시도 3회)
+# [블록 1] 시세 — 유니버스 일봉(11/25 의장: 저장본 하나에 새 거래일만)
+#   하는 일  : 드라이브 1_data/가격10년_*(저장본)에 새 거래일만 덧붙이고(px_store.update), 그 저장본에서 5년치를 잘라
+#              00_가격이력.csv를 만든다. 5년치·1달치를 따로 다시 받던 것은 지움. 새 종목만 그 종목 과거치를 받는다.
+#   소스     : 드라이브 저장본. 새 거래일은 미국 야후, 한국 한투(07시엔 한국 새 장이 없어 한투 접속 없음)
 #   만드는 것: 수집데이터/00_누적/00_가격이력.csv (누적, 날짜 없는 파일)
 #              수집데이터/YYYYMMDD/YYYYMMDD_시세.csv (오늘 종가·등락률·거래량)
 #   쓰는 위원: 닉스 3여신(주봉·월봉은 이 일봉으로 계산), 포보스(지수)
@@ -12,65 +11,41 @@
 # ======================================================================
 HIST = f'{KEEP}/00_가격이력.csv'
 COLS = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Adj Close': '수정종가', 'Volume': '거래량'}
-CHUNK, PAUSE, RETRY = 10, 2.0, 3
-
-def _yf(tickers, period):
-    for n in range(RETRY + 1):
-        try:
-            d = yf.download(tickers, period=period, interval='1d', auto_adjust=False,
-                            group_by='ticker', threads=False, progress=False)
-            rows = []
-            for t in tickers:
-                if d is None or d.empty or t not in d.columns.get_level_values(0):
-                    continue
-                x = d[t].dropna(subset=['Close'])
-                if not x.empty:
-                    x = x[list(COLS)].rename(columns=COLS)
-                    x.insert(0, '티커', t)
-                    rows.append(x)
-            if not rows:
-                raise ValueError('받은 종목 없음')
-            out = pd.concat(rows).reset_index().rename(columns={'Date': '날짜'})
-            out['날짜'] = pd.to_datetime(out['날짜']).dt.tz_localize(None).dt.normalize()
-            return out
-        except Exception as e:
-            if n == RETRY:
-                print(f'  실패 {tickers[:3]}: {e}')
-                return pd.DataFrame()
-            time.sleep(5 * 3 ** n)
-
-def yf_fetch(tickers, period):
-    parts = []
-    for i in range(0, len(tickers), CHUNK):
-        parts.append(_yf(tickers[i:i + CHUNK], period))
-        time.sleep(PAUSE)
-    got = pd.concat([p for p in parts if not p.empty] or [pd.DataFrame(columns=['티커'])])
-    for t in [t for t in tickers if t not in set(got['티커'])]:   # 빠진 종목은 한 종목씩 한 번 더
-        time.sleep(PAUSE)
-        one = _yf([t], period)
-        if not one.empty:
-            got = pd.concat([got, one])
-    return got
 
 try:
-    first_run = not os.path.exists(HIST)
-    if first_run:
-        hist, refreshed = yf_fetch(TICKERS, '5y'), ['전체(첫 실행)']
-    else:
-        hist = pd.read_csv(HIST, parse_dates=['날짜'], dtype={'티커': str})
-        new = yf_fetch(TICKERS, '1mo')
-        # 배당·분할로 수정주가가 바뀐 종목과 새 편입 종목은 5년치를 다시 받는다
-        m = new.merge(hist[['날짜', '티커', '수정종가']], on=['날짜', '티커'], suffixes=('', '_old'))
-        changed = set(m.loc[(m['수정종가'] / m['수정종가_old'] - 1).abs() > 0.003, '티커'])
-        refreshed = sorted(changed | (set(TICKERS) - set(hist['티커'])))
-        if refreshed:
-            full = yf_fetch(refreshed, '5y')
-            hist = pd.concat([hist[~hist['티커'].isin(full['티커'].unique())], full])
-        hist = pd.concat([hist, new])
-    hist = (hist[hist['티커'].isin(TICKERS)].drop_duplicates(['날짜', '티커'], keep='last')
-            .sort_values(['티커', '날짜']))
+    # 11/25 의장 "블록과 회의프로그램 모두 저장된 것을 쓰도록, 하루 2번 업데이트하면 블록은 그걸 가지고 계산":
+    #   야후에서 5년치·1달치를 따로 받던 것을 지움. 가격 저장본은 드라이브 1_data/가격10년_* 하나(px_store.py).
+    #   07시엔 미국 전날 장만 새로 있어 미국만 덧붙이고(한투 접속 없음), 저녁 미장전 회의 준비 코드가 한국 오늘 장을 덧붙인다.
+    #   00_가격이력.csv(닉스·섹터·데스크 블록이 읽는 긴 표)는 이 저장본에서 잘라 만든다.
+    import sys as _s
+    _s.path.insert(0, os.path.abspath('data'))   # collect/run.py가 collect 폴더에서 돎 → collect/data(px_store·kis)
+    import px_store as PS
+    PXD = f'{DATA}/1_data_가격'
+    os.makedirs(PXD, exist_ok=True)
+    if not IN_COLAB:
+        for k in PS.F:
+            b_ = gdrive.get(f'{D_DATA}/1_data/{PS.name(k)}')
+            if b_:
+                open(f'{PXD}/{PS.name(k)}', 'wb').write(b_)
+    B0 = PS.load(PXD)
+    _msg = []
+    B = PS.update(B0, u, NOW.replace(tzinfo=None), log=_msg.append)
+    if not IN_COLAB and B is not B0:
+        for nm in PS.save(B, PXD):
+            gdrive.put(f'{D_DATA}/1_data/{nm}', open(f'{PXD}/{nm}', 'rb').read())
+        _msg.append('드라이브 1_data/가격10년 저장(새 날짜 덧붙임)')
+    cut = B['Close'].index.max() - pd.Timedelta(days=5 * 366)
+    long = []
+    for k, col in (('Open', '시가'), ('High', '고가'), ('Low', '저가'), ('Close', '종가'), ('Volume', '거래량')):
+        d = B[k][[t for t in TICKERS if t in B[k].columns]]
+        d = d[d.index >= cut].stack().rename(col)
+        long.append(d)
+    hist = pd.concat(long, axis=1).reset_index()
+    hist.columns = ['날짜', '티커'] + list(hist.columns[2:])
+    hist['수정종가'] = hist['종가']
+    hist = hist[['날짜', '티커', '시가', '고가', '저가', '종가', '수정종가', '거래량']].dropna(subset=['종가']).sort_values(['티커', '날짜'])
     hist.to_csv(HIST, index=False, encoding='utf-8-sig')
-
+    refreshed = _msg
     last2 = hist.groupby('티커').tail(2)
     snap = last2.groupby('티커').agg(기준일=('날짜', 'last'), 전일종가=('종가', 'first'),
                                     종가=('종가', 'last'), 거래량=('거래량', 'last')).reset_index()
@@ -85,7 +60,7 @@ try:
     miss = snap.loc[snap['종가'].isna(), '정식 종목명'].tolist()
     log(f'[1 야후 시세] {snap["종가"].notna().sum()}/{len(snap)}종목 | 기준일 ' +
         ', '.join(f'{k} {v}' for k, v in snap.groupby('시장')['기준일'].max().items()) +
-        f' | 빠짐: {", ".join(miss) or "없음"} | 5년치 재수신: {", ".join(refreshed) or "없음"}')
+        f' | 빠짐: {", ".join(miss) or "없음"} | 저장본: {" / ".join(refreshed) or "없음"}')
 except Exception as e:
     traceback.print_exc()
     log(f'[1 야후 시세] 실패: {type(e).__name__} {e}')

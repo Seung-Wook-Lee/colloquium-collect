@@ -2,7 +2,8 @@
 import os
 import pandas as pd, requests, yfinance as yf
 YF = {'SPX': '^GSPC', 'GOLD': 'GC=F', 'SILVER': 'SI=F', 'BTC': 'BTC-USD', 'TLT': 'TLT', 'VIX': '^VIX', 'VIX3M': '^VIX3M', 'NDX': '^NDX', 'QQQ': 'QQQ', 'RSP': 'RSP',
-      'SPYG': 'SPYG', 'BIL': 'BIL', 'IWF': 'IWF', 'IWD': 'IWD', 'NVDA': 'NVDA', 'MGK': 'MGK', 'COMPQ': '^IXIC', 'QLTA': 'QLTA'}   # 11/22 의장 변곡점 판(SPYG:BIL·IWF:IWD 일목, NVDA 앵커드 VWAP)   # 11/22 의장 B02 앵커드 VWAP(QQQ:RSP)
+      'SPYG': 'SPYG', 'BIL': 'BIL', 'IWF': 'IWF', 'IWD': 'IWD', 'NVDA': 'NVDA', 'MGK': 'MGK', 'COMPQ': '^IXIC', 'QLTA': 'QLTA',
+      'RUT': '^RUT', 'MOVE': '^MOVE', 'TNX': '^TNX', 'KS11': '^KS11', 'KQ11': '^KQ11', 'DJI': '^DJI', 'SOX': '^SOX'}   # 11/25 의장: 블록이 지수를 저장본에서만 읽도록(app/market/stored.py)   # 11/22 의장 변곡점 판(SPYG:BIL·IWF:IWD 일목, NVDA 앵커드 VWAP)   # 11/22 의장 B02 앵커드 VWAP(QQQ:RSP)
 # 11/25 의장 "드라이브에 다 저장해 놓으라고 했잖아. 오늘 가격만 받으면 되지": 저장본(in/시장위험.csv, 드라이브 전날 사본)이 있으면
 #   그 마지막 날 5일 전부터만 받아 덧붙인다(전체 기간은 저장본에 이미 있음). 저장본에 없는 칸만 원래대로 전체를 받는다.
 try:
@@ -17,7 +18,7 @@ cols = {}
 for k, t in YF.items():
     try:
         s0 = _s0(k)
-        h = yf.Ticker(t).history(start=str(s0), auto_adjust=True) if s0 else yf.Ticker(t).history(period='max' if k in ('NDX', 'QQQ', 'RSP', 'SPX', 'SPYG', 'BIL', 'IWF', 'IWD', 'NVDA', 'VIX', 'MGK', 'COMPQ', 'QLTA', 'VIX3M') else '2y', auto_adjust=True)   # 코폭은 월봉 10년 필요
+        h = yf.Ticker(t).history(start=str(s0), auto_adjust=True) if s0 else yf.Ticker(t).history(period='max' if k in ('NDX', 'QQQ', 'RSP', 'SPX', 'SPYG', 'BIL', 'IWF', 'IWD', 'NVDA', 'VIX', 'MGK', 'COMPQ', 'QLTA', 'VIX3M', 'RUT', 'MOVE', 'TNX', 'KS11', 'KQ11', 'DJI', 'SOX') else '2y', auto_adjust=True)   # 코폭은 월봉 10년 필요
         h.index = pd.to_datetime(h.index).tz_localize(None).normalize()
         cols[k] = h['Close']
         if k in ('QQQ', 'RSP', 'SPYG', 'BIL', 'IWF', 'IWD'):   # 11/22 변곡점 판: 비율 그림은 배당 안 고친 값(StockCharts와 같게)
