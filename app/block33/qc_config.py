@@ -1,5 +1,5 @@
 """비공개 설정 찾기(11/19 의장: 저장소는 공개, 블록 문턱·가중·종목 목록·최종 판단은 비공개).
-blocks.yaml·종목 목록(seed)·판단 코드(gen_port.py)는 비공개 저장소(team_q colloquium_private/)에 있고,
+blocks.yaml·종목 목록(seed)는 비공개 저장소(team_q colloquium_private/)에 있고,
 실행할 때 아래 순서로 찾는다. 공개 저장소에는 질문 이름만 적힌 blocks.sample.yaml만 있다.
   1) 환경 변수 QC_PRIVATE(폴더)  2) 이 저장소 옆의 ../team_q/colloquium_private  3) team_q_private/colloquium_private(워크플로)"""
 import os

@@ -201,26 +201,6 @@ def _save(b, p):
     return bool(b)
 
 
-def judge(W, S):
-    """11/19 의장: 스튜디오 톰앤수 판단 층. 엔진(블록33) 판정표 위에서 최종 포트폴리오를 정하는 코드는 비공개(colloquium_private/gen_port.py)."""
-    try:
-        p = os.path.join(QCC.private_dir(), 'gen_port.py')
-    except FileNotFoundError:
-        p = ''
-    if not os.path.exists(p):
-        log('[판단] 비공개 판단 코드 없음 → 건너뜀'); return {}
-    S.to_csv(f'{W}/out_판정표.csv', index=False, encoding='utf-8-sig')
-    for x in glob.glob(f'{W}/추천포트폴리오_Ver.*'):
-        os.remove(x)
-    r = subprocess.run([sys.executable, p], cwd=W, capture_output=True, text=True, timeout=600,
-                       env={**os.environ, 'PYTHONPATH': PYPATH, 'QC_PRIVATE': QCC.private_dir()})
-    if r.returncode != 0:
-        log('[판단] 실패: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:160]); return {}
-    out = {os.path.basename(x): open(x, 'rb').read() for x in glob.glob(f'{W}/추천포트폴리오_Ver.*')}
-    log(f'[판단] 추천 포트폴리오 {len(out)}개 파일')
-    return out
-
-
 def backtest(W, IN, use_drive, tday, B, S):
     """11/19 의장: 블록 성적표·조합 시험(block33/backtest.py). 금요일(성적표.요일)만. 지난 계산(블록점수이력.csv)은 드라이브에 이어 써서 새 날짜만 계산."""
     cache = f'{W}/블록점수이력.csv'
@@ -478,7 +458,6 @@ def main():
             log(f'[시장기록] 장부 {len(L1)}줄(새 {len(new)}줄)')
     except Exception as e:   # noqa: BLE001
         log(f'[시장기록] 실패: {str(e)[:160]}')
-    outs.update({(k if a.session == '국장전' else f'미장전_{k}'): v for k, v in judge(W, S).items()})
     for k, v in outs.items():
         open(f'{OUT}/{k}', 'wb').write(v)
     log(f'[원고] {len(sec)}칸, 오늘의 한 종목 {c.picks.get("센터", {}).get("종목") or "해당 없음"}')

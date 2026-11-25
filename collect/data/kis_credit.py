@@ -11,7 +11,8 @@ import drive  # noqa: E402
 import kis  # noqa: E402
 
 PATH = '콜로키움 수집데이터/1_data/신용잔고_일별.csv'
-U = pd.read_csv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'teamq', 'universe_20261120.csv'), dtype={'코드': str})
+_un = sorted(f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))   # 최신 유니버스(11/26 옛 팀Q 사본 지움)
+U = pd.read_csv(io.BytesIO(drive.get(f'콜로키움/포트폴리오/{_un[-1]}')), dtype={'코드': str}, encoding='utf-8-sig')
 codes = U[(U['시장'] == '한국') & (U['구분'] == '개별주')]['코드'].dropna().str.zfill(6).unique()
 old = None
 if drive.ready():

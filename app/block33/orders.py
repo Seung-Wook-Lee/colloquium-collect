@@ -1,4 +1,4 @@
-"""국면(B08, 구 B00)과 주문 한도(대장 이탈·확정 이벤트·수급 이동, 챗지 구 B27~B29)·분할·층별 바구니. 모든 수치는 blocks.yaml '국면'·'주문' 칸에서 읽는다.
+"""국면(B08, 구 B00)과 주문 한도(대장 이탈·확정 이벤트·수급 이동, 챗지 구 B27~B29). 모든 수치는 blocks.yaml '국면'·'주문' 칸에서 읽는다.
 11/17 의장 지시: 외부 AI 검토(챗지 B00·B27~B30, 제이미 C_rate·C_techvol·C_breadth 기록) 반영. 클로드 판단 없이 식으로만."""
 import numpy as np, pandas as pd
 import os as _os
@@ -195,52 +195,6 @@ def index_regime(d):
     return out
 
 
-def basket_dd(d, P):
-    """직전 추천 바구니 낙폭(Millennium): 추천장부 마지막 추천일 동일가중 수익률(절대값, %)."""
-    try:
-        L = pd.read_csv('/mnt/project-files/퀀트센터/추천기록/추천장부.csv', encoding='utf-8-sig')
-    except FileNotFoundError:
-        return None
-    if not len(L):
-        return None
-    last = L[L['추천일'] == L['추천일'].max()]
-    rs = [P[t].dropna().iloc[-1] / b - 1 for t, b in zip(last['티커'], last['기준가']) if t in P and P[t].notna().any() and b]
-    return None if not rs else round(float(np.mean(rs)) * 100, 2)
-
-
-def basket(C, f, BK, defmode, LR, dd):
-    """층별 비중 바구니. C = 거르기 끝난 추천 등급 후보(국내 상장), 순서 = 엔진 순서.
-    층비중(국면별) × 업종 상대강도 가감(AQR) → 방어 국면 AI 합산 상한 → 층 안은 60일 변동성 역수(Winton) → 주문승수 → 낙폭 한도(Millennium).
-    남는 비중은 현금. 1회차 주문 = 목표비중 ÷ 분할."""
-    W = dict(BK['층비중_방어' if defmode else '층비중_평상'])
-    adj = BK.get('업종RS_가감', 0)
-    for lay in W:
-        rk = LR.get(('한국', lay))
-        if rk:
-            third = max(1, rk[1] // 3)
-            W[lay] *= (1 + adj) if rk[0] <= third else ((1 - adj) if rk[0] > rk[1] - third else 1)
-    tot = sum(W.values()); W = {k: v / tot * 100 for k, v in W.items()}
-    if defmode:
-        ai = sum(W[k] for k in AI if k in W)
-        if ai > BK['AI한도_방어']:
-            for k in AI:
-                if k in W: W[k] *= BK['AI한도_방어'] / ai
-    rows = []
-    for lay, g in C.groupby('층', sort=False):
-        g = g.head(BK['층당최대'])
-        if lay not in W or not len(g):
-            continue
-        iv = 1 / g['vol60'].clip(lower=5)
-        for (_, r), w in zip(g.iterrows(), iv / iv.sum()):
-            tgt = W[lay] * w * r['주문승수'] * (BK['낙폭승수'] if dd is not None and dd <= BK['낙폭한도'] else 1)
-            rows.append(dict(종목=r['종목'], 층=lay, 목표비중=round(tgt, 1), 회차1=round(tgt / BK['분할'], 1),
-                             주문승수=r['주문승수'], 국면=r['국면'], 경보=r.get('경보', ''), 갈래=r.get('갈래', '')))
-    T = pd.DataFrame(rows)
-    cash = 100 - (T['목표비중'].sum() if len(T) else 0)
-    T = pd.concat([T, pd.DataFrame([dict(종목='현금(빈 층·주문 한도·AI 상한)', 층='-', 목표비중=round(cash, 1), 회차1=None)])], ignore_index=True)
-    return T, {k: round(v, 1) for k, v in W.items()}
-
-
 def relative(d, P, f):
     """시장 안 백분위(낮은 값 = 좋음: 변동성·꼬리손실·베타 하위, 고점 근접 상위)와 같은 시장 AI 묶음 대비 상대 수익률."""
     U = _u(d); r = P.pct_change(fill_method=None)
@@ -289,36 +243,3 @@ def advisors(d, NM):
                 h, n = hold.get(t, (0, 0)); hold[t] = (h + 1, n + int(new))
     avg = {mk: float(np.mean([c.get(mk, 0) for c in cw])) for mk in ('미국', '한국')} if cw else {}
     return hold, avg, sorted(latest.values())
-
-
-def country(m, f, P, adv_avg, CC):
-    """국가 비중 규칙: 기본 = 자문사 평균 국가 비중(없으면 50/50) → 근거 있을 때만 기울임. 각 나라 하한 유지. 이유 한 줄."""
-    base = dict(adv_avg) if adv_avg else {'미국': 50.0, '한국': 50.0}
-    why = [f"기본 자문사 평균 미국 {base['미국']:.0f}%·한국 {base['한국']:.0f}%" if adv_avg else '기본 50/50(자문사 자료 없음)']
-    us, kr = base['미국'], base['한국']
-    dus, dkr = m.get('DEF_미국', 0), m.get('DEF_한국', 0)
-    if dus != dkr:
-        s = CC['국면차_이동'] * (1 if dus else -1); us -= s; kr += s
-        why.append(f"B00 국면 차이({'미국' if dus else '한국'}만 방어) → {CC['국면차_이동']}%p 이동")
-    try:
-        I = PS.index(m.get('_d'), 735)
-        g = lambda k: I[k].dropna().iloc[-1] / I[k].dropna().iloc[-64] - 1
-        rs = (g('^GSPC') - g('^KS11')) * 100
-        if abs(rs) >= CC['지수RS_문턱']:
-            s = CC['지수RS_이동'] * (1 if rs > 0 else -1); us += s; kr -= s
-            why.append(f"3달 지수 상대강도 S&P−코스피 {rs:+.1f}%p → {'미국' if rs > 0 else '한국'} +{CC['지수RS_이동']}%p")
-    except Exception:
-        pass
-    k = f[(f['시장'] == '한국') & f['f5'].notna()] if 'f5' in f else pd.DataFrame()
-    if len(k):
-        fs = float(k['f5'].sum())
-        if fs <= CC['외국인5일_문턱']:
-            us += CC['외국인_이동']; kr -= CC['외국인_이동']
-            why.append(f"한국 외국인 5일 합계 {fs:,.0f}억 → 한국 −{CC['외국인_이동']}%p")
-        elif fs >= -CC['외국인5일_문턱']:
-            us -= CC['외국인_이동']; kr += CC['외국인_이동']
-            why.append(f"한국 외국인 5일 합계 +{fs:,.0f}억 → 한국 +{CC['외국인_이동']}%p")
-    lo = CC['하한']
-    kr = min(max(kr, lo), 100 - lo); us = 100 - kr
-    why.append(f"하한 각 {lo}% → 미국 {us:.0f}%·한국 {kr:.0f}%")
-    return {'미국': us, '한국': kr}, ' / '.join(why)

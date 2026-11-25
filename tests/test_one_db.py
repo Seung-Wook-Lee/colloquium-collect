@@ -33,8 +33,6 @@ def test_meeting_and_blocks_do_not_download():
 def test_no_price_copies():
     bad = []
     for p in _py([R / 'app', R / 'collect' / 'blocks', R / 'collect' / 'data']):
-        if p.name in ('rename_citadel_1125.py',):
-            continue
         for i, ln in enumerate(p.read_text(encoding='utf-8').splitlines(), 1):
             if COPY.search(ln) and not ln.lstrip().startswith('#'):
                 bad.append(f'{p.relative_to(R)}:{i}')
@@ -42,10 +40,20 @@ def test_no_price_copies():
 
 
 def test_removed_fetchers_stay_removed():
-    for f in ('collect/data/fetch_px.py', 'collect/data/fetch_long.py', 'collect/data/fetch_per3.py', 'collect/blocks/b09_kisstore.py', 'collect/blocks/b09_heatmap.py', 'collect/heatmap.py', 'app/meeting/store_first.py'):
+    for f in ('collect/data/fetch_px.py', 'collect/data/fetch_long.py', 'collect/data/fetch_per3.py', 'collect/blocks/b09_kisstore.py', 'collect/blocks/b09_heatmap.py', 'collect/heatmap.py', 'app/meeting/store_first.py', 'collect/data/px_trim.py', 'collect/data/rename_citadel_1125.py'):
         assert not (R / f).exists(), f
     d = (R / 'app' / 'meeting' / 'daily.py').read_text(encoding='utf-8')
     assert 'FETCH = [' not in d and 'def fetch(' not in d and 'TEAMQ_DIR' not in d
     for w in ('meeting.yml', 'start.yml'):
         y = (R / '.github' / 'workflows' / w).read_text(encoding='utf-8')
         assert 'research/daily' not in y and 'TEAMQ_DIR' not in y and 'KIS_APP_KEY' not in y
+
+
+def test_cleanup_1126_stays_removed():
+    """11/26 의장: 끝난 일회용 실행·안 쓰는 코드 폴더·블록33 포트폴리오 규칙 삭제(포트폴리오는 따로 저장소)."""
+    for f in ('collect/teamq', 'collect/research', 'tools', 'app/portfolio',
+              '.github/workflows/px_trim.yml', '.github/workflows/rename_citadel.yml', '.github/workflows/teamq.yml',
+              '.github/workflows/fetch_history.yml', '.github/workflows/fetch_risk.yml', '.github/workflows/kis_probe.yml',
+              '.github/workflows/check_private.yml', '.github/workflows/research.yml', '.github/workflows/portfolio.yml'):
+        assert not (R / f).exists(), f
+    assert 'gen_port' not in (R / 'app' / 'meeting' / 'daily.py').read_text(encoding='utf-8')
