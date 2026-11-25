@@ -1025,11 +1025,11 @@ def _limits(c):
 
 
 def _accuracy(c):
-    """⑥ 블록 정확도(블록성적.csv, 매주 금요일 backtest.py가 블록점수이력 2017-12~로 계산): 블록 점수와 N주 뒤 수익의 순위 상관(IC) 평균."""
+    """⑥ 블록 정확도(backtest.py가 매 회의 10년치 데이터베이스 블록 점수 칸(2017-12~)으로 계산): 블록 점수와 N주 뒤 수익의 순위 상관(IC) 평균."""
     R = c.R.get('뚜지') or {}
     A = _read(c.d, '블록성적')
     if not len(A) or 'IC평균' not in A:
-        return [L('블록 정확도', '자료 없음', '블록성적.csv 없음(금요일 성적표 계산 뒤부터 매일 나옴)')], []
+        return [L('블록 정확도', '자료 없음', '블록성적.csv 없음(성적표 계산 실패)')], []
     hz = R.get('IC_기간', '26주')
     X = A[A['기간'].astype(str) == hz].copy()
     X['IC평균'] = pd.to_numeric(X['IC평균'], errors='coerce')
@@ -1043,7 +1043,7 @@ def _accuracy(c):
     rows = [[str(r['블록']), str(r['질문']), str(r.get('국면', '')), f"{r['IC평균']:+.3f}", n(r.get('IC_t'), 2), n(r.get('예_승률'), 1, '%'), n(r.get('아니오_승률'), 1, '%'), str(r.get('날짜수', ''))]
             for _, r in X.iterrows()]
     return out, [{'type': 'grid', 'title': f'블록 정확도 — {hz} 뒤 수익과의 순위 상관(IC)', 'columns': ['블록', '질문', '국면', 'IC 평균', 'IC t값', '예 승률', '아니오 승률', '주 수'],
-                  'rows': rows, 'source': '블록성적.csv(backtest.py, 블록점수이력 2017-12~)'}]
+                  'rows': rows, 'source': '블록성적.csv(backtest.py, 10년치 데이터베이스 블록 점수 2017-12~)'}]
 
 
 def ttuji(c):
