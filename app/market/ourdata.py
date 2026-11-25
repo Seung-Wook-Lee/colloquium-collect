@@ -6,10 +6,10 @@
  3. 의장이 허락하면 app/market/외부자료_허락.yaml에 날짜·지시와 함께 적고, 그 스크립트만 외부에서 받는다.
 
 우리 자료(읽는 순서)
- - 시장위험_장기.csv : fetch_risk.yml이 매일 쌓는 장기 일봉(SPX·NDX·GOLD(금 선물 GC=F)·SILVER·BTC·TLT·IEF·SHY·LQD·QQQ·RSP·VIX…·FRED 금리)
+ - 가격10년_시장지표.csv.gz : 저장본 칸(옛 시장위험_장기.csv 등 5개를 합침), 장기 일봉(SPX·NDX·GOLD(금 선물 GC=F)·SILVER·BTC·TLT·IEF·SHY·LQD·QQQ·RSP·VIX…·FRED 금리)
  - 가격10년_지수장기.csv.gz : ^GSPC·^NDX·^KS11(코스피) 종가
  - 가격10년_종가.csv.gz : 유니버스 종목·ETF 2016~ 종가(START_DIR에 있을 때)
- - 추가자료_종가.csv : 위에 없는 것을 한투에서 받아 둔 것(kis_extra.yml, 드라이브 1_data). 목록 collect/data/추가자료_목록.yaml
+ - 가격10년_추가종가.csv.gz : 저장본 칸(옛 추가자료_종가), 위에 없는 것을 한투에서 받아 둔 것(kis_extra.yml, 드라이브 1_data). 목록 collect/data/추가자료_목록.yaml
 """
 import os
 from pathlib import Path
@@ -38,7 +38,7 @@ _cache = {}
 
 def _risk():
     if 'risk' not in _cache:
-        p = _find('시장위험_장기.csv')
+        p = _find('가격10년_시장지표.csv.gz') or _find('시장위험_장기.csv')   # 저장본 칸, 없으면 옛 파일
         _cache['risk'] = pd.read_csv(p, index_col=0, parse_dates=True) if p else pd.DataFrame()
     return _cache['risk']
 
@@ -63,7 +63,7 @@ def _px10():
 
 def _extra():
     if 'ex' not in _cache:
-        p = _find('추가자료_종가.csv') or _find('추가자료_종가.csv.gz')
+        p = _find('가격10년_추가종가.csv.gz') or _find('추가자료_종가.csv.gz')   # 저장본 칸, 없으면 옛 압축본
         _cache['ex'] = pd.read_csv(p, index_col=0, parse_dates=True, encoding='utf-8-sig') if p else pd.DataFrame()
     return _cache['ex']
 
@@ -71,7 +71,7 @@ def _extra():
 def where(name):
     """그 이름이 우리 자료 어디에 있는지(파일, 칸). 없으면 None."""
     k = ALIAS.get(name, name)
-    for fname, df in (('시장위험_장기.csv', _risk()), ('가격10년_지수장기.csv.gz', _index()), ('가격10년_종가.csv.gz', _px10()), ('추가자료_종가.csv', _extra())):
+    for fname, df in (('가격10년_시장지표.csv.gz', _risk()), ('가격10년_지수장기.csv.gz', _index()), ('가격10년_종가.csv.gz', _px10()), ('가격10년_추가종가.csv.gz', _extra())):
         if k in df.columns and df[k].notna().any():
             return fname, k
     return None
@@ -85,7 +85,7 @@ def get(*names, low=False):
         if w is None:
             miss.append(n); continue
         fname, k = w
-        df = {'시장위험_장기.csv': _risk(), '가격10년_지수장기.csv.gz': _index(), '가격10년_종가.csv.gz': _px10(), '추가자료_종가.csv': _extra()}[fname]
+        df = {'가격10년_시장지표.csv.gz': _risk(), '가격10년_지수장기.csv.gz': _index(), '가격10년_종가.csv.gz': _px10(), '가격10년_추가종가.csv.gz': _extra()}[fname]
         col = f'{k}_LOW' if low and f'{k}_LOW' in df.columns else k
         out[n] = df[col].dropna()
     if miss:

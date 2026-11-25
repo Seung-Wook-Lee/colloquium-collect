@@ -1,8 +1,9 @@
 """시장 블록(B01~B10) 과거 값을 GitHub Actions에서 만들고 드라이브에 보관 (11/24 의장 "자료들은 드라이브에 체계적으로 보관").
-1) 우리 수집 코드로 긴 자료를 받음: collect/data/fetch_risk.py(시장위험_장기·공포탐욕·지정학위험), fetch_cpce.py(CPCE), ccc_history.py(하이일드)
+1) 우리 수집 코드로 긴 자료를 받음: collect/data/fetch_risk.py(시장 지표 장기 일봉·공포탐욕·지정학위험), fetch_cpce.py(CPCE), ccc_history.py(하이일드)
 2) 드라이브 1_data 가격10년_종가·가격10년_지수장기, 00_퀀트입력 유니버스 → hist_market.py
-3) 받은 자료와 결과를 드라이브 '콜로키움 수집데이터/1_data/장기/'에, 시장블록이력.csv는 00_퀀트입력에도 올림."""
-import os, shutil, subprocess, sys
+3) 받은 자료와 결과를 드라이브 10년치 저장본 칸으로 올림(11/26 의장 "10년치 저장본 밖에 따로 있는 과거 자료들을 저장본에 합치시오"):
+   시장 지표 5개 → 1_data/가격10년_시장지표.csv.gz 한 칸(PS.market), 결과 → 1_data/가격10년_시장블록.csv.gz. 옛 파일은 휴지통."""
+import os, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path[:0] = [os.path.join(REPO, 'collect')]
 import drive  # noqa: E402
@@ -32,14 +33,7 @@ nbim()
 for s in ('fetch_risk.py', 'fetch_cpce.py', 'ccc_history.py'):
     r = subprocess.run([sys.executable, f'collect/data/{s}'], cwd=REPO, capture_output=True, text=True, timeout=3000)
     print(f'[{s}]', r.returncode, (r.stdout + r.stderr).strip()[-600:])
-for src, dst in (('history/시장위험_장기.csv', '시장위험_장기.csv'), ('history/공포탐욕_이력.csv', '공포탐욕_이력.csv'), ('history/지정학위험_이력.csv', '지정학위험_이력.csv'),
-                 ('history/CPCE.csv', 'CPCE.csv'), ('history/신용스프레드_이력.csv', '신용스프레드_이력.csv')):
-    p = os.path.join(REPO, src)
-    if os.path.exists(p):
-        shutil.copy(p, f'{W}/{dst}'); drive.put(f'{D}/1_data/장기/{dst}', open(p, 'rb').read()); print('드라이브 올림', dst)
-    else:
-        b = drive.get(f'{D}/1_data/장기/{dst}')   # 이번에 못 받으면 지난번 보관본
-        if b: open(f'{W}/{dst}', 'wb').write(b); print('지난 보관본 사용', dst)
+PS.market(drive, os.path.join(REPO, 'history'), W)   # 새로 받은 것 > 저장본 칸 > 옛 파일, 옛 파일 5개 휴지통
 for src, dst in ((f'{D}/1_data/가격10년_종가.csv.gz', '가격10년_종가.csv.gz'), (f'{D}/1_data/{PS.name("지수장기")}', PS.name('지수장기')),
                  ('콜로키움/포트폴리오/' + max((f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv')), default='없음'), '유니버스.csv')):   # 회의 원고(daily.pull_univ)와 같은 최신 유니버스
     b = drive.get(src)
@@ -64,6 +58,9 @@ y = os.path.join(os.environ.get('QC_PRIVATE', ''), 'blocks.yaml')
 r = subprocess.run([sys.executable, '-W', 'ignore', f'{HERE}/hist_market.py', W, y], capture_output=True, text=True, timeout=5000)
 print(r.stdout[-3000:], r.stderr[-2000:])
 if r.returncode == 0:
-    b = open(f'{W}/시장블록이력.csv', 'rb').read()
-    drive.put(f'{D}/1_data/장기/시장블록이력.csv', b); drive.put(f'{D}/00_퀀트입력/시장블록이력.csv', b); print('드라이브 올림 시장블록이력.csv')
+    put_db('시장블록', f'{W}/{PS.name("시장블록")}')
+    if drive.get(f'{D}/1_data/{PS.name("시장블록")}'):   # 올라간 것 확인 뒤 옛 자리 2곳 휴지통
+        for o in ('1_data/장기/시장블록이력.csv', '00_퀀트입력/시장블록이력.csv'):   # 옛 이름
+            if drive.trash(f'{D}/{o}'):
+                print('[저장본] 옛', o, '휴지통')
 sys.exit(r.returncode)
