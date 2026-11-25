@@ -127,6 +127,8 @@ else:
 u = u[u['yfinance 티커'].notna()].copy()
 u['yfinance 티커'] = u['yfinance 티커'].astype(str).str.strip()
 u['코드'] = u['코드'].astype(str).str.strip()
+import layers   # 11/25 새 층(U0~U7·K0~K5) → 분석 묶음(S0~S6), collect/layers.py
+u = layers.apply(u)
 TICKERS = u['yfinance 티커'].tolist()
 log(f'[유니버스] {nfc(os.path.basename(UNIV_FILE))} → {len(u)}종목')
 

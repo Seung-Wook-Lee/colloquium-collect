@@ -136,13 +136,15 @@ def pull_advisors(IN, use_drive):
 
 
 def _dedup_univ(fp):
-    """11/23: 같은 티커가 두 번호로 두 줄이면(예: G41·G177 SPYM) 가격표 칸이 겹쳐 3-30이 멈추고 '번호 중복'이 남 → 앞 번호 한 줄만 쓴다(드라이브 원본은 그대로)."""
+    """11/23: 같은 티커가 두 번호로 두 줄이면(예: U0-1·U0-1 SPYM) 가격표 칸이 겹쳐 3-30이 멈추고 '번호 중복'이 남 → 앞 번호 한 줄만 쓴다(드라이브 원본은 그대로)."""
     U = pd.read_csv(fp, dtype=str, encoding='utf-8-sig')
     t = U['yfinance 티커']
     dup = t.notna() & t.duplicated(keep='first')
     if dup.any():
         log('[받기] 유니버스 같은 티커 두 줄 → 뒤 번호 뺌: ' + ', '.join(f"{n}({k})" for n, k in zip(U.loc[dup, '번호'], t[dup])))
-        U.loc[~dup].to_csv(fp, index=False, encoding='utf-8-sig')
+        U = U.loc[~dup]
+    import layers   # 11/25 새 층(U0~U7·K0~K5) → 분석 묶음(S0~S6) 규칙은 collect/layers.py 한 곳
+    layers.apply(U).to_csv(fp, index=False, encoding='utf-8-sig')
 
 
 def pull_univ(IN):
