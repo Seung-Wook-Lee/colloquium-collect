@@ -7,12 +7,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import drive  # noqa: E402
 
 D = '콜로키움 수집데이터'
-top = drive._call({'action': 'list', 'path': D})
-folders = [D] + [f"{D}/{x['name']}" for x in top.get('folders', [])]
+import datetime as dt
+import unicodedata
+days = [(dt.date(2026, 11, 7) + dt.timedelta(days=i)).strftime('%Y%m%d') for i in range((dt.date.today() - dt.date(2026, 11, 7)).days + 1)]
+folders = [D, f'{D}/00_누적', f'{D}/1_data', f'{D}/1_data/장기', f'{D}/미스터역도산'] + [f'{D}/{d}' for d in days]
 done = []
 for fd in folders:
+    print('폴더', fd, flush=True)
     for f in drive.ls(fd):
-        n = f['name']
+        n = unicodedata.normalize('NFC', f['name'])
         if '역도산' not in n:
             continue
         new = n.replace('역도산', '시타델')
