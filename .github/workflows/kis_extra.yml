@@ -1,8 +1,7 @@
 name: 한투 추가 자료(우리 자료에 없는 것)
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '30 22 * * 0-4'   # 평일 07:30 KST(미국 장 마감 뒤)
+# 11/25 의장: 07:30 예약은 없앰 — 저녁 8시 수집(kr_evening.yml)이 한투 접속 1번으로 같이 받는다. 손으로 돌릴 때만.
 jobs:
   fetch:
     runs-on: ubuntu-latest

@@ -8,7 +8,7 @@ on:
         required: false
         default: ''
   schedule:                   # 매일 아침 7시(한국) 자동 실행 — 8시 프리장 전에 끝나도록 (2026-10-28 의장 결정)
-    - cron: '0 22 * * 0-4'    # 11/21 의장: 주말 쉼(UTC 일~목 = 한국 월~금 아침)      # UTC 22:00 = 한국 07:00 (GitHub 사정으로 몇 분~수십 분 늦을 수 있음)
+    - cron: '0 23 * * 0-4'    # 11/25 의장 "자료 수집을 아침 8시, 저녁 8시로": 아침 8시 = 미국 자료(한투 접속 없음). 한국은 kr_evening.yml(저녁 8시)    # 11/21 의장: 주말 쉼(UTC 일~목 = 한국 월~금 아침)      # UTC 22:00 = 한국 07:00 (GitHub 사정으로 몇 분~수십 분 늦을 수 있음)
 
 concurrency: collect          # 두 번 겹쳐 돌지 않게
 
@@ -34,6 +34,7 @@ jobs:
       - name: 자료 수집
         env:
           TZ: Asia/Seoul
+          KIS_OFF: '1'                # 11/25 의장: 아침엔 한투 접속 안 함(한국 자료는 저녁 8시)
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
           FRED_KEY: ${{ secrets.FRED_KEY }}

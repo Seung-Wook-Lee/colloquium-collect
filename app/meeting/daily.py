@@ -65,6 +65,9 @@ def drive_ok():
         return False
 
 
+KR_EVENING = {'ETF겹침_반도체', 'ETF구성', 'ETF자금', 'ETF카드', '국내수급', '역도산'}   # 저녁 8시 한국 수집(한투)이 만드는 날짜 파일
+
+
 def pull_day(today, IN):
     import drive
     day = f'{D_DATA}/{today}'
@@ -80,7 +83,30 @@ def pull_day(today, IN):
             continue
         open(f'{IN}/{RENAME.get(base, base)}{ext}', 'wb').write(data)
         got += 1
-    log(f'[받기] 07시 파일 {got}개 ({day})')
+    log(f'[받기] 아침 수집 파일 {got}개 ({day})')
+    # 11/25 의장 "아침 8시 미국, 저녁 8시 한국": 한국(한투) 자료는 전날 저녁 8시 수집이 전날 날짜 폴더에 둔다 → 오늘 폴더에 없는 것만 거기서
+    import datetime as _dt
+    have = {n for n in os.listdir(IN)}
+    d0 = _dt.datetime.strptime(today, '%Y%m%d').date()
+    for back in range(1, 5):
+        prev = (d0 - _dt.timedelta(days=back)).strftime('%Y%m%d')
+        pf = drive.ls(f'{D_DATA}/{prev}')
+        if not pf:
+            continue
+        n_prev = 0
+        for f in pf:
+            name = f['name']
+            base, ext = os.path.splitext(name[len(prev) + 1:])
+            if not name.startswith(f'{prev}_') or base not in KR_EVENING:
+                continue
+            if f'{RENAME.get(base, base)}{ext}' in have:
+                continue
+            data = drive.get(f'{D_DATA}/{prev}/{name}')
+            if data:
+                open(f'{IN}/{RENAME.get(base, base)}{ext}', 'wb').write(data)
+                n_prev += 1
+        log(f'[받기] 오늘 폴더에 없는 {n_prev}개는 {prev} 폴더(전날 저녁 한국 수집)에서')
+        break
     return got
 
 

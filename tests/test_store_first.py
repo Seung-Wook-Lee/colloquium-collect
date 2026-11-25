@@ -137,3 +137,31 @@ def test_keep_drops_tickers_not_in_universe():
     assert all(list(d.columns) == ['AAPL', '^GSPC'] for d in B2.values())
     B3, drop3 = PS.keep(B2, ['AAPL'])
     assert drop3 == [] and B3 is B2
+
+
+def test_kis_once_in_evening():
+    """11/25 의장 "자료 수집을 아침 8시, 저녁 8시로": 한투 접속은 저녁 8시 한국 수집 1번뿐."""
+    W = R / '.github' / 'workflows'
+    col = (W / 'collect.yml').read_text(encoding='utf-8')
+    assert "cron: '0 23 * * 0-4'" in col and "KIS_OFF: '1'" in col
+    ev = (W / 'kr_evening.yml').read_text(encoding='utf-8')
+    assert "cron: '0 11 * * 1-5'" in ev and 'KIS_TOKEN_FILE' in ev
+    for s in ('kis_extra.py', 'kis_credit.py', 'hist_kflow.py', 'b02_kis'):
+        assert s in ev
+    assert 'schedule' not in (W / 'kis_extra.yml').read_text(encoding='utf-8')
+    mt = (W / 'meeting.yml').read_text(encoding='utf-8')
+    assert 'schedule' not in mt and 'KIS_APP_KEY' not in mt and "KIS_OFF: '1'" in mt
+    assert '저녁 8시 한국 자료 수집' in mt
+
+
+def test_px_update_skips_korea_when_kis_off(monkeypatch):
+    import pandas as pd
+    import px_store as PS
+    monkeypatch.setenv('KIS_OFF', '1')
+    i = pd.date_range('2026-11-20', '2026-11-25', freq='B')
+    B = {k: pd.DataFrame({'AAPL': 1.0, '005930.KS': 1.0}, index=i) for k in PS.F}
+    U = pd.DataFrame({'yfinance 티커': ['AAPL', '005930.KS', '000660.KS'], '시장': ['미국', '한국', '한국']})
+    msg = []
+    import datetime as dt
+    out = PS.update(B, U, dt.datetime(2026, 11, 26, 8, 0), log=msg.append)
+    assert out is B and any('한국: 아침엔 받지 않음' in m for m in msg)

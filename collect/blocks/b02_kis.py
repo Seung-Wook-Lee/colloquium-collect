@@ -20,12 +20,25 @@ EXCD = {'NASDAQ': 'NAS', 'NYSE': 'NYS', 'NYSE American': 'AMS', 'NYSE Arca': 'AM
         'Cboe BZX': 'AMS', 'TSE 프라임': 'TSE'}
 
 def kis_token():
-    # 토큰은 24시간 유효, 1분에 1회만 발급 가능. 런타임 안에서만 들고 있고 파일로 저장하지 않는다.
+    # 토큰은 24시간 유효, 1분에 1회만 발급 가능. 11/25 의장 "07시 조회 때 0730 것까지 한꺼번에": 같은 실행 안 스크립트들이
+    # 토큰 하나를 같이 쓰도록 러너 임시 파일(KIS_TOKEN_FILE)에만 둔다(실행이 끝나면 사라짐).
+    import json as _j, time as _t
+    _f = os.environ.get('KIS_TOKEN_FILE', '')
+    if _f and os.path.exists(_f):
+        try:
+            _x = _j.load(open(_f))
+            if _t.time() - _x['t'] < 20 * 3600:
+                return _x['v']
+        except Exception:
+            pass
     r = requests.post(f'{BASE}/oauth2/tokenP', timeout=10, json={
         'grant_type': 'client_credentials', 'appkey': SEC['KIS_APP_KEY'], 'appsecret': SEC['KIS_APP_SECRET']})
     tok = r.json().get('access_token')
     if not tok:
         raise RuntimeError(f"토큰 발급 실패 {r.json().get('error_code')} {r.json().get('error_description')}")
+    if _f:
+        _j.dump({'v': tok, 't': _t.time()}, open(_f, 'w'))
+        os.chmod(_f, 0o600)
     return tok
 
 def kis_get(path, tr_id, params, retry=2):
@@ -64,7 +77,25 @@ def yahoo_info(rows_u):
 
 
 val, kis_err = None, None
+def _evening_val():
+    """11/25 의장 "아침 8시 미국, 저녁 8시 한국": 아침엔 한투에 접속하지 않고 전날 저녁 8시 수집의 한투 밸류에이션을 쓴다."""
+    for _d in range(1, 6):
+        _day = (NOW - dt.timedelta(days=_d)).strftime('%Y%m%d')
+        try:
+            _b = gdrive.get(f'{D_DATA}/{_day}/{_day}_밸류에이션.csv')
+        except Exception:
+            _b = None
+        if _b:
+            _v = pd.read_csv(io.BytesIO(_b), dtype={'코드': str}, encoding='utf-8-sig')
+            if _v['출처'].astype(str).str.contains('한국투자증권').any():
+                return _v, _day
+    return None, None
+
+
+KIS_OFF = os.environ.get('KIS_OFF') == '1'
 try:
+    if KIS_OFF:
+        raise RuntimeError('아침 수집: 한투 접속 안 함(저녁 8시 수집이 받음)')
     if not (SEC.get('KIS_APP_KEY') and SEC.get('KIS_APP_SECRET')):
         raise RuntimeError('한투 키 없음')
     if 'TOKEN' not in globals() or not TOKEN:
@@ -117,6 +148,17 @@ try:
                          '수신': '성공' if i else '실패'})
         val = pd.DataFrame(rows)
         val['출처'] = '야후 (한투 실패로 대체)'
+        if KIS_OFF:   # 한국 종목은 전날 저녁 8시 한투 값(한국 장은 그 뒤로 열리지 않음), 미국은 야후 최신
+            _ev, _evd = _evening_val()
+            if _ev is not None:
+                _ev = _ev[_ev['시장'] == '한국'].set_index('번호')
+                _kr = val['번호'].isin(_ev.index)
+                for _c in [c for c in _ev.columns if c in val.columns or c in ('외국인 소진율(%)',)]:
+                    if _c in ('번호', '선행 PER(야후)', '선행 EPS(야후)', '수집시각(KST)'):
+                        continue
+                    val.loc[_kr, _c] = val.loc[_kr, '번호'].map(_ev[_c])
+                val.loc[_kr, '출처'] = f'한국투자증권 KIS ({_evd} 저녁 8시)'
+                kis_err = f'아침: 한투 접속 안 함, 한국 {int(_kr.sum())}종목은 {_evd} 저녁 한투 값'
     val['선행 PER(야후)'] = val['번호'].map(lambda n: round(info[n]['forwardPE'], 2)
                                            if info.get(n, {}).get('forwardPE') else None)
     val['선행 EPS(야후)'] = val['번호'].map(lambda n: info.get(n, {}).get('forwardEps'))

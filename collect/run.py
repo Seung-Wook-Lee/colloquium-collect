@@ -11,11 +11,17 @@ sys.path.insert(0, os.getcwd())
 only = {int(a) for a in sys.argv[1:] if a.isdigit()}
 names = [a for a in sys.argv[1:] if not a.isdigit()]
 G = {'__name__': '__colloquium__', 'ONLY': sorted(only) or ([-1] if names else []), 'ONLY_NAMES': names}   # 이름 실행도 시험 실행으로 본다
+# 11/25 의장 "아침 8시 미국 자료, 저녁 8시 한국 자료": 한투 접속 블록은 저녁 8시 수집(kr_evening.yml)에서만 돈다.
+#   b02(밸류에이션)는 아침에도 돌되 한투 대신 전날 저녁 한투 값 + 야후(미국) — b02_kis.py KIS_OFF.
+KIS_BLOCKS = {'b09_kisstore', 'b09_flow', 'b09_yeokdosan', 'b09_zetfcard', 'b09_etfpdf'}
 for path in sorted(glob.glob('blocks/b[0-9][0-9]_*.py')):
     no = int(re.search(r'b(\d\d)_', path).group(1))
     if names and not (no in {0, 2, 11} or any(n in os.path.basename(path) for n in names)):
         continue
     if only and not names and no not in only | {0, 11}:
+        continue
+    if os.environ.get('KIS_OFF') == '1' and os.path.basename(path)[:-3] in KIS_BLOCKS:
+        print(f'\n===== {os.path.basename(path)} — 아침엔 한투 접속 안 함(저녁 8시 수집이 받음) =====', flush=True)
         continue
     print(f'\n===== {os.path.basename(path)} =====', flush=True)
     try:

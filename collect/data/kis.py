@@ -15,7 +15,20 @@ def ready():
     return bool(os.environ.get('KIS_APP_KEY') and os.environ.get('KIS_APP_SECRET'))
 
 
+def _tok_file():
+    """11/25 의장 "07시 조회 때 0730 것까지 한꺼번에": 같은 실행(job) 안 여러 스크립트가 토큰 하나를 같이 씀.
+    파일은 러너 임시 폴더(KIS_TOKEN_FILE)에만, 실행이 끝나면 사라짐(드라이브·저장소에 남기지 않음)."""
+    return os.environ.get('KIS_TOKEN_FILE', '')
+
+
 def _token():
+    if 'v' not in _TOK and _tok_file() and os.path.exists(_tok_file()):
+        try:
+            j = __import__('json').load(open(_tok_file()))
+            if time.time() - j['t'] < 20 * 3600:
+                _TOK['v'] = j['v']
+        except Exception:   # noqa: BLE001
+            pass
     if 'v' not in _TOK:
         for n in range(3):   # 토큰은 1분에 1번만 발급 → 앞 스크립트가 막 받았으면 61초 기다렸다 다시
             r = requests.post(f'{BASE}/oauth2/tokenP', timeout=10, json={
@@ -27,6 +40,9 @@ def _token():
         if not r.get('access_token'):
             raise RuntimeError(f"한투 토큰 실패 {r.get('error_code')} {r.get('error_description')}")
         _TOK['v'] = r['access_token']
+        if _tok_file():
+            __import__('json').dump({'v': _TOK['v'], 't': time.time()}, open(_tok_file(), 'w'))
+            os.chmod(_tok_file(), 0o600)
     return _TOK['v']
 
 
