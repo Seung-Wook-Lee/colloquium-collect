@@ -5,23 +5,23 @@
 
 규칙
 1. 계산은 드라이브 저장본(00_퀀트입력, 전날 사본)으로 한다.
-2. 가격 자료(가격2년·지수2년·시장위험): 저장본 마지막 날 뒤의 값만 받아 덧붙인다(fetch_px.py·fetch_risk_daily.py·daily.py 지수).
-   2년(또는 전체)은 저장본에 없는 종목·칸만 받는다.
+2. 가격(10년치 데이터베이스 가격10년_*, px_store.py)·시장위험: 저장본 마지막 날 뒤의 값만 받아 덧붙인다.
+   과거 전체는 저장본에 없는 종목·칸만 받는다.
 3. 재무·13F·공매도(SLOW): 저장본에 없는 것이 생겼을 때만 다시 받는다. '없는 것'은 아래뿐이다.
    - 저장본 파일이 없음
    - 유니버스에 있는데 저장본에 없는 종목(새 종목)
-   - 저장본을 받은 날 뒤에 나온 새 실적 공시(07시 DART·SEC 파일의 공시일) → 분기·연매출·재무건전성·FZ·PER 3년
+   - 저장본을 받은 날 뒤에 나온 새 실적 공시(07시 DART·SEC 파일의 공시일) → 분기·연매출·재무건전성·FZ
    - 저장본을 받은 날 뒤에 지난 13F 제출 마감일(2/14·5/15·8/14·11/14) → 장기펀드13F
    - 저장본을 받은 날 뒤에 지난 공매도 잔고 기준일(매월 15일·말일) → 공매도
-4. PER3년의 오늘 PER(per_now)은 저장본 PER × (오늘 종가 ÷ 저장본 받은 날 종가)로 매일 맞춘다(주가만 바뀌므로).
+4. 받는 곳은 아침 8시·저녁 8시 수집(supplement.py) 두 곳뿐이다. 회의 코드·블록33은 드라이브만 읽는다(11/26 의장 "따로 받는 코드는 전부 싹 다 지워").
 tests/test_store_first.py가 이 규칙을 어기는 코드를 막는다."""
 import datetime as dt
 import os
 
 import pandas as pd
 
-SLOW = {'분기원자료.csv', '분기실적.csv', '재무건전성.csv', '연매출.csv', 'FZ점수.csv', 'PER3년.csv', '장기펀드13F.csv', '공매도.csv'}
-EARN = {'분기원자료.csv', '분기실적.csv', '재무건전성.csv', '연매출.csv', 'FZ점수.csv', 'PER3년.csv'}
+SLOW = {'분기원자료.csv', '분기실적.csv', '재무건전성.csv', '연매출.csv', 'FZ점수.csv', '장기펀드13F.csv', '공매도.csv'}
+EARN = {'분기원자료.csv', '분기실적.csv', '재무건전성.csv', '연매출.csv', 'FZ점수.csv'}
 MARK = '보조갱신일.json'
 
 
@@ -84,31 +84,3 @@ def why_fetch(out, IN, mk, today):
     if out == '공매도.csv' and _passed(since, today, {(m, 15) for m in range(1, 13)} | {'말일'}):
         return '공매도 잔고 기준일 지남'
     return None
-
-
-def per_today(IN, mk):
-    """PER3년.csv per_now를 오늘 종가로 맞춤(저장본 그대로 쓸 때)."""
-    P, N = _read(f'{IN}/PER3년.csv'), _read(f'{IN}/닉스.csv')
-    try:
-        px = pd.read_csv(f'{IN}/가격2년.csv', index_col=0, parse_dates=True, encoding='utf-8-sig')
-    except Exception:
-        return 0
-    if P is None or N is None or 'per_now' not in P or 'PER3년.csv' not in mk or 'yfinance 티커' not in N:
-        return 0
-    if 'per_base' not in P:   # 처음 맞출 때 저장본 값을 기준으로 남김(매일 기준 × 비율, 누적 오차 없음)
-        P['per_base'] = P['per_now']
-    t0 = pd.Timestamp(mk['PER3년.csv'])
-    tk = dict(zip(N['번호'].astype(str), N['yfinance 티커'].astype(str)))
-    n = 0
-    for i, r in P.iterrows():
-        t = tk.get(str(r['번호']))
-        if not t or t not in px or pd.isna(r.get('per_base')):
-            continue
-        s = px[t].dropna()
-        a, b = s[s.index <= t0], s
-        if not len(a) or not len(b):
-            continue
-        P.at[i, 'per_now'] = round(float(r['per_base']) * float(b.iloc[-1]) / float(a.iloc[-1]), 2)
-        n += 1
-    P.to_csv(f'{IN}/PER3년.csv', index=False, encoding='utf-8-sig')
-    return n

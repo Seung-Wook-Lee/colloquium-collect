@@ -1,7 +1,7 @@
 """1-9 자료 품질 검사(블록 1 검정): 원천마다 종목 수·기간·결측률·이상치 수, 유니버스 중 빠진 종목."""
 import pandas as pd
 
-from .common import need, write
+from .common import need, read, write
 
 
 def run(ctx, c):
@@ -9,7 +9,13 @@ def run(ctx, c):
     U = ctx.get('U') if ctx.get('U') is not None else need(ctx, 'L', '유니버스_층.csv.gz')
     want = set(U['yfinance 티커'].dropna()) if U is not None else set()
     P = need(ctx, 'P', '가격10년_정제.csv.gz', index_col=0, parse_dates=True)
-    need(ctx, 'SEC', 'SEC재무_분기.csv.gz'); need(ctx, 'DART', 'DART재무_분기.csv.gz'); need(ctx, 'PER', 'PER_EPS_주별.csv.gz')
+    need(ctx, 'SEC', 'SEC재무_분기.csv.gz'); need(ctx, 'DART', 'DART재무_분기.csv.gz')
+    if ctx.get('PER') is None:   # 11/26 PER은 10년치 데이터베이스(종가 ÷ EPS 칸)에서 읽음
+        import os, sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import px_store as PS
+        read(ctx, PS.name('Close'), nrows=1); read(ctx, PS.name('EPS'), nrows=1)   # 없으면 드라이브에서 1_data로 받아 둠
+        ctx['PER'] = PS.per_weekly(ctx['out'])
     if ctx.get('정제기록') is None:
         ctx['정제기록'] = need(ctx, '정제기록', '정제_기록.csv.gz')
     if P is not None:

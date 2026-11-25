@@ -16,11 +16,10 @@ def m13612w(px):
 
 
 def run(P=None):
-    """P: 일별 종가 DataFrame(VWO·BND 열). 없으면 야후에서 2년치."""
+    """P: 일별 종가 DataFrame(VWO·BND 열). 없으면 저장본(시장위험, 수집이 하루 2번 덧붙임)에서 읽음 — 받지 않음(11/26 의장)."""
     if P is None or not all(t in P for t in ASSETS):
-        import yfinance as yf
-        P = yf.download(list(ASSETS), period='2y', auto_adjust=True, progress=False)['Close']
-        P.index = pd.to_datetime(P.index).tz_localize(None)
+        from . import stored
+        P = stored.close(list(ASSETS))
     rows = []
     for t, nm in ASSETS.items():
         v = m13612w(P[t].dropna()) if t in P else None

@@ -49,3 +49,14 @@ jobs:
           TAVILY_KEY: ${{ secrets.TAVILY_KEY }}
           BLOCKS: ${{ github.event.inputs.blocks }}
         run: python collect/run.py $BLOCKS
+      - name: 보조 자료(재무·13F·공매도는 새 공시·새 종목일 때만, 시장위험·사건 RSS) — 회의는 받지 않고 이것만 읽음(11/26 의장)
+        if: always() && github.event.inputs.blocks == ''
+        env:
+          TZ: Asia/Seoul
+          KIS_OFF: '1'
+          FRED_KEY: ${{ secrets.FRED_KEY }}
+          DART_KEY: ${{ secrets.DART_KEY }}
+          SEC_EMAIL: ${{ secrets.SEC_EMAIL }}
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+        run: pip install pyyaml && python collect/data/supplement.py 아침

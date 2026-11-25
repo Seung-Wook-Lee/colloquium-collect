@@ -9,7 +9,6 @@ on:
       hz: {description: '보유 기간(주) 4·12·26·52', required: false, default: '26'}
       nus: {description: '뽑을 수: 미국(0이면 종목 안 뽑음·그림 없음)', required: false, default: '0'}
       nkr: {description: '뽑을 수: 한국', required: false, default: '0'}
-      fetch: {description: '야후 보조 자료 새로 받기(기본 yes, 빠른 시험만 no)', required: false, default: 'yes'}
 
 concurrency: start
 
@@ -21,15 +20,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      - name: 팀Q 아침보고·퀀트자료
-        uses: actions/checkout@v5
-        continue-on-error: true
-        with:
-          repository: Seung-Wook-Lee/team_q
-          ref: block20-V2611
-          path: team_q
-          sparse-checkout: research/daily
-          token: ${{ secrets.TEAMQ_TOKEN }}
       - name: 비공개 설정(blocks.yaml·Core50)
         uses: actions/checkout@v5
         with:
@@ -50,17 +40,11 @@ jobs:
           TZ: Asia/Seoul
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
-          TEAMQ_DIR: ${{ github.workspace }}/team_q
           QC_PRIVATE: ${{ github.workspace }}/team_q_private/colloquium_private
-          FRED_KEY: ${{ secrets.FRED_KEY }}
-          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
-          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
-          DART_KEY: ${{ secrets.DART_KEY }}
           Q: ${{ github.event.inputs.q }}
         run: |
           set -o pipefail
-          F=""; if [ "${{ github.event.inputs.fetch }}" = "yes" ]; then F="--fetch"; fi
-          python app/block33/start_run.py "$Q" "${{ github.event.inputs.tgt }}" "${{ github.event.inputs.kind }}" "${{ github.event.inputs.hz }}" "${{ github.event.inputs.nus }}" "${{ github.event.inputs.nkr }}" $F 2>&1 | tee work_start_log.txt
+          python app/block33/start_run.py "$Q" "${{ github.event.inputs.tgt }}" "${{ github.event.inputs.kind }}" "${{ github.event.inputs.hz }}" "${{ github.event.inputs.nus }}" "${{ github.event.inputs.nkr }}" 2>&1 | tee work_start_log.txt
       - name: 결과를 data-start 가지에 쌓음
         if: always()
         run: |

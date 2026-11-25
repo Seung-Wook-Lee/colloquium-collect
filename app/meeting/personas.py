@@ -10,6 +10,10 @@ import os
 
 import numpy as np
 import pandas as pd
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))), 'collect', 'data'))
+import px_store as PS  # noqa: E402  10년치 데이터베이스 하나만 읽는다
 
 import re as _re
 BAN = _re.compile(r'^(?:카카오|LIG|LG|LS)(?![A-Za-z])')   # 콜로키움_룰.txt 4장: 언급하지 않는다(rules.yaml 금지이름으로 바꿀 수 있음)
@@ -544,7 +548,7 @@ def rio(c):
     if c.m.get('KS_GAP50') is not None:
         g, MR = c.m['KS_GAP50'], c.R.get('미스터 마켓', {})
         hot, warn = MR.get('코스피이격_과열', 130), MR.get('코스피이격_주의', 125)
-        out.append(L('시장 이격', f"코스피 50일 이격 {g:.1f}", '지수2년.csv 계산', val=f"코스피 50일 이격 {g:.1f}",
+        out.append(L('시장 이격', f"코스피 50일 이격 {g:.1f}", '10년치 데이터베이스 계산', val=f"코스피 50일 이격 {g:.1f}",
                      crit=f"{warn} 과열 주의 · {hot} 과열" + (' → 과열' if g >= hot else (' → 과열 주의' if g >= warn else '')),
                      sig='red' if g >= hot else ('orange' if g >= warn else '')))
     b, o = c.burden_opp()   # 11/20 의장: 시장 블록은 칸 맨 아래 표로 자세히(macro_table)
@@ -880,11 +884,11 @@ def _betas(c, rows):
             want[r['번호']] = (t, c.R['결론']['기준지수']['미국' if (r['시장'] == '미국' or '미국' in str(r['종목'])) else '한국'])
     if not want:
         return {}
-    try:   # 11/25 의장: 종목은 저장본 가격2년, 지수는 저장본 시장위험(회의 준비 코드가 하루 2번 갱신) — 직접 받지 않음
-        import stored
-        px = pd.read_csv(f'{c.d}/가격2년.csv', index_col=0, parse_dates=True, encoding='utf-8-sig')
-        P = pd.concat([px[[t for t, _ in want.values() if t in px]], stored.close(sorted({i for _, i in want.values()}))], axis=1)
-        P = P[P.index >= P.index.max() - pd.Timedelta(days=366)]
+    try:   # 11/26 의장: 종목·지수 모두 10년치 데이터베이스(하루 2번 수집)에서만 읽음
+        px = PS.frame(c.d, 'Close', 366)
+        P = px[sorted({x for w in want.values() for x in w if x in px})]
+        if P.empty:
+            raise ValueError('데이터베이스 없음')
     except Exception:   # noqa: BLE001 — 저장본을 못 읽으면 유니버스 '베타(2년 주간)'
         if '베타(2년 주간)' in c.U:
             bb = c.U.drop_duplicates('번호').set_index('번호')['베타(2년 주간)']

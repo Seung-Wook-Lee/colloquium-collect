@@ -3,7 +3,7 @@
 
 저장본 = 회의 준비 코드가 하루 2번(국장전·미장전) 새 날짜만 덧붙이는 in/시장위험.csv (드라이브 00_퀀트입력에 이어 씀).
 블록(바닥 확률·분할 판정·조정 단계·시황 한 줄 등)은 이 함수로만 지수를 읽는다. 야후에서 직접 받지 않는다.
-저장본에 그 칸이 아예 없을 때만 그 칸 하나를 받고 그렇게 했다고 남긴다(store_first 규칙과 같음)."""
+저장본에 그 칸이 없으면 10년치 데이터베이스(가격10년_종가)에서 찾고, 거기도 없으면 빈칸으로 두고 남긴다. 받지 않는다(11/26 의장)."""
 import os
 
 import pandas as pd
@@ -30,8 +30,16 @@ def _store():
     return _cache[p]
 
 
+def _db():
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'collect', 'data'))
+    import px_store as PS
+    p = path()
+    return PS.frame(os.path.dirname(p)) if p else pd.DataFrame()
+
+
 def close(tickers, start=None):
-    """종가 DataFrame(칸 = 야후 티커). 저장본에서 읽고, 저장본에 그 칸이 없을 때만 그 칸을 받는다."""
+    """종가 DataFrame(칸 = 야후 티커). 저장본(시장위험) → 없으면 10년치 데이터베이스."""
     one = isinstance(tickers, str)
     tickers = [tickers] if one else list(tickers)
     S = _store()
@@ -42,14 +50,14 @@ def close(tickers, start=None):
             out[t] = pd.to_numeric(S[c], errors='coerce')
         else:
             miss.append(t)
-    if miss:
-        import yfinance as yf   # 저장본에 없는 칸만
-        D = yf.download(miss, start=start or '1985-01-01', auto_adjust=True, progress=False)['Close']
-        D = D.to_frame(miss[0]) if isinstance(D, pd.Series) else D
+    if miss:   # 11/26 의장 "따로 받는 코드는 전부 싹 다 지워": 받지 않고 10년치 데이터베이스(가격10년_종가)에서 찾음
+        db = _db()
         for t in miss:
-            if t in D:
-                out[t] = D[t]
-        NOTE.append(f'저장본에 없어 받음: {miss}')
+            if t in db and db[t].notna().any():
+                out[t] = db[t]
+        left = [t for t in miss if t not in out]
+        if left:
+            NOTE.append(f'저장본·데이터베이스에 없음(빈칸): {left}')
     P = pd.DataFrame(out)
     P.index = pd.to_datetime(P.index)
     if start:

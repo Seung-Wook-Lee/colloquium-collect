@@ -36,7 +36,7 @@ def _csv(d, name, **kw):
 
 
 def hmm_bear(c, min_weeks=156, n_states=3, iters=100, seed=2611, volwin=21):
-    """team_q block20 b01_hmm과 같은 방식. 주별 '하락 상태가 가장 높을 때 그 확률, 아니면 0'(features.market의 US_BEAR·KR_BEAR 규칙)."""
+    """B01 하락 국면(가우시안 HMM 3상태, 분기마다 다시 맞춤). 주별 '하락 상태가 가장 높을 때 그 확률, 아니면 0'(features.market의 US_BEAR·KR_BEAR 규칙)."""
     try:
         from hmmlearn.hmm import GaussianHMM
         from scipy.special import logsumexp

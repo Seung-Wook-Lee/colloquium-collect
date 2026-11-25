@@ -1,10 +1,11 @@
-"""매일 07시 수집 뒤 자동 실행: 엔진 입력 받기 → 사건·변수달력(규칙) → 보조 자료 갱신 → 퀀트센터 엔진 → 위원 원고(코드) → 드라이브.
+"""아침 8시·저녁 8시 수집 뒤 자동 실행: 드라이브 읽기 → 사건·변수달력(규칙) → 블록33 엔진 → 위원 원고(코드) → 드라이브.
+11/26 의장 "따로 받는 코드는 전부 싹 다 지워": 이 코드는 아무것도 받지 않는다. 자료는 수집 두 곳(collect/run.py·collect/data/supplement.py)이 드라이브에 쌓고,
+가격은 10년치 데이터베이스(1_data/가격10년_*) 하나에서만 읽는다(tests/test_one_db.py가 막음).
 사람·AI가 손으로 옮기거나 쓰는 단계가 없다(2026-11-17 의장).
 
   python meeting/daily.py                  # GitHub Actions(meeting.yml): 드라이브에서 받고 드라이브에 올림
   python meeting/daily.py --local <폴더>   # 손 시험: 그 폴더(날짜 앞머리 없는 이름)를 입력으로, 결과는 <폴더>/../원고/
   --date YYYYMMDD                          # 그날 자료로 다시 만들기
-  --skip-fetch                             # 야후 보조 자료 갱신 건너뛰기(전날 것 사용)
 
 드라이브: 읽기 '콜로키움 수집데이터/YYYYMMDD/'(07시), '콜로키움 수집데이터/00_퀀트입력/'(전날까지의 보조 자료·사건 로그)
           쓰기 같은 날짜 폴더 YYYYMMDD_회의원고.txt·_회의원고.md(회의실 채팅용)·_발표.json·_오늘의한종목.csv·_판정표.csv·_시장블록.csv·_사건상태.csv·_변수달력.csv,
@@ -37,18 +38,12 @@ KST = dt.timezone(dt.timedelta(hours=9))
 D_DATA = '콜로키움 수집데이터'
 CARRY = f'{D_DATA}/00_퀀트입력'
 RENAME = {'DART실적': 'DART', 'SEC실적': 'SEC'}
-# 매일 갱신하는 보조 자료(야후): (스크립트, 만드는 파일)
-FETCH = [('fetch_px.py', '가격2년.csv'), (None, '지수2년.csv'), ('fetch_q.py', '분기원자료.csv'), ('fetch_fund.py', '분기실적.csv'),
-         ('fetch_bs.py', '재무건전성.csv'), ('fetch_rev.py', '연매출.csv'), ('fetch_fz.py', 'FZ점수.csv'), ('fetch_per3.py', 'PER3년.csv'),
-         ('fetch_13f.py', '장기펀드13F.csv'), ('fetch_short.py', '공매도.csv'),
-         ('fetch_risk_daily.py', '시장위험.csv')]   # 11/22 의장: B35 항복·B03 AAA 괴리   # 11/19 장기 펀드 13F(B21 보너스, SEC 무료), B22 공매도 잔고(미국, 야후)
-# 전날 것을 이어 쓰는 자료(드라이브 00_퀀트입력 → 없으면 저장소 meeting/seed/)
-# 11/25 의장 "구글 드라이브에 있는 것으로 계산한다, 거기 없을 때에만 받으라고" → 규칙은 store_first.py(테스트 tests/test_store_first.py)
-from store_first import SLOW, MARK, why_fetch, per_today   # noqa: E402
+# 전날까지 쌓인 저장본(드라이브 00_퀀트입력 → 없으면 비공개 seed/). 보조 자료는 아침 8시 수집(supplement.py)이 갱신함
 sys.path.insert(0, DATA)
-import px_store as PS   # noqa: E402  가격 저장본(1_data/가격10년_*) 규칙
+import px_store as PS   # noqa: E402  10년치 데이터베이스(1_data/가격10년_*)
+from store_first import SLOW, MARK   # noqa: E402
 CARRY_FILES = [MARK, '유니버스.csv', 'ETF보유.csv', 'ETF멤버.csv', '1달조합.csv', '블룸버그EPS.csv', '지수밸류.csv',
-               '퀀트자료.csv', 'forward_log.csv', '아침보고.txt', '고가2년.csv', '저가2년.csv', '거래량2년.csv'] + [x for _, x in FETCH]
+               '시장위험.csv'] + sorted(SLOW)
 LOG = []
 
 
@@ -191,105 +186,19 @@ def pull_univ(IN):
         log(f'[받기] 유니버스 드라이브 실패: {e}')
 
 
-def pull_teamq(IN):
-    """팀Q BLOCK20 아침보고·퀀트자료·forward_log: 워크플로가 받아 둔 team_q 폴더(TEAMQ_DIR)에서 최신 파일."""
-    root = os.environ.get('TEAMQ_DIR', '')
-    if not root or not os.path.isdir(f'{root}/research/daily'):
-        log('[받기] 팀Q 폴더 없음 → 전날 사본 사용')
-        return []
-    dd = f'{root}/research/daily'
-    got = []
-    for pat, name in (('*_팀Q_아침보고.txt', '아침보고.txt'), ('*_퀀트자료_종목.csv', '퀀트자료.csv'), ('forward_log.csv', 'forward_log.csv')):
-        fs = sorted(glob.glob(f'{dd}/{pat}'))
-        if fs:
-            shutil.copy(fs[-1], f'{IN}/{name}'); got.append(f'{name}←{os.path.basename(fs[-1])}')
-    log('[받기] 팀Q ' + ', '.join(got))
-    return [g.split('←')[0] for g in got]
+def pull_db(IN):
+    """10년치 데이터베이스(1_data/가격10년_시가·고가·저가·종가·거래량) → IN. 블록33·위원 원고는 PS.frame으로 여기서만 가격을 읽는다."""
+    import drive
+    want = [PS.name(k) for k in list(PS.F) + ['EPS']]   # 시가·고가·저가·종가·거래량 + EPS 칸(PER = 종가 ÷ EPS)
+    got = [nm for nm in want if _save(drive.get(f'{D_DATA}/1_data/{nm}'), f'{IN}/{nm}')]
+    log(f'[받기] 10년치 데이터베이스 {len(got)}/{len(want)}개')
+    return got
 
 
-def fetch(W, IN, tday=None):
-    """보조 자료. 11/25 의장 규칙(store_first.py): 계산은 드라이브 저장본(전날 사본, 이미 IN에 있음)으로 하고,
-    저장본에 없는 것만 받는다. 가격은 저장본 마지막 날 뒤만 덧붙이고, SLOW 자료는 why_fetch가 이유를 낼 때만 받는다.
-    받다가 실패하면 저장본을 그대로 쓴다."""
-    import json
-    import yfinance as yf
-    done = []
-    tday = tday or dt.datetime.now(KST).date()
-    try:
-        mk = json.load(open(f'{IN}/{MARK}', encoding='utf-8'))
-    except Exception:   # 처음(표 없음): 드라이브 저장본을 오늘 받은 것으로 보고 시작(전날까지 매일 새로 받던 것이라 하루 이내)
-        mk = {o: tday.isoformat() for o in SLOW if os.path.exists(f'{IN}/{o}')}
-    keep, got = [], []
-    for script, out in FETCH:
-        if out in SLOW:
-            why = why_fetch(out, IN, mk, tday)
-            if why is None:
-                keep.append(out); continue
-            got.append(f'{out}({why})')
-        try:
-            if script is None:
-                # 11/25 의장 "오늘 가격만 받으면 되지": 저장본(드라이브 전날 사본)이 있으면 마지막 날 5일 전부터만 받아 덧붙임
-                try:
-                    old = pd.read_csv(f'{IN}/{out}', index_col=0, parse_dates=True, encoding='utf-8-sig')
-                except Exception:
-                    old = None
-                if old is not None and len(old.dropna(how='all')):
-                    s0 = (old.dropna(how='all').index.max() - pd.Timedelta(days=5)).date()
-                    px = yf.download(['^GSPC', '^KQ11', '^KS11'], start=str(s0), auto_adjust=True, progress=False)['Close']
-                    px.index = pd.to_datetime(px.index)
-                    px = px.combine_first(old).sort_index()
-                    px = px[px.index >= px.index.max() - pd.Timedelta(days=735)]
-                else:
-                    px = yf.download(['^GSPC', '^KQ11', '^KS11'], period='2y', auto_adjust=True, progress=False)['Close']
-                px.to_csv(f'{IN}/{out}', encoding='utf-8-sig')
-            else:
-                bak = f'{IN}/{out}.bak'
-                if os.path.exists(f'{IN}/{out}'):
-                    shutil.copy(f'{IN}/{out}', bak)
-                r = subprocess.run([sys.executable, f'{DATA}/{script}'], cwd=W, capture_output=True, text=True, timeout=900, env={**os.environ, 'PYTHONPATH': PYPATH})
-                if r.returncode != 0:
-                    if os.path.exists(bak):
-                        shutil.move(bak, f'{IN}/{out}')
-                    raise RuntimeError(r.stderr.strip().splitlines()[-1] if r.stderr.strip() else f'코드 {r.returncode}')
-                if os.path.exists(bak):
-                    os.remove(bak)
-                for ln in r.stdout.splitlines():   # 11/21: 한투 보충 결과를 실행 기록에 남김
-                    if '한투' in ln or 'DART' in ln:   # 11/23: 한투가 안 될 때 DART로 채운 수도 기록에
-                        log(f'[보조 자료] {out}: {ln[:300]}')
-            done.append(out)
-            if out == '가격2년.csv':   # 고가·저가·거래량 2년도 함께 저장(11/25 빠뜨려 거래량 공식이 비었던 것 고침)
-                done += [f for f in ('고가2년.csv', '저가2년.csv', '거래량2년.csv') if os.path.exists(f'{IN}/{f}')]
-            if out in SLOW:
-                mk[out] = tday.isoformat()
-        except Exception as e:
-            log(f'[보조 자료] {out} 갱신 실패 → 전날 사본: {str(e)[:120]}')
-    if keep:
-        log(f'[보조 자료] 드라이브 저장본 그대로: {", ".join(keep)}')
-    if got:
-        log(f'[보조 자료] 저장본에 없는 것이 있어 받음: {", ".join(got)}')
-    if 'PER3년.csv' in keep:
-        log(f'[보조 자료] PER3년 오늘 PER을 오늘 종가로 맞춤 {per_today(IN, mk)}종목')
-    log(f'[보조 자료] 갱신 {len(done)}/{len(FETCH) - len(keep)}')
-    json.dump(mk, open(f'{IN}/{MARK}', 'w', encoding='utf-8'), ensure_ascii=False)
-    return done + [MARK]
-
-
-def premarket_quotes(R):
-    """미장전 시세: rules.yaml 미장전.시세의 야후 티커 지금 값·전일 종가 대비."""
-    import yfinance as yf
-    rows = []
-    for name, tk in R.get('미장전', {}).get('시세', []):
-        try:
-            h = yf.Ticker(tk).history(period='5d', interval='1d', auto_adjust=False)
-            h = h['Close'].dropna()
-            v, prev = float(h.iloc[-1]), (float(h.iloc[-2]) if len(h) > 1 else float('nan'))
-            ts = h.index[-1]
-            rows.append(dict(이름=name, 티커=tk, 값=v, **{'전일대비(%)': (v / prev - 1) * 100 if prev == prev and prev else float('nan')},
-                             시각=f'{ts:%m-%d}'))
-        except Exception as e:   # noqa: BLE001
-            rows.append(dict(이름=name, 티커=tk, 값=float('nan'), **{'전일대비(%)': float('nan')}, 시각=''))
-            log(f'[미장전 시세] {tk} 실패: {str(e)[:80]}')
-    return pd.DataFrame(rows, columns=['이름', '티커', '값', '전일대비(%)', '시각'])
+def _save(b, p):
+    if b:
+        open(p, 'wb').write(b)
+    return bool(b)
 
 
 def judge(W, S):
@@ -322,12 +231,10 @@ def backtest(W, IN, use_drive, tday, B, S):
             raw = drive.get(f'{CARRY}/블록점수이력.csv')
             if raw:
                 open(cache, 'wb').write(raw)
-        r = subprocess.run([sys.executable, f'{DATA}/fetch_long.py', IN], cwd=W, capture_output=True, text=True, timeout=900, env={**os.environ, 'PYTHONPATH': PYPATH})
-        if r.returncode != 0:
-            raise RuntimeError('긴 가격 실패: ' + (r.stderr.strip().splitlines() or ['?'])[-1])
+        os.makedirs(f'{IN}/장기', exist_ok=True)   # 가격은 10년치 데이터베이스(IN/가격10년_*)를 그대로 씀
         if use_drive:   # 11/23 의장 '24개 블록 과거 값 채워': 재무 칸 과거 값(공시일 기준)
             import drive
-            for nm in ('SEC재무_분기.csv.gz', 'DART재무_분기.csv.gz', 'PER_EPS_주별.csv.gz', '장기/국내수급_일별.csv.gz', '장기/장기펀드13F_이력.csv', '장기/공매도_미국_이력.csv.gz', '장기/ETF좌수_이력.csv.gz'):
+            for nm in ('SEC재무_분기.csv.gz', 'DART재무_분기.csv.gz', '장기/국내수급_일별.csv.gz', '장기/장기펀드13F_이력.csv', '장기/공매도_미국_이력.csv.gz', '장기/ETF좌수_이력.csv.gz'):
                 b = drive.get(f'{D_DATA}/1_data/{nm}')
                 if b: open(f'{IN}/장기/{os.path.basename(nm)}', 'wb').write(b)
                 log(f'[성적표] 1_data/{nm} ' + ('받음' if b else '없음'))
@@ -392,7 +299,7 @@ def bottom(W, use_drive, B, S):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--date'); ap.add_argument('--local'); ap.add_argument('--skip-fetch', action='store_true')
+    ap.add_argument('--date'); ap.add_argument('--local')
     ap.add_argument('--session', default='국장전', choices=['국장전', '미장전'])   # 11/19 의장: 10시 국장전·22시 미장전
     a = ap.parse_args()
     now = dt.datetime.now(KST)
@@ -409,11 +316,6 @@ def main():
         os.makedirs(IN)
     os.makedirs(OUT, exist_ok=True)
     os.environ['MKT_STORE'] = f'{IN}/시장위험.csv'   # 11/25 의장: 블록은 지수를 이 저장본에서만 읽음(app/market/stored.py)
-    # fetch_*.py는 'in/'·'qblocks/'를 상대 경로로 쓴다
-    for link, target in (('in', IN), ('qblocks', QC)):
-        lp = os.path.join(W, link)
-        if os.path.abspath(lp) != target and not os.path.exists(lp):
-            os.symlink(target, lp)
     R = yaml.safe_load(open(f'{HERE}/rules.yaml', encoding='utf-8'))
     B = QCC.load_blocks()
     if B.get('결론'):   # 11/20 의장 결론 칸 규칙 숫자는 비공개 blocks.yaml에만(공개 저장소에 매수 규칙 숫자를 두지 않음)
@@ -429,17 +331,8 @@ def main():
         if not pull_day(today, IN):
             sys.exit(f'{today} 07시 파일이 드라이브에 없습니다.')
         pull_univ(IN)
-        carry_up += pull_teamq(IN)
+        pull_db(IN)
     pull_carry(IN, use_drive)
-    if use_drive:   # 11/24 B24 실제 이익 공식(eps_proxy)이 오늘 판정에도 쓰는 EPS TTM 주별(1_data, 공시일 기준)
-        try:
-            import drive
-            os.makedirs(f'{IN}/장기', exist_ok=True)
-            b = drive.get(f'{D_DATA}/1_data/PER_EPS_주별.csv.gz')
-            if b: open(f'{IN}/장기/PER_EPS_주별.csv.gz', 'wb').write(b)
-            log('[받기] 1_data/PER_EPS_주별.csv.gz ' + ('받음' if b else '없음'))
-        except Exception as e:   # noqa: BLE001
-            log(f'[받기] PER_EPS_주별 실패: {e}')
     if use_drive:   # 11/23 의장 "PER 찾아봐" → 우리 수집(b09_valuation)이 매주 토요일 S&P500 구성종목 503개 선행 EPS를 합산한 00_지수선행PE.csv를 먼저 쓴다
         try:
             import drive
@@ -461,46 +354,16 @@ def main():
             raw = drive.get(f'{CARRY}/00_사건로그.csv')
             if raw:
                 old = pd.read_csv(io.BytesIO(raw), encoding='utf-8-sig')
-        new, fail = EVT.fetch_rss(R) if use_drive or os.environ.get('MEETING_RSS') else (pd.DataFrame(columns=EVT.LOG_COLS), ['손 시험: RSS 건너뜀'])
-        logdf = EVT.update_log(old, pd.concat([new, EVT.news_csv_rows(IN, R, tday)]), tday)
+        logdf = EVT.update_log(old, EVT.news_csv_rows(IN, R, tday), tday)   # RSS는 수집(supplement.py)이 로그에 쌓아 둠
         EV = EVT.event_state(R, logdf, tday)
         CAL = EVT.calendar(R, IN, tday)
         EV.to_csv(f'{IN}/사건상태.csv', index=False, encoding='utf-8-sig')
         CAL.to_csv(f'{IN}/변수달력.csv', index=False, encoding='utf-8-sig')
         logdf.to_csv(f'{W}/00_사건로그.csv', index=False, encoding='utf-8-sig')
-        log(f'[사건] RSS {len(new)}건(실패 {", ".join(fail) or "없음"}), 진행 중 사건 {EV["사건"].nunique() if len(EV) else 0}개, 변수 {len(CAL)}줄(확정 {int((CAL["확정"] == "예").sum()) if len(CAL) else 0})')
+        log(f'[사건] 사건로그 {len(logdf)}줄, 진행 중 사건 {EV["사건"].nunique() if len(EV) else 0}개, 변수 {len(CAL)}줄(확정 {int((CAL["확정"] == "예").sum()) if len(CAL) else 0})')
     except Exception as e:
         traceback.print_exc(); log(f'[사건] 실패 → 사건·변수 없이 진행: {e}')
         EV, CAL = pd.DataFrame(columns=['업종', '사건', '상태', '날짜', '출처']), pd.DataFrame()
-
-    # 2) 보조 자료
-    # 11/25 의장 "매일매일 그날 자료만 받아오고, 구글 드라이브에 쌓고": 가격 저장본은 1_data/가격10년_* 하나.
-    #   회의 직전에 받아서(fetch_px.py가 새 날짜만 덧붙임) 같은 자리에 다시 올린다.
-    PX10 = [PS.name(k) for k in PS.F]
-    if use_drive and not a.skip_fetch:
-        import drive
-        got10 = []
-        for nm in PX10:
-            try:
-                b = drive.get(f'{D_DATA}/1_data/{nm}')
-                if b:
-                    open(f'{IN}/{nm}', 'wb').write(b); got10.append(nm)
-            except Exception as e:   # noqa: BLE001
-                log(f'[받기] 1_data/{nm} 실패: {e}')
-        log(f'[받기] 가격 저장본 1_data/가격10년 {len(got10)}/{len(PX10)}개')
-    if not a.skip_fetch:
-        done = fetch(W, IN, tday)
-        carry_up += done
-        if use_drive and '가격2년.csv' in done:
-            import drive
-            up10 = []
-            for nm in PX10:
-                if os.path.exists(f'{IN}/{nm}'):
-                    try:
-                        drive.put(f'{D_DATA}/1_data/{nm}', open(f'{IN}/{nm}', 'rb').read()); up10.append(nm)
-                    except Exception as e:   # noqa: BLE001
-                        log(f'[올리기] 1_data/{nm} 실패: {e}')
-            log(f'[올리기] 가격 저장본 1_data/가격10년 {len(up10)}/{len(PX10)}개(새 날짜 덧붙임)')
 
     # 3) 엔진
     import engine as ENG
@@ -524,9 +387,6 @@ def main():
     BTO.update(bottom(W, use_drive, B, S))
 
     # 4) 위원 원고
-    if os.path.exists(f'{IN}/아침보고.txt'):
-        first = open(f'{IN}/아침보고.txt', encoding='utf-8').read().splitlines()[1:2]
-        note.append('팀Q 자료 ' + (first[0][:40] if first else ''))
     c, sec = PER.build(IN, S, M, m, f, R, B.get('추천', {}), tday, EV, CAL, session=a.session)
     if m.get('CASH_SWITCH') == 1 or m.get('CTM_RED') == 1:   # 11/22 의장 1순위: CTM 빨간불 또는 MA 클러스터 빨간불이면 원고 맨 위에 현금 전환
         ls = [PER.L('🔴 CTM 빨간불', f"S&P CTM {m.get('CTM_SPX')} (30 아래 {m.get('CTM_LOW_WEEKS')}주 연속)", '블록33 B01 CTM_RED')] if m.get('CTM_RED') == 1 else []
@@ -536,7 +396,10 @@ def main():
         sec.insert(0, ('0 CTM 초록불', '블록33 B01', '시장', [PER.L(f"🟢 CTM 초록불(반등 시작) {m.get('CTM_GREEN_STAGE')}단계/3", f"S&P CTM {m.get('CTM_SPX')} — 최저 뒤 첫 상승 주부터 3주 동안 1/3씩", '블록33 B01 CTM_GREEN')], [], ''))
     PFX = f'{today}_' if a.session == '국장전' else f'{today}_미장전_'
     if a.session == '미장전':
-        Q = premarket_quotes(R)
+        try:   # 저녁 8시 수집(supplement.py 저녁)이 날짜 폴더에 둔 미장전 시세
+            Q = pd.read_csv(f'{IN}/미장전시세.csv', encoding='utf-8-sig')
+        except Exception:   # noqa: BLE001
+            Q = pd.DataFrame(columns=['이름', '티커', '값', '전일대비(%)', '시각']); log('[미장전 시세] 날짜 폴더에 없음')
         # 11/20 23:39 의장: 미스터 마켓은 1번(0번 칸 없앰) — 미장전 시세를 '1 시장' 칸 맨 앞에 붙인다
         pm = PER.premarket(c, Q, tday)
         i1 = next((i for i, x in enumerate(sec) if x[0] == '1 시장'), None)
@@ -545,8 +408,7 @@ def main():
         else:
             t, w, r, ls, g, tb = sec[i1]
             sec[i1] = (t, w, r, pm + ls, g, tb)
-        note.insert(0, '미장전 회의(22:00) — 07시 파일 + 야후 가격(오늘 한국 종가까지)·RSS 다시 받아 엔진 다시 실행')
-        Q.to_csv(f'{IN}/미장전시세.csv', index=False, encoding='utf-8-sig')
+        note.insert(0, '미장전 회의 — 저녁 8시 수집까지 쌓인 데이터베이스로 엔진 다시 실행')
     # 11/20 의장 블록 1~5 재편: 블록 2 phase(국면.csv) · 블록 3 Analysis(종목점수.csv) 출력 — 다음 블록은 이 파일만 읽는다
     BLK = {}
     try:

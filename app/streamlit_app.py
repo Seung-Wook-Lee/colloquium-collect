@@ -281,18 +281,23 @@ def flow_chart(val):
     return True
 
 
-def kospi_gap():
-    """11/20 의장: 코스피 50일 이격을 그래프로(지수2년.csv ^KS11, 종가 ÷ 50일 평균 × 100, 의장 기준 125 과열 주의·130 과열)."""
+@st.cache_data(ttl=3 * 3600, show_spinner=False)
+def _db_close():
+    """10년치 데이터베이스 종가(드라이브 1_data/가격10년_종가.csv.gz) — 화면도 이 하나만 읽음(11/26 의장)."""
     import io
-    rel = '00_퀀트입력/지수2년.csv'
+    rel = '1_data/가격10년_종가.csv.gz'
     try:
         if LOCAL:
-            I = pd.read_csv(Path(LOCAL) / rel, encoding='utf-8-sig', index_col=0, parse_dates=True)
-        else:
-            b = drive.get(f'{D_DATA}/{rel}')
-            I = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', index_col=0, parse_dates=True) if b else None
+            return pd.read_csv(Path(LOCAL) / rel, encoding='utf-8-sig', index_col=0, parse_dates=True)
+        b = drive.get(f'{D_DATA}/{rel}')
+        return pd.read_csv(io.BytesIO(b), compression='gzip', encoding='utf-8-sig', index_col=0, parse_dates=True) if b else None
     except Exception:
-        I = None
+        return None
+
+
+def kospi_gap():
+    """11/20 의장: 코스피 50일 이격을 그래프로(10년치 데이터베이스 ^KS11, 종가 ÷ 50일 평균 × 100, 의장 기준 125 과열 주의·130 과열)."""
+    I = _db_close()
     if I is None or '^KS11' not in I:
         return False
     s = pd.to_numeric(I['^KS11'], errors='coerce').dropna()
