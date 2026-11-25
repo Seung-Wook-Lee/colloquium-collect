@@ -43,7 +43,12 @@ FETCH = [('fetch_px.py', '가격2년.csv'), (None, '지수2년.csv'), ('fetch_q.
          ('fetch_13f.py', '장기펀드13F.csv'), ('fetch_short.py', '공매도.csv'),
          ('fetch_risk_daily.py', '시장위험.csv')]   # 11/22 의장: B35 항복·B03 AAA 괴리   # 11/19 장기 펀드 13F(B21 보너스, SEC 무료), B22 공매도 잔고(미국, 야후)
 # 전날 것을 이어 쓰는 자료(드라이브 00_퀀트입력 → 없으면 저장소 meeting/seed/)
-CARRY_FILES = ['유니버스.csv', 'ETF보유.csv', 'ETF멤버.csv', '1달조합.csv', '블룸버그EPS.csv', '지수밸류.csv',
+# 11/25 의장 "드라이브에 다 저장해 놓으라고 했잖아": 재무·13F처럼 천천히 바뀌는 자료는 드라이브 저장본을 쓰고 7일에 한 번만 새로 받음.
+#   마지막으로 받은 날은 00_퀀트입력/보조갱신일.json에 적음. 가격(fetch_px)은 매번이지만 저장본에 최근 15일만 덧붙임.
+SLOW = {'분기원자료.csv', '분기실적.csv', '재무건전성.csv', '연매출.csv', 'FZ점수.csv', 'PER3년.csv', '장기펀드13F.csv', '공매도.csv'}
+SLOW_DAYS = 7
+MARK = '보조갱신일.json'
+CARRY_FILES = [MARK, '유니버스.csv', 'ETF보유.csv', 'ETF멤버.csv', '1달조합.csv', '블룸버그EPS.csv', '지수밸류.csv',
                '퀀트자료.csv', 'forward_log.csv', '아침보고.txt', '고가2년.csv', '저가2년.csv', '거래량2년.csv'] + [x for _, x in FETCH]
 LOG = []
 
@@ -175,11 +180,23 @@ def pull_teamq(IN):
     return [g.split('←')[0] for g in got]
 
 
-def fetch(W, IN):
-    """야후 보조 자료. 실패하면 전날 사본(이미 IN에 있음)을 그대로 쓴다."""
+def fetch(W, IN, tday=None):
+    """야후 보조 자료. 실패하면 전날 사본(이미 IN에 있음)을 그대로 쓴다.
+    11/25: SLOW 자료는 저장본이 있고 마지막으로 받은 지 SLOW_DAYS일이 안 됐으면 받지 않고 저장본을 씀."""
+    import json
     import yfinance as yf
     done = []
+    tday = tday or dt.datetime.now(KST).date()
+    try:
+        mk = json.load(open(f'{IN}/{MARK}', encoding='utf-8'))
+    except Exception:   # 처음(표 없음): 드라이브 저장본을 오늘 받은 것으로 보고 시작(전날까지 매일 새로 받던 것이라 하루 이내)
+        mk = {o: tday.isoformat() for o in SLOW if os.path.exists(f'{IN}/{o}')}
+    keep = []
     for script, out in FETCH:
+        if out in SLOW and os.path.exists(f'{IN}/{out}') and out in mk:
+            age = (tday - dt.date.fromisoformat(mk[out])).days
+            if 0 <= age < SLOW_DAYS:
+                keep.append(f'{out}({mk[out][5:]})'); continue
         try:
             if script is None:
                 px = yf.download(['^GSPC', '^KQ11', '^KS11'], period='2y', auto_adjust=True, progress=False)['Close']
@@ -199,10 +216,15 @@ def fetch(W, IN):
                     if '한투' in ln or 'DART' in ln:   # 11/23: 한투가 안 될 때 DART로 채운 수도 기록에
                         log(f'[보조 자료] {out}: {ln[:300]}')
             done.append(out)
+            if out in SLOW:
+                mk[out] = tday.isoformat()
         except Exception as e:
             log(f'[보조 자료] {out} 갱신 실패 → 전날 사본: {str(e)[:120]}')
-    log(f'[보조 자료] 갱신 {len(done)}/{len(FETCH)}')
-    return done
+    if keep:
+        log(f'[보조 자료] 드라이브 저장본 그대로(받은 날, {SLOW_DAYS}일마다 새로): {", ".join(keep)}')
+    log(f'[보조 자료] 갱신 {len(done)}/{len(FETCH) - len(keep)}')
+    json.dump(mk, open(f'{IN}/{MARK}', 'w', encoding='utf-8'), ensure_ascii=False)
+    return done + [MARK]
 
 
 def premarket_quotes(R):
@@ -405,7 +427,7 @@ def main():
 
     # 2) 보조 자료
     if not a.skip_fetch:
-        carry_up += fetch(W, IN)
+        carry_up += fetch(W, IN, tday)
 
     # 3) 엔진
     import engine as ENG
