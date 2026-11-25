@@ -1,0 +1,28 @@
+name: 10년치 가격을 유니버스에 맞추기(11/25)
+
+# 11/25 의장 "10년치 자료에서 유니버스에 없는 종목의 기록들은 모두 삭제해." 유니버스가 바뀔 때 손으로 돌린다.
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: '1이면 표만 보고 저장 안 함'
+        required: false
+        default: '0'
+
+concurrency: meeting
+
+jobs:
+  trim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install pandas requests
+      - run: python collect/data/px_trim.py
+        env:
+          DRY: ${{ github.event.inputs.dry }}
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
