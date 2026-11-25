@@ -40,9 +40,10 @@ def events(F, P):
             rev = (r['매출'] / ly['매출'].iloc[0] - 1) * 100
             opd = r['영업이익'] - ly['영업이익'].iloc[0]
             i = s.index.searchsorted(r['공시일'])
-            if i < 1 or i + REACT >= len(s):
+            if i < 1 or i >= len(s):
                 continue
-            p0, p1 = s.iloc[i - 1], s.iloc[i + REACT]
+            n = min(REACT, len(s) - 1 - i)   # 최근 공시는 가격이 10거래일 안 쌓였으면 있는 날까지만(표 통계에서는 뺌)
+            p0, p1 = s.iloc[i - 1], s.iloc[i + n]
             nxt = g.loc[g.index > q + pd.Timedelta(days=60)].head(1)
             rec = np.nan
             if len(nxt):
@@ -51,9 +52,9 @@ def events(F, P):
                 if len(ly2):
                     rec = float(nxt['영업이익'].iloc[0] > ly2['영업이익'].iloc[0])
             rows.append(dict(ticker=t, 분기말=q.date(), 공시일=r['공시일'].date(), 매출증가=round(rev, 1), 이익증감=opd,
-                             반응=(p1 / p0 - 1) * 100,
-                             뒤13주=(s.iloc[i + REACT + F13] / p1 - 1) * 100 if i + REACT + F13 < len(s) else np.nan,
-                             뒤26주=(s.iloc[i + REACT + F26] / p1 - 1) * 100 if i + REACT + F26 < len(s) else np.nan,
+                             반응=(p1 / p0 - 1) * 100, 반응일수=n, 매출=r['매출'], 영업이익=r['영업이익'],
+                             뒤13주=(s.iloc[i + n + F13] / p1 - 1) * 100 if n == REACT and i + n + F13 < len(s) else np.nan,
+                             뒤26주=(s.iloc[i + n + F26] / p1 - 1) * 100 if n == REACT and i + n + F26 < len(s) else np.nan,
                              다음분기회복=rec))
     E = pd.DataFrame(rows)
     E['갈래'] = np.select([(E.매출증가 >= REV_UP) & (E.이익증감 < 0), (E.매출증가 < 0) & (E.이익증감 < 0), (E.매출증가 >= 0) & (E.이익증감 >= 0)],
@@ -82,10 +83,12 @@ def main(d):
         if not len(F):
             print(f'{mk}: {k} 칸 없음'); continue
         E = events(F, P)
-        table(E, mk)
+        table(E[E.반응일수 == REACT], mk)
         if mk == '한국':
-            a = E[E.ticker == '278470.KS'].tail(8)
-            print('\n### 에이피알 최근 실적 발표\n' + a[['분기말', '공시일', '매출증가', '이익증감', '반응', '뒤13주', '갈래', '다음분기회복']].round(1).to_string(index=False))
+            a = E[E.ticker == '278470.KS'].tail(8).copy()
+            a['매출(억)'] = (a['매출'] / 1e8).round(0); a['영업이익(억)'] = (a['영업이익'] / 1e8).round(0); a['이익증감(억)'] = (a['이익증감'] / 1e8).round(0)
+            print('\n### 에이피알 최근 실적 발표(반응일수 = 공시 뒤 가격이 쌓인 거래일, 10 미만이면 아직 덜 쌓임)\n' +
+                  a[['분기말', '공시일', '매출(억)', '영업이익(억)', '매출증가', '이익증감(억)', '반응', '반응일수', '뒤13주', '갈래', '다음분기회복']].round(1).to_string(index=False))
     s = P.get('278470.KS')
     if s is not None:
         s = s.dropna()
