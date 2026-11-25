@@ -225,10 +225,6 @@ def backtest(W, IN, use_drive, tday, B, S):
         if use_drive and os.path.exists(cache):
             import drive
             drive.put(f'{D_DATA}/1_data/{PS.name("블록점수")}', open(cache, 'rb').read())
-            # 11/26 01:49 의장 "옛 파일을 지우고": 10년치 데이터베이스 칸에 올라간 뒤 옛 00_퀀트입력/블록점수이력.csv를 휴지통으로(있을 때만)
-            if drive.get(f'{D_DATA}/1_data/{PS.name("블록점수")}') and drive.get(f'{CARRY}/블록점수이력.csv'):
-                drive.trash(f'{CARRY}/블록점수이력.csv')
-                log('[성적표] 옛 00_퀀트입력/블록점수이력.csv 휴지통으로(10년치 데이터베이스 칸으로 옮김)')
         return out
     except Exception as e:
         log(f'[성적표] 실패 → 건너뜀: {str(e)[:160]}')
