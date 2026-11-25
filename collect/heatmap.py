@@ -1,6 +1,6 @@
 # 히트맵 계산 — 블록 b09_heatmap(07시)과 스트림릿(그날 파일이 없을 때 바로 계산)이 같이 쓴다.
 #   한국: heatmap_kr.csv(코스피·코스닥 주요 약 70종목, 섹터별), 칸 크기는 시가총액.
-#   S&P500: SPDR 섹터 ETF 11개의 상위 10종목(yeokdosan/holdings_top10.csv)을 섹터별로 묶고, 칸 크기는 시가총액.
+#   S&P500: SPDR 섹터 ETF 11개의 상위 10종목(citadel/holdings_top10.csv)을 섹터별로 묶고, 칸 크기는 시가총액.
 #   등락률: 1일(직전 거래일), 1주(5거래일), 1달(21거래일). 판정은 하지 않는다.
 from concurrent.futures import ThreadPoolExecutor
 
