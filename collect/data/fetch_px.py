@@ -1,18 +1,24 @@
 import os, datetime as dt, pandas as pd, yfinance as yf
 N=pd.read_csv('in/닉스.csv',encoding='utf-8-sig')
 t=[x for x in N['yfinance 티커'].dropna().astype(str).unique()]
-# 11/25 의장 "드라이브에 다 저장해 놓으라고 했잖아. 그냥 오늘 가격만 받아오면 되는 거 아님?":
-#   드라이브에 저장된 2년 가격(전날 사본)이 있으면 최근 15일만 받아 덧붙인다. 2년 전부 다시 받기는
-#   ① 저장본이 없거나 ② 마지막 날짜가 10일보다 오래됐거나 ③ 새 종목이 있거나 ④ 월요일(배당 수정 주가를 주 1회 맞춤)일 때만.
+# 11/25 의장 "드라이브에 다 저장해 놓으라고 했잖아. 그냥 오늘 가격만 받아오면 되는 거 아님?" "월요일마다 뭘 또 받아":
+#   드라이브 저장본(가격·고가·저가·거래량 2년, 전날 사본)에 저장본 마지막 날 이후 가격만 받아 덧붙인다(겹침 3일).
+#   2년치는 저장본에 없는 새 종목만, 그 종목만 받는다. 저장본 자체가 없을 때만 전부 2년.
 OLD={}
 for k,f in (('Close','가격2년'),('High','고가2년'),('Low','저가2년'),('Volume','거래량2년')):
     try: OLD[k]=pd.read_csv(f'in/{f}.csv',index_col=0,parse_dates=True,encoding='utf-8-sig')
     except Exception: pass
 _c=OLD.get('Close')
-FULL=(_c is None or not len(_c) or (pd.Timestamp.today()-_c.index.max()).days>10 or any(x not in _c.columns for x in t) or dt.date.today().weekday()==0 or os.environ.get('PX_FULL')=='1')
-DAYS=730 if FULL else 15
-print('가격 받기', '2년 전부' if FULL else f'최근 {DAYS}일만(저장본 {_c.index.max():%Y-%m-%d}까지에 덧붙임)')
-D=yf.download(t, period='2y' if FULL else '1mo', auto_adjust=True, progress=False, threads=True)
+FULL=_c is None or not len(_c.dropna(how='all'))
+NEW=t if FULL else [x for x in t if x not in _c.columns or _c[x].dropna().empty]
+OLDT=[x for x in t if x not in NEW]
+S0=None if FULL else (_c.dropna(how='all').index.max()-pd.Timedelta(days=3)).date()
+DAYS=730 if FULL else (dt.date.today()-S0).days+1
+print('가격 받기', '저장본 없음 → 2년 전부' if FULL else f'저장본 {S0 + dt.timedelta(days=3)}까지 + 그 뒤 {DAYS}일만 {len(OLDT)}종목' + (f' · 새 종목 2년 {NEW}' if NEW else ''))
+D=yf.download(OLDT, start=str(S0), auto_adjust=True, progress=False, threads=True) if OLDT else None
+if NEW:
+    D2=yf.download(NEW, period='2y', auto_adjust=True, progress=False, threads=True)
+    D=D2 if D is None else pd.concat([D, D2], axis=1)
 px=D['Close']
 # 11/21 의장: 야후가 막아 빈 종목(최근 5일 값 없음)은 한투 일봉으로 채운다
 try:
@@ -26,8 +32,8 @@ try:
         got=[]
         for x in bad:
             r=M.loc[x]; mk=r.get('시장')
-            if mk=='한국': k=kis.daily_kr(str(r.get('코드') or x).split('.')[0], days=DAYS)
-            elif mk=='미국': k=kis.daily_us(r.get('코드') or x, r.get('거래소'), days=DAYS, pages=8 if FULL else 1)
+            if mk=='한국': k=kis.daily_kr(str(r.get('코드') or x).split('.')[0], days=730 if x in NEW else DAYS)
+            elif mk=='미국': k=kis.daily_us(r.get('코드') or x, r.get('거래소'), days=730 if x in NEW else DAYS, pages=8 if x in NEW else 1)
             else: continue
             if not len(k): continue
             for col in ('Close','High','Low','Volume'):
