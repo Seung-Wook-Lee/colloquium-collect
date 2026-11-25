@@ -389,6 +389,7 @@ def run(d, cfg=None):
         if '4-12' in B.get('_꺼짐', []):   # 하위 블록 4-12 주문 한도 꺼짐
             mu, al = 1.0, []
         out['주문승수'] = mu; out['경보'] = ' / '.join(al)
+        out['층순위'] = row.get('lay_rs_rank')   # 11/26 의장: 뚜지가 엔진 앞부분(층 상대강도)도 발표
         out['블록예'] = ny; out['블록수'] = nb; out['블록예비율'] = round(ny / nb, 2) if nb else None
         out['블록 예'] = ' / '.join(f'{k} {q}' for k, q, y, _ in yes_blocks if y)
         out['블록 아니오'] = ' / '.join(f'{k} {q}' for k, q, y, _ in yes_blocks if not y)

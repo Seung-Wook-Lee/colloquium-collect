@@ -43,7 +43,7 @@ sys.path.insert(0, DATA)
 import px_store as PS   # noqa: E402  10년치 데이터베이스(1_data/가격10년_*)
 from store_first import SLOW, MARK   # noqa: E402
 CARRY_FILES = [MARK, '유니버스.csv', 'ETF보유.csv', 'ETF멤버.csv', '1달조합.csv', '블룸버그EPS.csv', '지수밸류.csv',
-               '시장위험.csv'] + sorted(SLOW)
+               '시장위험.csv', '블록성적.csv'] + sorted(SLOW)
 LOG = []
 
 
@@ -226,6 +226,11 @@ def backtest(W, IN, use_drive, tday, B, S):
             raise RuntimeError((r.stderr.strip().splitlines() or ['?'])[-1])
         log('[성적표] ' + ' | '.join(r.stdout.strip().splitlines()[:2]))
         out = {k: open(f'{W}/{k}', 'rb').read() for k in ('블록성적.csv', '조합시험.csv', '조합후보_오늘.csv') if os.path.exists(f'{W}/{k}')}
+        if os.path.exists(f'{W}/블록성적.csv'):   # 11/26 의장: 뚜지가 매일 블록 정확도(IC) 발표 → 금요일 성적을 이어 두고 다른 날은 그것을 읽음
+            shutil.copy(f'{W}/블록성적.csv', f'{IN}/블록성적.csv')
+            if use_drive:
+                import drive
+                drive.put(f'{CARRY}/블록성적.csv', open(f'{W}/블록성적.csv', 'rb').read())
         if use_drive and os.path.exists(cache):
             import drive
             drive.put(f'{CARRY}/블록점수이력.csv', open(cache, 'rb').read())
