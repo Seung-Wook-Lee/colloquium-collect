@@ -210,7 +210,7 @@ def backtest(W, IN, use_drive, tday, B, S):
         os.makedirs(f'{IN}/장기', exist_ok=True)   # 가격은 10년치 데이터베이스(IN/가격10년_*)를 그대로 씀
         if use_drive:   # 11/26 의장 "10년치 저장본 밖에 따로 있는 과거 자료들을 저장본에 합치시오": 블록 점수·재무·수급·13F·공매도·ETF 좌수는 저장본 칸
             import drive   # 칸이 아직 없으면 PS.fetch가 옛 파일을 칸으로 옮기고 옛 파일은 휴지통(11/26 의장 "옛 파일을 지우고")
-            for k in ('블록점수', 'SEC재무', 'DART재무', '국내수급', '13F', '공매도', 'ETF좌수', '섹터주봉'):   # 섹터주봉 = B18 업종 ETF 60주선 과거 값
+            for k in ('블록점수', 'SEC재무', 'DART재무', '국내수급', '13F', '공매도', 'ETF좌수'):
                 log(f'[성적표] 저장본 {PS.name(k)} ' + ('받음' if PS.fetch(drive, k, IN, log) else '없음'))
         r = subprocess.run([sys.executable, '-W', 'ignore', f'{QC}/backtest.py', IN], cwd=W, capture_output=True, text=True, timeout=5400, env={**os.environ, 'PYTHONPATH': PYPATH})
         if r.returncode != 0:
