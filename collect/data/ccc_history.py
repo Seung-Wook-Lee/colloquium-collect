@@ -1,5 +1,5 @@
 """11/23 의장 'CCC 기준 검정해서 만들자': ICE BofA CCC 이하(BAMLH0A3HYC)·하이일드(BAMLH0A0HYM2) 스프레드 긴 이력.
-FRED는 최근 3년만 주므로 ALFRED 옛 판(vintage)을 이어 붙인다. → collect/research/out/신용스프레드_이력.csv"""
+FRED는 최근 3년만 주므로 ALFRED 옛 판(vintage)을 이어 붙인다. → history/신용스프레드_이력.csv"""
 import os, time
 import pandas as pd, requests
 
@@ -38,7 +38,7 @@ for sid, nm in (('BAMLH0A3HYC', 'CCC 이하'), ('BAMLH0A0HYM2', '하이일드'))
     out[nm] = s
     print(nm, '합친 것', len(s), s.index.min(), s.index.max())
 D = pd.DataFrame(out)
-os.makedirs('collect/research/out', exist_ok=True)
-D.to_csv('collect/research/out/신용스프레드_이력.csv', encoding='utf-8-sig', index_label='날짜')
+os.makedirs('history', exist_ok=True)
+D.to_csv('history/신용스프레드_이력.csv', encoding='utf-8-sig', index_label='날짜')
 y = D.resample('YE').agg(['min', 'median', 'max']).round(2)
 print(y.to_string())

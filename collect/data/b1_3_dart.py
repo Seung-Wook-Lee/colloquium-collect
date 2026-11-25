@@ -15,13 +15,18 @@ def _load(ctx, rel, local):
     p = os.path.join(ctx['in'], local)
     if os.path.exists(p):
         return pd.read_parquet(p)
-    try:
-        sys_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'teamq')
-        import sys
-        sys.path.insert(0, sys_path)
-        import common as TQ   # 팀Q 드라이브(TEAMQ_DRIVE_URL·TOKEN)
-        TQ.OUT = ctx['tmp']
-        return TQ.load(rel)
+    try:   # 팀Q 드라이브(TEAMQ_DRIVE_URL·TOKEN)에 남은 표준 재무 파일을 읽기만 함(11/26 옛 팀Q 수집 코드 지움)
+        import base64
+        import requests
+        url, tok = os.environ.get('TEAMQ_DRIVE_URL'), os.environ.get('TEAMQ_DRIVE_TOKEN')
+        if not (url and tok):
+            raise RuntimeError('TEAMQ_DRIVE_URL·TOKEN 없음')
+        b = requests.post(url, json={'token': tok, 'action': 'get', 'path': f'Team_Q__chatgpt/{rel}'}, timeout=600).json()
+        if not b.get('found'):
+            raise RuntimeError(f'{rel} 없음')
+        p = os.path.join(ctx['tmp'], local)
+        open(p, 'wb').write(base64.b64decode(b['data']))
+        return pd.read_parquet(p)
     except Exception as e:   # noqa: BLE001
         print(f'[1-3] 팀Q 드라이브 실패: {e}')
         return None

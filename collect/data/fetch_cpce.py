@@ -1,9 +1,9 @@
 """CBOE 주식 풋/콜 비율(CPCE) 일별 이력 받기 (11/22 의장 그림: 빌 루비 CPCE 10일 EMA와 126일 엔벨로프).
 1) CBOE 옛 파일 equitypc.csv(2006-11~2019-10) 2) 2019-10 뒤는 CBOE 날짜별 시장 통계 JSON에서 'EQUITY PUT/CALL RATIO'.
-결과: collect/research/out/CPCE.csv (날짜, CPCE)"""
+결과: history/CPCE.csv (날짜, CPCE)"""
 import os, io, time, datetime as dt
 import pandas as pd, requests
-os.makedirs('collect/research/out', exist_ok=True)
+os.makedirs('history', exist_ok=True)
 H = {'User-Agent': 'Mozilla/5.0'}
 out = {}
 try:
@@ -36,5 +36,5 @@ while d <= pd.Timestamp.today():
         if d.day == 1: print(d.date(), len(out) - n0, flush=True)
     d += pd.Timedelta(days=1)
 S = pd.Series(out).sort_index(); S.index.name = '날짜'
-S.rename('CPCE').to_csv('collect/research/out/CPCE.csv', encoding='utf-8-sig')
+S.rename('CPCE').to_csv('history/CPCE.csv', encoding='utf-8-sig')
 print('합계', len(S), S.index.min(), S.index.max(), '새로', len(out) - n0, '실패', miss); print(S.tail())
