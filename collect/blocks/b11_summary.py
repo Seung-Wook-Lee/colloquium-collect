@@ -8,15 +8,22 @@
 #              제미나이 같은 외부 AI가 날짜를 몰라도 매일 같은 이름으로 찾게 하려는 것.
 # ======================================================================
 def _upload():
+    import sys; sys.path.insert(0, os.path.abspath('data'))
+    import px_store as PS
     up, fail = 0, []
     files = [(f'{DAY}/{n}', f'{D_DATA}/{TODAY}/{n}') for n in sorted(os.listdir(DAY))]
     for n in sorted(os.listdir(KEEP)):
         local = f'{KEEP}/{n}'
+        if n in PS.KEEP_DROP:                       # 11/26 의장: 안 쓰는 파일은 올리지 않음
+            continue
         if SYNC.get(local) != _fp(local):           # 새로 생겼거나 바뀐 누적 파일만
-            files.append((local, f'{D_DATA}/00_누적/{n}'))
+            k = PS.KEEP_DB.get(n)                   # 매일 쓰는 이력은 10년치 데이터베이스 칸으로(11/26 의장)
+            files.append((local, f'{D_DATA}/1_data/{PS.name(k)}' if k else f'{D_DATA}/00_누적/{n}'))
+    import gzip as _gz
     for local, remote in files:
         try:
-            gdrive.put(remote, open(local, 'rb').read())
+            b = open(local, 'rb').read()
+            gdrive.put(remote, _gz.compress(b) if remote.endswith('.gz') and not local.endswith('.gz') else b)
             up += 1
         except Exception as e:
             fail.append(f'{os.path.basename(local)}({e})')

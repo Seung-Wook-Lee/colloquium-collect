@@ -219,12 +219,12 @@ def stocks(d):
             f = f.merge(pd.DataFrame({'번호': C['번호'], 'combo1m': (C['판정'] == '충족').astype(int)}), on='번호', how='left')
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('1달조합', e)
-    # 업종 ETF(섹터 60주·자금): 종목이 상위 10에 든 섹터 ETF 값
+    # 업종 ETF(섹터 60주·자금): 섹터 ETF 자기 값(11/26 의장 "상위종목 하지마. ETF만" → 상위 10 연결 없음)
     Y = _r(d, '시타델')
     try:
         if len(Y):
             etf = Y[Y['구분'] == 'ETF'].set_index('ETF')
-            h = Y[Y['구분'] == '종목'][['ETF', '티커']].copy()
+            h = Y[Y['구분'].isin(['종목', 'ETF'])][['ETF', '티커']].copy()
             h['티커'] = h['티커'].astype(str).str.upper()
             h['sec_gap60'] = h['ETF'].map(_num(etf['60주 이격']))
             h['sec_flow5'] = h['ETF'].map(_num(etf['자금5일']))

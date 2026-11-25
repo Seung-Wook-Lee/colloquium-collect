@@ -30,7 +30,7 @@ def _load(d):
     y = f'{d}/시타델.csv'
     if os.path.exists(y):
         Y = pd.read_csv(y, encoding='utf-8-sig', dtype=str)
-        h = Y[Y['구분'] == '종목'][['ETF', '티커']].copy()
+        h = Y[Y['구분'].isin(['종목', 'ETF'])][['ETF', '티커']].copy()   # 11/26: 섹터 ETF 자기 값(상위 종목 없음)
         h['티커'] = h['티커'].astype(str).str.upper()
         link = h.groupby('티커')['ETF'].first()
     return H, link

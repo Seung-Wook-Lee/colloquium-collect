@@ -368,7 +368,7 @@ def hy_chart():
 @st.cache_data(ttl=3 * 3600, show_spinner=False)
 def _pos_hist():
     import io
-    rel = '00_누적/00_수급포지셔닝_이력.csv'
+    rel = '1_data/가격10년_수급포지셔닝.csv.gz'   # 10년치 데이터베이스 칸(11/26 의장, 옛 00_누적 이력)
     if LOCAL:
         p = Path(LOCAL) / rel
         b = p.read_bytes() if p.exists() else None
@@ -376,7 +376,7 @@ def _pos_hist():
         b = drive.get(f'{D_DATA}/{rel}')
     if not b:
         return None
-    H = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', parse_dates=['날짜'])
+    H = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', parse_dates=['날짜'], compression='gzip')
     return H[H['날짜'] >= H['날짜'].max() - pd.Timedelta(days=372)]
 
 
@@ -451,7 +451,7 @@ def pos_board(title, md):
                 unsafe_allow_html=True)
     H = _pos_hist()
     if H is not None and len(H):
-        st.caption('최근 1년 · 점선 = 기준선 · 색 띠 = 바닥(녹색)·과열(붉은색) 구간 · 출처 00_수급포지셔닝_이력.csv')
+        st.caption('최근 1년 · 점선 = 기준선 · 색 띠 = 바닥(녹색)·과열(붉은색) 구간 · 출처 10년치 데이터베이스 수급포지셔닝 칸')
         for i in range(0, len(POS_PANEL), 2):
             if i:
                 st.markdown('<div style="height:22px"></div>', unsafe_allow_html=True)   # 11/23 의장: 위아래 여유

@@ -33,7 +33,7 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.txt pyyaml
-      - name: 한국 블록(가격·밸류에이션·ETF 좌수·섹터 ETF 주봉(시타델)·ETF 구성)
+      - name: 한국 블록(가격·밸류에이션·ETF 좌수·섹터 ETF 지도(시타델, 데이터베이스로 계산)·ETF 구성)
         run: python collect/run.py b01_prices b02_kis b09_flow.py b09_citadel b09_etfpdf
       - name: 한투 추가 자료
         if: always()

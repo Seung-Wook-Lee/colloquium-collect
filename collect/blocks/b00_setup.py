@@ -97,11 +97,27 @@ if not IN_COLAB:
         raise FileNotFoundError('드라이브 콜로키움/포트폴리오에 콜로키움100_유니버스 csv가 없습니다')
     _pull(f'{D_ROOT}/포트폴리오', names[-1], f'{UNIV_DIR}/{names[-1]}')
     # 2) 00_누적 전부 (드라이브 수정 시각을 그대로 붙여 '며칠마다 새로 받기' 판단이 맞게)
+    import sys; sys.path.insert(0, os.path.abspath('data'))
+    import px_store as PS
+    for n in PS.KEEP_DROP:   # 11/26 의장 카드 '안 쓰는 5개만 지움'
+        if gdrive.trash(f'{D_DATA}/00_누적/{n}'):
+            log(f'[준비] 안 쓰는 00_누적/{n} 휴지통')
     for f in gdrive.ls(f'{D_DATA}/00_누적'):
+        if f['name'] in PS.KEEP_DB:   # 매일 쓰는 이력은 10년치 데이터베이스 칸에서(아래)
+            continue
         local = f'{KEEP}/{f["name"]}'
         if _pull(f'{D_DATA}/00_누적', f['name'], local):
             t = dt.datetime.fromisoformat(f['modified'].replace('Z', '+00:00')).timestamp()
             os.utime(local, (t, t))
+            SYNC[local] = _fp(local)
+            pulled += 1
+    # 2-1) 매일 쓰는 이력 4개 = 10년치 데이터베이스 칸(1_data/가격10년_{칸}). 칸이 없으면 PS.fetch가 옛 00_누적 파일을 옮기고 휴지통.
+    import gzip as _gz
+    for n, k in PS.KEEP_DB.items():
+        if PS.fetch(gdrive, k, KEEP, log):
+            local = f'{KEEP}/{n}'
+            open(local, 'wb').write(_gz.decompress(open(f'{KEEP}/{PS.name(k)}', 'rb').read()))
+            os.remove(f'{KEEP}/{PS.name(k)}')
             SYNC[local] = _fp(local)
             pulled += 1
     # 3) 같은 날 다시 돌릴 때 이어 쓰는 점검 파일
