@@ -28,8 +28,9 @@ try:
     import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import kis
     KR=N[(N['구분']=='개별주')&(N['시장']=='한국')].set_index('번호')['코드' if '코드' in N else 'yfinance 티커'].astype(str).str.split('.').str[0].str.zfill(6).to_dict()   # 닉스.csv엔 코드 칸이 없어 야후 티커 앞부분
     # 11/21 23:47 의장: 한국은 한투가 먼저(최근 4분기 매출 합), 한투가 비면 야후 값
-    print('한투 키', '있음' if kis.ready() else '없음')
-    if kis.ready():
+    print('한투 키', '있음' if kis.ready() else '없음', '| 한투 재무 조회 건너뜀(DART로 채움)' if os.environ.get('KIS_FIN') != '1' else '')
+    # 11/25: 한투 재무(FHKST66430200)는 11/23부터 '호출 전처리 오류'로 0/50 → 원인 찾을 때까지 건너뛰고 DART로 채움(KIS_FIN=1이면 다시 시도)
+    if kis.ready() and os.environ.get('KIS_FIN') == '1':
         ok=0; oks=set()
         for n in KR:
             v=[b for _,b,_,_ in kis.quarterly_kr(KR[n])][-4:]

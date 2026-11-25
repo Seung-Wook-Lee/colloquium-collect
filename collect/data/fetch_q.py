@@ -24,8 +24,9 @@ with ThreadPoolExecutor(10) as ex: R=sum(ex.map(one,t.itertuples(index=False)),[
 try:
     import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import kis
     # 11/21 23:47 의장 "그냥 한국거는 한투받아": 한국은 한투가 먼저, 한투가 비면 야후 값을 그대로 둔다
-    print('한투 키', '있음' if kis.ready() else '없음')
-    if kis.ready():
+    print('한투 키', '있음' if kis.ready() else '없음', '| 한투 재무 조회 건너뜀(DART로 채움)' if os.environ.get('KIS_FIN') != '1' else '')
+    # 11/25: 한투 재무(FHKST66430200)는 11/23부터 '호출 전처리 오류'로 0/50 → 원인 찾을 때까지 건너뛰고 DART로 채움(KIS_FIN=1이면 다시 시도)
+    if kis.ready() and os.environ.get('KIS_FIN') == '1':
         ok=[]
         for n in KR:
             q=kis.quarterly_kr(KR[n])
