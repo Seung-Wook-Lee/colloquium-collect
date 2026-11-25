@@ -100,4 +100,27 @@ def test_no_full_redownload():
     """일요일 10년치 통째 받기 금지: 가격 받는 코드는 저장본(px_store)을 읽어야 한다."""
     for p in ('b1_1_prices.py', 'fetch_px.py'):
         src = (R / 'collect' / 'data' / p).read_text(encoding='utf-8')
-        assert 'px_store' in src and 'PS.start(' in src and 'PS.missing(' in src, p
+        assert 'px_store' in src and ('PS.update(' in src or ('PS.start(' in src and 'PS.missing(' in src)), p
+
+
+def test_update_only_new_sessions():
+    """하루 2번: 07시엔 미국 전날 장만, 저녁엔 한국 오늘 장만 새로 있다. 이미 받은 장은 다시 받지 않는다."""
+    sys.path.insert(0, str(R / 'collect' / 'data'))
+    import px_store as PS
+    wed7 = dt.datetime(2026, 11, 25, 7, 5)
+    wed20 = dt.datetime(2026, 11, 25, 20, 17)
+    assert PS.last_session('미국', wed7) == dt.date(2026, 11, 24) and PS.last_session('한국', wed7) == dt.date(2026, 11, 24)
+    assert PS.last_session('미국', wed20) == dt.date(2026, 11, 24) and PS.last_session('한국', wed20) == dt.date(2026, 11, 25)
+    mon7 = dt.datetime(2026, 11, 23, 7, 5)
+    assert PS.last_session('미국', mon7) == dt.date(2026, 11, 20) and PS.last_session('한국', mon7) == dt.date(2026, 11, 20)
+    idx = pd.bdate_range('2026-01-02', '2026-11-24')
+    B = {'Close': pd.DataFrame({'NVDA': 1.0, '005930.KS': 1.0}, index=idx)}
+    U = pd.DataFrame({'yfinance 티커': ['NVDA', '005930.KS'], '시장': ['미국', '한국']})
+    log = []
+    assert PS.update(B, U, wed7, log=log.append) is B and '받지 않음' in log[0] and '받지 않음' in log[1]   # 국장전: 받을 것 없음
+
+
+def test_price_block_reads_store():
+    """07시 수집 블록 1도 저장본(px_store)만: 5년치·1달치를 따로 받지 않는다."""
+    src = (R / 'collect' / 'blocks' / 'b01_prices.py').read_text(encoding='utf-8')
+    assert 'PS.update(' in src and 'yf.download' not in src and "'5y'" not in src

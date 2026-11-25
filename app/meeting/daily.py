@@ -382,6 +382,7 @@ def main():
         shutil.rmtree(W, ignore_errors=True)
         os.makedirs(IN)
     os.makedirs(OUT, exist_ok=True)
+    os.environ['MKT_STORE'] = f'{IN}/시장위험.csv'   # 11/25 의장: 블록은 지수를 이 저장본에서만 읽음(app/market/stored.py)
     # fetch_*.py는 'in/'·'qblocks/'를 상대 경로로 쓴다
     for link, target in (('in', IN), ('qblocks', QC)):
         lp = os.path.join(W, link)

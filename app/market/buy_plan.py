@@ -39,9 +39,8 @@ def _rsi(x, n=14):
 
 
 def load(start='1985-01-01'):
-    import yfinance as yf
-    t = ['^GSPC', '^NDX', '^RUT', '^VIX', '^VIX3M', '^MOVE', '^TNX']
-    return yf.download(t, start=start, auto_adjust=True, progress=False)['Close']
+    import stored   # 11/25 의장: 저장본에서만(회의 준비 코드가 하루 2번 갱신)
+    return stored.close(['^GSPC', '^NDX', '^RUT', '^VIX', '^VIX3M', '^MOVE', '^TNX'], start=start)
 
 
 def blocks(P):

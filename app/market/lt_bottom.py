@@ -16,6 +16,9 @@
 import numpy as np
 import pandas as pd
 
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))   # stored.py(저장본 읽기)
+
 DEF = dict(강세_문턱=10.0, 약세_문턱=5.0, 바닥_여유=0.03)
 START = {'^GSPC': '1928-01-01', '^NDX': '1985-01-01'}
 
@@ -82,10 +85,10 @@ def prob(s, cfg=None):
 
 
 def today(idx_list=('^NDX', '^GSPC'), cfg=None):
-    import yfinance as yf
+    import stored   # 11/25 의장: 저장본에서만(회의 준비 코드가 하루 2번 갱신)
     rows = []
     for t in idx_list:
-        s = yf.download(t, start=START.get(t, '1985-01-01'), auto_adjust=True, progress=False)['Close'].squeeze()
+        s = stored.close(t, start=START.get(t, '1985-01-01'))
         rows.append({'기준지수': t, '날짜': str(s.dropna().index[-1].date()), **prob(s, cfg)})
     return pd.DataFrame(rows)
 
@@ -179,8 +182,8 @@ def buckets(W, raw, edges=(0, 20, 30, 40, 50, 60, 70, 80, 101)):
 
 
 def hazard_today(idx_list=('^NDX', '^GSPC'), cfg=None):
-    import yfinance as yf
-    P = yf.download(list(idx_list) + ['^VIX', '^TNX'], start='1985-01-01', auto_adjust=True, progress=False)['Close']
+    import stored   # 11/25 의장: 저장본에서만
+    P = stored.close(list(idx_list) + ['^VIX', '^TNX'], start='1985-01-01')
     rows = []
     for t in idx_list:
         one, test = hazard(P[t], P['^VIX'], P['^TNX'], cfg)
