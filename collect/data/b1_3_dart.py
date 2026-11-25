@@ -47,7 +47,8 @@ def _add_new(D, yt):
     if not dart_q.ready():
         print('[1-3] DART_KEY 없음 — 새 분기 덧붙이기 건너뜀')
         return D
-    last = pd.to_datetime(D['분기말']).groupby(D['ticker']).max() if len(D) else pd.Series(dtype='datetime64[ns]')
+    E = D[D['항목'].isin(['매출', '영업이익'])]   # 주식수 줄은 분기말 칸에 공시 날짜가 들어 있어 빼야 함
+    last = pd.to_datetime(E['분기말']).groupby(E['ticker']).max() if len(E) else pd.Series(dtype='datetime64[ns]')
     rows = []
     for code, t in yt.items():
         lq = last.get(t)
