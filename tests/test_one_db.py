@@ -33,7 +33,7 @@ def test_meeting_and_blocks_do_not_download():
 def test_no_price_copies():
     bad = []
     for p in _py([R / 'app', R / 'collect' / 'blocks', R / 'collect' / 'data']):
-        if p.name in ('rename_citadel_1125.py',):
+        if p.name in ('rename_citadel_1125.py', 'trash_old_1126.py'):   # 옛 사본을 지우는 일회용 코드
             continue
         for i, ln in enumerate(p.read_text(encoding='utf-8').splitlines(), 1):
             if COPY.search(ln) and not ln.lstrip().startswith('#'):

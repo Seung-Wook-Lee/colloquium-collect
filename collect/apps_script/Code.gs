@@ -34,6 +34,7 @@ function doPost(e) {
     if (req.action === 'list') return out_({ ok: true, files: list_(req.path), folders: folders_(req.path) });
     if (req.action === 'get') return out_(get_(req.path));
     if (req.action === 'put') return out_(put_(req.path, req.data, req.mime));
+    if (req.action === 'trash') return out_(trash_(req.path));
     return out_({ ok: false, error: '모르는 요청: ' + req.action });
   } catch (err) {
     return out_({ ok: false, error: String(err) });
@@ -123,4 +124,13 @@ function put_(path, data, mime) {
   const blob = Utilities.newBlob(Utilities.base64Decode(data), mime || 'application/octet-stream', name);
   const made = f.createFile(blob);
   return { ok: true, id: made.getId() };
+}
+
+// 11/26 의장: 옛 사본 파일을 코드로 휴지통에 넣는다(휴지통은 30일 뒤 자동으로 비워짐)
+function trash_(path) {
+  const [dir, name] = split_(path);
+  const f = folder_(dir, false);
+  const hits = f ? find_(f, name) : [];
+  hits.forEach(x => x.setTrashed(true));
+  return { ok: true, trashed: hits.length };
 }

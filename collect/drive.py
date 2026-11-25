@@ -47,3 +47,8 @@ def put(path, data):
     """파일 올리기 (같은 이름이 있으면 바꿔 넣음)"""
     mime = MIME.get(os.path.splitext(path)[1].lower(), 'application/octet-stream')
     return _call({'action': 'put', 'path': path, 'mime': mime, 'data': base64.b64encode(data).decode()})
+
+
+def trash(path):
+    """드라이브 파일을 휴지통으로(30일 뒤 자동으로 비워짐). 돌려주는 값: 휴지통에 넣은 개수."""
+    return _call({'action': 'trash', 'path': path}).get('trashed', 0)
