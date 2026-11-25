@@ -15,6 +15,9 @@ EVENT = {'방산': ['종전', '휴전', '평화협상', 'ceasefire', 'peace deal
 MISSING = {}   # 11/21 의장 '병렬식': 빠지거나 깨진 자료 {이름: 이유} — 원고는 그 칸만 비우고 계속 만든다
 
 
+# 11/25 의장: 기준층(S0) 중 블록 판정에 넣는 지수 ETF(QQQM G42·G178, SPYM G41·G177). 층 이름 'S0판정' → 'S0' 예외(기준층 표시·매도 제외·성적표 제외)에 걸리지 않음
+S0_JUDGE = {'G41', 'G42', 'G177', 'G178'}
+
 def _fail(name, e):
     if name not in MISSING:
         MISSING[name] = f'{type(e).__name__}: {str(e)[:80]}'
@@ -84,6 +87,8 @@ def stocks(d):
         _fail('예외검정', e)
     if 'layer' not in f:   # 예외검정이 빠지면 층 없이(한 묶음) 계산
         f['layer'] = ''
+    # 11/25 22:29 의장 "QQQM, SPYM 추천후보에 넣으라고 말했을 텐데. 블록 판정에 넣으라고": 기준층(S0)이지만 블록 판정·추천 후보·블록점수이력에 넣음
+    f.loc[f['번호'].isin(S0_JUDGE) & f['layer'].eq('S0'), 'layer'] = 'S0판정'
     F = _r(d, '국내수급')
     try:
         if len(F):
