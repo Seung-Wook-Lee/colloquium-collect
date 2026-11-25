@@ -1,7 +1,7 @@
 """1-1 가격: 드라이브 저장본(1_data/가격10년_*)에 새 날짜만 덧붙인다(11/25 의장).
 의장: "일요일에 10년치를 통째로 왜 다시 받지? 그걸 왜 코딩을 한거야. 당장 지워. 지금 10년치 있잖아."
 → 10년치 통째 받기를 지움. 규칙은 px_store.py(저장본에 있는 종목은 마지막 날 뒤만, 저장본에 없는 종목만 과거치).
-지수 장기(지수_장기.csv.gz)도 저장본 마지막 날 뒤만 받아 덧붙인다."""
+지수 장기(저장본 칸 가격10년_지수장기, 옛 지수_장기.csv.gz)도 저장본 마지막 날 뒤만 받아 덧붙인다."""
 import pandas as pd
 
 from . import px_store as PS
@@ -23,7 +23,10 @@ def _base(ctx):
 
 
 def _long(ctx, yf):
-    old = read(ctx, '지수_장기.csv.gz')
+    if ctx.get('drive'):   # 11/26 의장: 지수 장기도 10년치 저장본 칸 — 칸이 아직 없으면 옛 지수_장기.csv.gz를 칸으로 옮기고 휴지통
+        import drive
+        PS.fetch(drive, '지수장기', ctx['out'])
+    old = read(ctx, PS.name('지수장기'))
     if old is not None and len(old):
         old['날짜'] = pd.to_datetime(old['날짜'])
         s0 = (old['날짜'].max() - pd.Timedelta(days=PS.OVERLAP_DAYS)).date()
@@ -36,7 +39,7 @@ def _long(ctx, yf):
     L = L.rename_axis(['날짜', '지수']).reset_index()
     if old is not None:
         L = pd.concat([L, old]).drop_duplicates(['날짜', '지수'], keep='first').sort_values(['날짜', '지수'])
-    write(ctx, '지수_장기.csv.gz', L)
+    write(ctx, PS.name('지수장기'), L)
 
 
 def run(ctx, c):

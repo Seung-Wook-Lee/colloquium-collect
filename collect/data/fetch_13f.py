@@ -10,7 +10,7 @@
 - 늘렸나: 펀드마다 분기 주식 수 변화. 신규 = 앞 분기 0 → 보유, 전량 매도 = 보유 → 0.
 - 시점: '공시일'(그 분기 13F가 모두 나온 마지막 공시일) 이후에만 그 분기 값을 씀(미래 정보 없음).
 
-출력(입력 폴더): 장기펀드13F.csv(종목별 최신), 장기펀드13F_이력.csv(종목×분기, 성적 측정용)
+출력(입력 폴더): 장기펀드13F.csv(종목별 최신), 가격10년_13F.csv.gz(종목×분기, 성적 측정용, 10년치 저장본 칸)
 칸: lt_funds(보유 펀드 수), lt_up(늘린 펀드 수, 신규 포함), lt_dn(줄인 펀드 수, 전량 매도 포함),
     lt_net(합산 주식 수 변화 %), lt_net_prev(그 전 분기 합산 변화 %)
 실행: python fetch_13f.py <입력 폴더> [캐시 폴더]
@@ -202,7 +202,7 @@ if __name__ == '__main__':
     since = None if full else (pd.Timestamp.now() - pd.DateOffset(years=3)).strftime('%Y-%m-%d')
     R, miss = build(d, cache, since)
     if full:
-        R.to_csv(f'{d}/장기펀드13F_이력.csv', index=False, encoding='utf-8-sig')
+        R.to_csv(f'{d}/가격10년_13F.csv.gz', index=False, encoding='utf-8-sig', compression='gzip')
     recent = sorted(R['분기'].unique())[-2:]   # 최근 두 분기(반기만 내는 펀드 대비)보다 오래된 값은 쓰지 않음
     L = R[R['분기'].isin(recent)].dropna(subset=['lt_net']).sort_values('분기').groupby('ticker').tail(1)
     L.to_csv(f'{d}/장기펀드13F.csv', index=False, encoding='utf-8-sig')

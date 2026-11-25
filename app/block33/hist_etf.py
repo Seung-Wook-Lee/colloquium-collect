@@ -1,6 +1,6 @@
 """블록점수이력용 B20 ETF 자금 과거 값 (11/24 B20).
 features.py는 오늘 ETF자금.csv·시타델.csv만 읽어 과거 주에도 같은 값이 들어갔다(그래서 비웠음).
-여기서는 1_data/장기/ETF좌수_이력.csv.gz(State Street 공식 이력, 일별 좌수·NAV)로 그 주 금요일까지를 블록 9-ETF자금과 같은 식으로 다시 계산한다.
+여기서는 10년치 저장본 ETF좌수 칸(State Street 공식 이력, 일별 좌수·NAV)로 그 주 금요일까지를 블록 9-ETF자금과 같은 식으로 다시 계산한다.
   하루 유입 = 좌수 변화 × NAV, 5일·20일 = 마지막 5·20 거래일 합(백만달러)
   etf_flow5·etf_flow20 = 그 ETF 자신, sec_flow5 = 종목이 상위 10에 든 업종 ETF의 5일(연결은 오늘 시타델.csv, hist_sector와 같음)
   money_ok는 features와 같은 규칙으로 다시 계산(그 주 값으로).
@@ -11,15 +11,18 @@ import os
 import numpy as np
 import pandas as pd
 
+import sys as _sys
+_sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'collect', 'data'))
+import px_store as PS  # noqa: E402  10년치 저장본(11/26 의장: 따로 있던 과거 자료도 저장본 칸)
+
 VARS = {'etf_flow5', 'etf_flow20', 'sec_flow5'}
 _E = None
 
 
 def _load(d):
-    p = f'{d}/장기/ETF좌수_이력.csv.gz'
-    if not os.path.exists(p):
+    H = PS.table(d, 'ETF좌수')   # 저장본 칸(옛 1_data/장기/ETF좌수_이력)
+    if not len(H):
         return None
-    H = pd.read_csv(p)
     H['날짜'] = pd.to_datetime(H['날짜'], errors='coerce')
     H = H.dropna(subset=['날짜']).sort_values(['코드', '날짜'])
     H['daily'] = H.groupby('코드')['상장좌수'].diff() * H['NAV'] / 1e6

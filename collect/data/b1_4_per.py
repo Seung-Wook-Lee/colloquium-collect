@@ -33,7 +33,7 @@ def _ttm(D):
 
 def run(ctx, c):
     P = need(ctx, 'P', '가격10년_정제.csv.gz', index_col=0, parse_dates=True)
-    need(ctx, 'SEC', 'SEC재무_분기.csv.gz'); need(ctx, 'DART', 'DART재무_분기.csv.gz')
+    need(ctx, 'SEC', '가격10년_SEC재무.csv.gz'); need(ctx, 'DART', '가격10년_DART재무.csv.gz')   # 10년치 저장본 칸
     if P is None:
         raise RuntimeError('1-6 정제 가격이 먼저 있어야 함')
     D = pd.concat([x for x in (ctx.get('SEC'), ctx.get('DART')) if x is not None and len(x)], ignore_index=True)

@@ -3,7 +3,7 @@
   같은 코드를 그대로 씀: risk_signals.signals(CTM·MA 클러스터·코폭·QQQ:RSP 앵커드 VWAP·CPCE·109주선), flowpos.compute(CTA·변동성 목표·시스템 매수 전환),
   B01 HMM은 team_q b01_hmm과 같은 방식(분기마다 그 앞 주만으로 다시 맞춤, 앞으로만 거름).
   값이 없는 변수는 비워 둔다(대신 값 쓰지 않음). 어느 변수가 언제부터 있는지는 실행 끝에 찍는다.
-입력 폴더 d: 시장위험_장기.csv, 지수_장기.csv.gz, (있으면) CPCE.csv·신용스프레드_이력.csv·공포탐욕_이력.csv·지정학위험_이력.csv·가격10년_종가.csv.gz·유니버스.csv
+입력 폴더 d: 시장위험_장기.csv, 가격10년_지수장기.csv.gz, (있으면) CPCE.csv·신용스프레드_이력.csv·공포탐욕_이력.csv·지정학위험_이력.csv·가격10년_종가.csv.gz·유니버스.csv
 출력: d/시장블록이력.csv (날짜, 변수 값, 공식별 결과 1/0/빈칸, 블록별 부담·기회 신호 수, 시장부담·시장기회, S&P·나스닥100 4·12·26·52주 뒤 수익)
 실행: python hist_market.py <입력 폴더> <blocks.yaml> [시작 YYYY-MM-DD]"""
 import os
@@ -77,7 +77,7 @@ def main(d, ypath, start='2000-01-07'):
     cp = _csv(d, 'CPCE.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
     if cp is not None and 'CPCE' not in R:
         R = R.join(cp[['CPCE']], how='outer')
-    I = pd.read_csv(f'{d}/지수_장기.csv.gz'); I['날짜'] = pd.to_datetime(I['날짜'])
+    I = pd.read_csv(f'{d}/가격10년_지수장기.csv.gz'); I['날짜'] = pd.to_datetime(I['날짜'])
     IX = I.pivot_table(index='날짜', columns='지수', values='종가').sort_index()
     spx = R['SPX'].dropna() if 'SPX' in R else IX['^GSPC'].dropna()
     ndx = R['NDX'].dropna() if 'NDX' in R else IX['^NDX'].dropna()

@@ -27,6 +27,58 @@ def name(k):
     return f'가격10년_{F.get(k, k)}.csv.gz'   # k = Open·High·Low·Close·Volume 또는 'EPS'(주당순이익 TTM 칸, 1-4가 매주 만듦)
 
 
+# 11/26 의장 "10년치 저장본 밖에 따로 있는 과거 자료들을 저장본에 합치시오"(카드: 저장본의 칸으로 합침).
+# 날짜 × 종목 칸(시가·고가·저가·종가·거래량·EPS) 말고, 공시·보유처럼 줄 단위인 과거 자료도 같은 저장본(1_data/가격10년_{칸}.csv.gz)의 칸으로 둔다.
+# 읽기는 table(), 쓰기는 put_table(), 드라이브에서 받기는 fetch() 하나로. 옛 자리 파일은 fetch()가 처음 한 번 칸으로 옮기고 휴지통으로 보낸다.
+BASE = '콜로키움 수집데이터'
+TABLES = {   # 칸 이름: 옛 자리(BASE 아래)
+    '블록점수': '00_퀀트입력/블록점수이력.csv',            # 블록 점수·N주 뒤 수익(성적표, 2017-12~ 매주)
+    'SEC재무': '1_data/SEC재무_분기.csv.gz',               # 미국 분기 재무(공시일 기준)
+    'DART재무': '1_data/DART재무_분기.csv.gz',             # 한국 분기 재무(공시일 기준)
+    '국내수급': '1_data/장기/국내수급_일별.csv.gz',        # 한국 종목 외국인·기관·개인 순매수(일별)
+    '13F': '1_data/장기/장기펀드13F_이력.csv',              # 장기 펀드 13F 종목×분기
+    '노르웨이보유': '1_data/장기/노르웨이_보유_이력.csv.gz',  # 노르웨이 국부펀드 보유(반기)
+    '공매도': '1_data/장기/공매도_미국_이력.csv.gz',        # 미국 공매도 잔고(FINRA 결제일)
+    'ETF좌수': '1_data/장기/ETF좌수_이력.csv.gz',          # ETF 상장좌수·NAV(일별)
+    '지수장기': '1_data/지수_장기.csv.gz',                  # 지수 가능한 가장 긴 일봉(^GSPC·^NDX·^KS11)
+}
+
+
+def table(d, k, **kw):
+    """저장본의 줄 단위 칸 읽기. 없으면 빈 표."""
+    p = f'{d}/{name(k)}'
+    if not os.path.exists(p):
+        return pd.DataFrame()
+    return pd.read_csv(p, encoding='utf-8-sig', **kw)
+
+
+def put_table(d, k, df):
+    """저장본의 줄 단위 칸 쓰기(gzip)."""
+    p = f'{d}/{name(k)}'
+    df.to_csv(p, index=False, encoding='utf-8-sig', compression='gzip')
+    return p
+
+
+def fetch(drive, k, folder, log=print):
+    """드라이브 저장본 칸(1_data/가격10년_{k}.csv.gz) → folder. 칸이 아직 없고 옛 자리에 파일이 있으면
+    칸으로 옮겨 올리고(내용 그대로, gzip) 올라간 것을 확인한 뒤 옛 파일을 휴지통으로(11/26 의장 "옛 파일을 지우고")."""
+    import gzip
+    new = f'{BASE}/1_data/{name(k)}'
+    b = drive.get(new)
+    if not b and k in TABLES:
+        old = f'{BASE}/{TABLES[k]}'
+        ob = drive.get(old)
+        if ob:
+            b = ob if old.endswith('.gz') else gzip.compress(ob)
+            drive.put(new, b)
+            if drive.get(new):
+                drive.trash(old)
+                log(f'[저장본] {TABLES[k]} → {name(k)} 옮기고 옛 파일 휴지통')
+    if b:
+        open(f'{folder}/{name(k)}', 'wb').write(b)
+    return bool(b)
+
+
 def load(folder):
     """저장본 읽기: {k: DataFrame(index=날짜, columns=티커)}. 없는 파일은 빠짐."""
     B = {}

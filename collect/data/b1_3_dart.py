@@ -4,6 +4,7 @@ import os
 
 import pandas as pd
 
+from . import px_store as PS
 from .common import universe, write
 
 MAP = {'revenue': '매출', 'operating_income': '영업이익', 'net_income': '순이익', 'pretax_income': '세전이익', 'gross_profit': '매출총이익',
@@ -33,6 +34,9 @@ def _load(ctx, rel, local):
 
 
 def run(ctx, c):
+    if ctx.get('drive'):   # 11/26 의장: 과거 자료는 10년치 저장본 칸 — 칸이 아직 없으면 옛 파일을 칸으로 옮기고 휴지통
+        import drive
+        PS.fetch(drive, 'DART재무', ctx['out'])
     k = _load(ctx, 'processed/fundamentals/kr_standardized_pit.parquet', 'kr_standardized_pit.parquet')
     if k is None:
         raise RuntimeError('DART 표준 재무(kr_standardized_pit)를 못 받음')
@@ -70,7 +74,7 @@ def run(ctx, c):
         ctx['DART_주식수_근거'] = '야후 현재 주식수(근사)'
     for c_ in ('분기말', '공시일'):
         D[c_] = pd.to_datetime(D[c_]).dt.strftime('%Y-%m-%d')
-    write(ctx, 'DART재무_분기.csv.gz', D)
+    write(ctx, PS.name('DART재무'), D)   # 10년치 저장본 칸(옛 1_data/DART재무_분기)
     ctx['DART'] = D
     return {'종목': int(D['ticker'].nunique()), '행': len(D), '시작': str(D['분기말'].min())[:10], '끝': str(D['분기말'].max())[:10],
             '주식수': int((D['항목'] == '주식수').sum())}

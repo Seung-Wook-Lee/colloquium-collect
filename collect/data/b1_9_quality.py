@@ -9,7 +9,7 @@ def run(ctx, c):
     U = ctx.get('U') if ctx.get('U') is not None else need(ctx, 'L', '유니버스_층.csv.gz')
     want = set(U['yfinance 티커'].dropna()) if U is not None else set()
     P = need(ctx, 'P', '가격10년_정제.csv.gz', index_col=0, parse_dates=True)
-    need(ctx, 'SEC', 'SEC재무_분기.csv.gz'); need(ctx, 'DART', 'DART재무_분기.csv.gz')
+    need(ctx, 'SEC', '가격10년_SEC재무.csv.gz'); need(ctx, 'DART', '가격10년_DART재무.csv.gz')   # 10년치 저장본 칸
     if ctx.get('PER') is None:   # 11/26 PER은 10년치 데이터베이스(종가 ÷ EPS 칸)에서 읽음
         import os, sys
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

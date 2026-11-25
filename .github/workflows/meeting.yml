@@ -19,7 +19,7 @@ on:
         required: false
         default: ''
       backtest:
-        description: '블록 성적표·블록점수이력을 금요일이 아니어도 돌리기 — yes'
+        description: '블록 성적표를 손으로 돌리기(이제 매 회의 돎) — yes'
         required: false
         default: ''
 

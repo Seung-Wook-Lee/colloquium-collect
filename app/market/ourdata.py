@@ -7,7 +7,7 @@
 
 우리 자료(읽는 순서)
  - 시장위험_장기.csv : fetch_risk.yml이 매일 쌓는 장기 일봉(SPX·NDX·GOLD(금 선물 GC=F)·SILVER·BTC·TLT·IEF·SHY·LQD·QQQ·RSP·VIX…·FRED 금리)
- - 지수_장기.csv.gz  : ^GSPC·^NDX·^KS11(코스피) 종가
+ - 가격10년_지수장기.csv.gz : ^GSPC·^NDX·^KS11(코스피) 종가
  - 가격10년_종가.csv.gz : 유니버스 종목·ETF 2016~ 종가(START_DIR에 있을 때)
  - 추가자료_종가.csv : 위에 없는 것을 한투에서 받아 둔 것(kis_extra.yml, 드라이브 1_data). 목록 collect/data/추가자료_목록.yaml
 """
@@ -45,7 +45,7 @@ def _risk():
 
 def _index():
     if 'idx' not in _cache:
-        p = _find('지수_장기.csv.gz')
+        p = _find('가격10년_지수장기.csv.gz')   # 11/26 저장본 칸
         if p:
             I = pd.read_csv(p); I['날짜'] = pd.to_datetime(I['날짜'])
             _cache['idx'] = I.pivot_table(index='날짜', columns='지수', values='종가')
@@ -71,7 +71,7 @@ def _extra():
 def where(name):
     """그 이름이 우리 자료 어디에 있는지(파일, 칸). 없으면 None."""
     k = ALIAS.get(name, name)
-    for fname, df in (('시장위험_장기.csv', _risk()), ('지수_장기.csv.gz', _index()), ('가격10년_종가.csv.gz', _px10()), ('추가자료_종가.csv', _extra())):
+    for fname, df in (('시장위험_장기.csv', _risk()), ('가격10년_지수장기.csv.gz', _index()), ('가격10년_종가.csv.gz', _px10()), ('추가자료_종가.csv', _extra())):
         if k in df.columns and df[k].notna().any():
             return fname, k
     return None
@@ -85,7 +85,7 @@ def get(*names, low=False):
         if w is None:
             miss.append(n); continue
         fname, k = w
-        df = {'시장위험_장기.csv': _risk(), '지수_장기.csv.gz': _index(), '가격10년_종가.csv.gz': _px10(), '추가자료_종가.csv': _extra()}[fname]
+        df = {'시장위험_장기.csv': _risk(), '가격10년_지수장기.csv.gz': _index(), '가격10년_종가.csv.gz': _px10(), '추가자료_종가.csv': _extra()}[fname]
         col = f'{k}_LOW' if low and f'{k}_LOW' in df.columns else k
         out[n] = df[col].dropna()
     if miss:

@@ -21,7 +21,7 @@ for k in range(0, 10):
 if not day: sys.exit('최근 10일 안 07시 파일이 드라이브에 없습니다.')
 DL.pull_univ(IN); DL.pull_db(IN); DL.pull_carry(IN, True); DL.pull_advisors(IN, True)
 D = DL.D_DATA
-for src, dst in ((f'{D}/1_data/가격10년_종가.csv.gz', '가격10년_종가.csv.gz'), (f'{D}/1_data/지수_장기.csv.gz', '지수_장기.csv.gz'),
+for src, dst in ((f'{D}/1_data/가격10년_종가.csv.gz', '가격10년_종가.csv.gz'), (f'{D}/1_data/가격10년_지수장기.csv.gz', '가격10년_지수장기.csv.gz'),
                  (f'{D}/1_data/가격10년_블록점수.csv.gz', 'bhist.csv')):   # 11/26 의장: 블록 점수는 10년치 데이터베이스 칸
     b = drive.get(src)
     if b is None and dst == 'bhist.csv':

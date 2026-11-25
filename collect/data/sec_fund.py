@@ -5,7 +5,7 @@ SEC XBRL companyfacts(무료, 키 없음)에서 미국 종목의 분기 재무�
 - 흐름 항목(매출·이익·현금흐름)은 분기 값으로 맞춘다: 3달짜리 값을 쓰고, 없는 4분기는 1년 값 − 앞 세 분기.
 - 같은 분기를 나중에 고쳐 다시 낸 값은 쓰지 않는다(처음 공시한 값과 그날 = 그때 알 수 있던 것).
 - 잔액 항목(자산·부채·자본)은 분기 말 값, 처음 공시일.
-출력: SEC재무_분기.csv (ticker, cik, 항목, 분기말, 공시일, 값) — 원본 json은 버린다.
+출력: 가격10년_SEC재무.csv.gz(10년치 저장본 칸, ticker, cik, 항목, 분기말, 공시일, 값) — 원본 json은 버린다.
 """
 import json
 import os
@@ -166,7 +166,7 @@ def run(out, univ_csv=None, sp500=True):
                 print(f'[SEC] {i}/{len(tk)}', flush=True)
     D = pd.concat(res, ignore_index=True)
     D = D.rename(columns={'end': '분기말', 'filed': '공시일', 'val': '값'})[['ticker', 'cik', '항목', '분기말', '공시일', '값']]
-    D.to_csv(f'{out}/SEC재무_분기.csv', index=False, encoding='utf-8-sig')
+    D.to_csv(f'{out}/가격10년_SEC재무.csv.gz', index=False, encoding='utf-8-sig', compression='gzip')
     pd.DataFrame({'ticker': list(sector), '섹터': list(sector.values())}).to_csv(f'{out}/SEC_섹터.csv', index=False, encoding='utf-8-sig')
     cov = D.groupby('항목')['ticker'].nunique()
     print(f'[SEC] 종목 {D["ticker"].nunique()}/{len(tk)}, 못 받음 {len(miss)}: {miss[:20]}')
