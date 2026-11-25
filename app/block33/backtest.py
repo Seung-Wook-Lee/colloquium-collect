@@ -5,7 +5,7 @@
    그해 매주 종합점수 상위 5종목의 실제 성적을 잰다. 고를 때 본 기간과 성적을 잰 기간이 겹치지 않는다.
 가격으로 다시 계산할 수 없는 칸(실적·수급·13F·뉴스·공매도 등)은 비워 두므로, 그런 블록은 기록이 쌓일 때까지 빠진다.
 쓰는 법: python backtest.py <입력폴더>   (입력폴더에 10년치 데이터베이스 가격10년_*.csv.gz가 있어야 함, 따로 받지 않음)
-결과: <입력폴더>/../블록점수이력.csv(다음 실행 때 새 날짜만 계산), 블록성적.csv, 조합시험.csv, 조합후보_오늘.csv
+결과: <입력폴더>/가격10년_블록점수.csv.gz(10년치 데이터베이스 칸, 다음 실행 때 새 날짜·빈 칸만 계산), ../블록성적.csv, 조합시험.csv, 조합후보_오늘.csv
 오늘 후보는 엔진 판정표(<입력폴더>/../out_판정표.csv)에서 '후보'(거르기·추천 자격 통과)인 종목만."""
 import ast
 import math
@@ -29,7 +29,9 @@ import hist_fund as HF  # 11/23 과거 재무 칸(SEC·DART 공시일 기준)
 import hist_sector as HS
 import hist_flow as HK
 import hist_13f as H13
-import hist_short as HSH  # noqa: E402
+import importlib.util as _iu  # noqa: E402
+# 11/26: 이름이 같은 수집용 collect/data/hist_short.py(FINRA 받기)가 앞에 잡히면 성적표가 받기를 시작함 → 블록33 hist_short.py를 파일 경로로 읽음
+_sp = _iu.spec_from_file_location('b33_hist_short', os.path.join(HERE, 'hist_short.py')); HSH = _iu.module_from_spec(_sp); _sp.loader.exec_module(HSH)
 import hist_etf as HE  # noqa: E402
 import eps_proxy as EP  # noqa: E402
 import nyx  # noqa: E402
@@ -191,6 +193,18 @@ def forward(L, H, ticker, t):
     return {f'{w}주': (c.iloc[i + n] / c.iloc[i] - 1) * 100 if i >= 0 and i + n < len(c) else np.nan for w, n in H.items()}
 
 
+def _ic_by_date(zz, bid, k):
+    """날짜별 순위 상관(스피어만): 날짜 안에서 순위를 매기고 피어슨 상관을 한꺼번에 계산(종목 수 루프 없음)."""
+    g = zz[['날짜', bid, k]].copy()
+    g['a'] = g.groupby('날짜')[bid].rank(); g['b'] = g.groupby('날짜')[k].rank()
+    g['ab'] = g['a'] * g['b']; g['aa'] = g['a'] ** 2; g['bb'] = g['b'] ** 2
+    s = g.groupby('날짜')[['a', 'b', 'ab', 'aa', 'bb']].sum(); n = g.groupby('날짜').size()
+    cov = s['ab'] - s['a'] * s['b'] / n
+    va, vb = s['aa'] - s['a'] ** 2 / n, s['bb'] - s['b'] ** 2 / n
+    ic = cov / np.sqrt(va * vb)
+    return ic[(va > 1e-12) & (vb > 1e-12)].dropna()
+
+
 def report(Z, SB, H):
     rows = []
     for bid, b in SB.items():
@@ -202,8 +216,7 @@ def report(Z, SB, H):
             k = f'{w}주'; zz = z[z[k].notna()]
             if zz['날짜'].nunique() < 8: continue
             y, n = zz[zz[bid] >= 0.5][k], zz[zz[bid] < 0.5][k]
-            ic = zz.groupby('날짜').apply(lambda g: g[bid].rank().corr(g[k].rank()) if g[bid].nunique() > 1 else np.nan,
-                                          include_groups=False).dropna()
+            ic = _ic_by_date(zz, bid, k)   # 11/26 의장 "이미 다 되어 있는 계산을 왜 다시 하는 거지": 날짜마다 apply 대신 한꺼번에(같은 값)
             rows.append(dict(블록=bid, 질문=b['질문'], 영문=b.get('영문', ''), 국면=reg or '전체', 기간=k, 날짜수=zz['날짜'].nunique(),
                              예_종목수=len(y), 예_평균수익률=round(y.mean(), 2), 예_승률=round((y > 0).mean() * 100, 1),
                              아니오_평균수익률=round(n.mean(), 2), 아니오_승률=round((n > 0).mean() * 100, 1),
@@ -291,7 +304,7 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     if os.path.exists(f'{d}/{PS.name("EPS")}'):
         mask = mask - EP.VARS; keep = keep | (EP.VARS & formula_vars(B['종목']))   # B24 실제 이익 공식은 데이터베이스 EPS 칸으로 그 주 값
     print('비운 칸(과거 값 없음):', ', '.join(sorted(mask)))
-    cache = os.path.join(d, '..', '블록점수이력.csv')
+    cache = os.path.join(d, PS.name('블록점수'))   # 11/26 의장 "10년치 하나에 넣으라니까": 블록 점수·N주 뒤 수익은 10년치 데이터베이스 칸(가격10년_블록점수)
     old = pd.read_csv(cache, encoding='utf-8-sig') if os.path.exists(cache) else pd.DataFrame()
     sig = ','.join(sorted(mask)) + '|' + ','.join(SB for SB in B['종목'])
     if len(old) and str(old.get('_설정', pd.Series([''])).iloc[0]) != sig:
@@ -319,11 +332,19 @@ def main(d, cfg=None, step='W-FRI', workers=None):
         new = pool.map(_one, [(d, L, t, B, mask) for t in todo])
     Z = pd.concat([old[old['날짜'].astype(str) != str(dates[-1].date())]] + new, ignore_index=True) if len(old) else pd.concat(new, ignore_index=True)
     Z['날짜'] = pd.to_datetime(Z['날짜']).dt.date
-    fw = pd.DataFrame([forward(L, H, tk, pd.Timestamp(t)) for tk, t in zip(Z['ticker'], Z['날짜'])], index=Z.index)
-    Z = pd.concat([Z.drop(columns=[c for c in fw.columns if c in Z]), fw], axis=1)
+    # 11/26 의장 "드라이브에서 꺼내오면 되잖아": N주 뒤 수익은 이력(드라이브)에 이미 있는 칸은 그대로, 빈 칸만 계산
+    hk = [f'{w}주' for w in H]
+    for k in hk:
+        if k not in Z:
+            Z[k] = np.nan
+    need = Z[hk].isna().any(axis=1)
+    if need.any():
+        fw = pd.DataFrame([forward(L, H, tk, pd.Timestamp(t)) for tk, t in zip(Z.loc[need, 'ticker'], Z.loc[need, '날짜'])], index=Z.index[need])
+        Z.loc[need, hk] = fw[hk].values
+    print(f'N주 뒤 수익 새로 계산 {int(need.sum())}줄 / 전체 {len(Z)}줄')
     Z['_설정'] = ''
     Z.loc[Z.index[:1], '_설정'] = sig   # 설정 표시는 첫 줄에만(파일 크기)
-    Z.round(3).to_csv(cache, index=False, encoding='utf-8-sig')
+    Z.round(3).to_csv(cache, index=False, encoding='utf-8-sig', compression='gzip')
     SB = B['종목']
     Z = Z[Z['층'] != 'S0']   # 이력 파일엔 기준층(QQQM·SPYM 등)도 남기고, 종목 성적표·조합 시험(종목 고르기)에서만 뺀다
     R = report(Z, SB, H)

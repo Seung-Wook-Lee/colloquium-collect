@@ -43,7 +43,7 @@ sys.path.insert(0, DATA)
 import px_store as PS   # noqa: E402  10년치 데이터베이스(1_data/가격10년_*)
 from store_first import SLOW, MARK   # noqa: E402
 CARRY_FILES = [MARK, '유니버스.csv', 'ETF보유.csv', 'ETF멤버.csv', '1달조합.csv', '블룸버그EPS.csv', '지수밸류.csv',
-               '시장위험.csv', '블록성적.csv'] + sorted(SLOW)
+               '시장위험.csv'] + sorted(SLOW)
 LOG = []
 
 
@@ -202,15 +202,22 @@ def _save(b, p):
 
 
 def backtest(W, IN, use_drive, tday, B, S):
-    """11/19 의장: 블록 성적표·조합 시험(block33/backtest.py). 매 회의(11/26 의장: 지난주들은 금요일 그대로, 이번 주는 그날 가격으로 그날까지). 지난 계산(블록점수이력.csv)은 드라이브에 이어 써서 새 날짜만 계산."""
-    cache = f'{W}/블록점수이력.csv'
+    """11/19 의장: 블록 성적표·조합 시험(block33/backtest.py). 매 회의(11/26 의장: 지난주들은 금요일 그대로, 이번 주는 그날 가격으로 그날까지).
+    11/26 의장 "10년치 하나에 넣으라니까": 블록 점수·N주 뒤 수익은 10년치 데이터베이스 칸(1_data/가격10년_블록점수.csv.gz)에 두고 새 날짜·빈 칸만 계산."""
+    cache = f'{IN}/{PS.name("블록점수")}'
     S.to_csv(f'{W}/out_판정표.csv', index=False, encoding='utf-8-sig')   # 오늘 후보는 엔진 '후보'만
     try:
         if use_drive:
             import drive
-            raw = drive.get(f'{CARRY}/블록점수이력.csv')
+            raw = drive.get(f'{D_DATA}/1_data/{PS.name("블록점수")}')
             if raw:
                 open(cache, 'wb').write(raw)
+            else:   # 처음 한 번: 옛 자리(00_퀀트입력/블록점수이력.csv)에서 옮겨 옴
+                raw = drive.get(f'{CARRY}/블록점수이력.csv')
+                if raw:
+                    import gzip
+                    open(cache, 'wb').write(gzip.compress(raw))
+                    log('[성적표] 옛 블록점수이력.csv → 10년치 데이터베이스 칸으로 옮김')
         os.makedirs(f'{IN}/장기', exist_ok=True)   # 가격은 10년치 데이터베이스(IN/가격10년_*)를 그대로 씀
         if use_drive:   # 11/23 의장 '24개 블록 과거 값 채워': 재무 칸 과거 값(공시일 기준)
             import drive
@@ -226,14 +233,11 @@ def backtest(W, IN, use_drive, tday, B, S):
             raise RuntimeError((r.stderr.strip().splitlines() or ['?'])[-1])
         log('[성적표] ' + ' | '.join(r.stdout.strip().splitlines()[:2]))
         out = {k: open(f'{W}/{k}', 'rb').read() for k in ('블록성적.csv', '조합시험.csv', '조합후보_오늘.csv') if os.path.exists(f'{W}/{k}')}
-        if os.path.exists(f'{W}/블록성적.csv'):   # 11/26 의장: 뚜지가 매일 블록 정확도(IC) 발표 → 금요일 성적을 이어 두고 다른 날은 그것을 읽음
+        if os.path.exists(f'{W}/블록성적.csv'):   # 뚜지(블록 정확도)가 읽음 — 매 회의 새로 계산하므로 따로 저장하지 않음
             shutil.copy(f'{W}/블록성적.csv', f'{IN}/블록성적.csv')
-            if use_drive:
-                import drive
-                drive.put(f'{CARRY}/블록성적.csv', open(f'{W}/블록성적.csv', 'rb').read())
         if use_drive and os.path.exists(cache):
             import drive
-            drive.put(f'{CARRY}/블록점수이력.csv', open(cache, 'rb').read())
+            drive.put(f'{D_DATA}/1_data/{PS.name("블록점수")}', open(cache, 'rb').read())
         return out
     except Exception as e:
         log(f'[성적표] 실패 → 건너뜀: {str(e)[:160]}')
@@ -367,7 +371,7 @@ def main():
         log(f'[가격대] 실패: {e}')
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
     # 11/26 의장 "뭘 금요일만 하냐. 그날 가격 가지고 그 주를 평가하면 되잖아": 성적표(하위 블록 5-1)는 매 회의 돈다.
-    # 지난 주들은 블록점수이력.csv에 이어 두고, 이번 주는 오늘 가격으로 다시 매긴다(backtest.py).
+    # 지난 주들은 10년치 데이터베이스(가격10년_블록점수)에 이어 두고, 이번 주는 오늘 가격으로 다시 매긴다(backtest.py).
     BTO = backtest(W, IN, use_drive, tday, B, S) if '5-1' not in B.get('_꺼짐', []) else {}
     BTO.update(bottom(W, use_drive, B, S))
 

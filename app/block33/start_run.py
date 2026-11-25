@@ -1,7 +1,7 @@
 """start 블록을 GitHub Actions에서 돌리는 창구 (11/22 23:30 의장 "하나의 흐름으로").
 1) 엔진 입력 모으기: 드라이브 최신 수집 파일(오늘이 없으면 가장 가까운 앞 날짜)·유니버스·10년치 데이터베이스·보조 자료(00_퀀트입력) — 회의 원고(daily.py)와 같은 함수.
    아무것도 따로 받지 않는다(11/26 의장: 받기는 아침 8시·저녁 8시 수집 두 곳뿐).
-2) start 자료: 1_data 가격10년_종가·지수_장기, 00_퀀트입력 블록점수이력, 비공개 Core50, 드라이브 start/질문장부.
+2) start 자료: 1_data 가격10년_종가·가격10년_블록점수·지수_장기, 비공개 Core50, 드라이브 start/질문장부.
 3) start.py 실행(그 안에서 엔진 ①블록 계산 ②거르기를 직접 돈다) → 결과를 드라이브 '콜로키움 수집데이터/start/'에 올림.
   python app/block33/start_run.py "<질문>" [core50|전체] [주식|ETF|모두] [4|12|26|52] [N미국] [N한국]"""
 import datetime as dt, os, shutil, subprocess, sys
@@ -22,8 +22,13 @@ if not day: sys.exit('최근 10일 안 07시 파일이 드라이브에 없습니
 DL.pull_univ(IN); DL.pull_db(IN); DL.pull_carry(IN, True); DL.pull_advisors(IN, True)
 D = DL.D_DATA
 for src, dst in ((f'{D}/1_data/가격10년_종가.csv.gz', '가격10년_종가.csv.gz'), (f'{D}/1_data/지수_장기.csv.gz', '지수_장기.csv.gz'),
-                 (f'{DL.CARRY}/블록점수이력.csv', 'bhist.csv')):
+                 (f'{D}/1_data/가격10년_블록점수.csv.gz', 'bhist.csv')):   # 11/26 의장: 블록 점수는 10년치 데이터베이스 칸
     b = drive.get(src)
+    if b is None and dst == 'bhist.csv':
+        b = drive.get(f'{DL.CARRY}/블록점수이력.csv')   # 옮기기 전 옛 자리
+    elif b is not None and dst == 'bhist.csv':
+        import gzip
+        b = gzip.decompress(b)
     if b is None: sys.exit(f'드라이브에 {src} 없음')
     open(f'{SD}/{dst}', 'wb').write(b)
 core = os.path.join(os.environ.get('QC_PRIVATE', ''), 'start', 'Core50.csv')
