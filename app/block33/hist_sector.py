@@ -1,7 +1,7 @@
 """블록점수이력용 B18 업종 ETF 60주선 이격 과거 값 (11/24 의장 "B1~B18 다 채웠나?").
 features.py는 오늘 시타델.csv(업종 ETF 60주 이격)만 읽어 과거 주에도 같은 값이 들어갔다(그래서 비웠음).
-여기서는 시타델 주봉 창고(10년치 저장본 칸 가격10년_섹터주봉, 한투 주봉 2000~)로 그 주 금요일까지의 60주선 이격을 다시 계산한다.
-종목↔업종 ETF 연결은 오늘 시타델.csv의 상위 10(과거 구성 기록 없음 — 지금 구성으로 씀). 상위 10에 없는 개별주는 features와 같이 같은 시장·층 중앙값.
+여기서는 10년치 데이터베이스 종가 칸(가격10년_종가)을 주봉(금요일)으로 묶어 그 주 금요일까지의 60주선 이격을 다시 계산한다.
+11/26 의장 "상위종목 하지마. ETF만 해": 섹터 ETF는 자기 값, 개별주는 features와 같이 같은 시장·층 중앙값.
 sec_flow5(업종 ETF 자금)는 과거 좌수 기록이 없어 아직 비움.
 쓰는 곳: backtest._one → apply(f, t, d)"""
 import os
@@ -19,13 +19,13 @@ _W = None
 
 def _load(d):
     y = f'{d}/시타델.csv'
-    W = PS.table(d, '섹터주봉', usecols=['티커', '날짜', '종가'], dtype={'티커': str}) if os.path.exists(y) else pd.DataFrame()   # 저장본 칸(옛 00_누적/00_시타델_주봉)
-    if not len(W):
+    X = PS.frame(d, 'Close') if os.path.exists(y) else pd.DataFrame()   # 10년치 데이터베이스 종가 칸
+    if not len(X):
         return None
-    W['날짜'] = pd.to_datetime(W['날짜'].astype(str), errors='coerce'); W['종가'] = pd.to_numeric(W['종가'], errors='coerce')
-    C = W.dropna().pivot_table(index='날짜', columns='티커', values='종가', aggfunc='last').sort_index()
+    C = X.resample('W-FRI').last()
+    C.columns = [str(c).split('.')[0] if str(c).endswith(('.KS', '.KQ')) else str(c) for c in C.columns]
     Y = pd.read_csv(y, encoding='utf-8-sig', dtype=str)
-    h = Y[Y['구분'] == '종목'][['ETF', '티커']].copy()
+    h = Y[Y['구분'].isin(['종목', 'ETF'])][['ETF', '티커']].copy()
     h['티커'] = h['티커'].astype(str).str.upper()
     return C, h.groupby('티커')['ETF'].first()
 

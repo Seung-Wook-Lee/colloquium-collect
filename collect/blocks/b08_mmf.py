@@ -4,7 +4,7 @@
 #              잔고가 줄면 대기 자금이 시장(주식·채권)으로 나가는 쪽, 늘면 현금으로 숨는 쪽. 해석은 리오가 한다.
 #   소스     : https://www.ici.org/research/stats/mmf 본문 첫 문장
 #              "Total money market fund assets increased by $X billion to $Y trillion for the week ended Wednesday, Month D"
-#   만드는 것: 수집데이터/00_누적/00_MMF잔고.csv (주마다 한 줄, 같은 주 다시 받으면 덮어씀)
+#   만드는 것: 10년치 데이터베이스 칸 1_data/가격10년_MMF.csv.gz (주마다 한 줄; 작업 폴더에선 옛 이름 KEEP/00_MMF잔고.csv, b11이 칸으로 올림)
 #              수집데이터/YYYYMMDD/YYYYMMDD_MMF.csv (최근 1줄: 기준일·잔고·1주 변화·4주 변화)
 #   주의     : ICI는 GitHub Actions 서버 접속을 막는다(2026-11-05 시험 403). 막히면 '실패'로 남고, 그 주는 뉴스 국장이 웹 검색으로 보고.
 #              4주 변화는 기록이 4주 쌓인 뒤부터. 문장 모양이 바뀌면 '실패'로 남는다(고칠 곳 MMF_RE).

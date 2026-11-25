@@ -61,3 +61,29 @@ def test_market_merges_five_into_one(tmp_path):
     assert list(M['CPCE']) == [0.5, 0.8]   # 시장위험_장기 값 우선, 빈 날은 CPCE.csv
     assert f'{B}/1_data/{PS.name("시장지표")}' in D.f and not any('장기/' in k for k in D.f)
     assert PS.frame(str(tmp_path), '시장지표').shape == (2, 4)
+
+
+def test_citadel_etf_only_from_db():
+    """11/26 의장 "상위종목 하지마. ETF만 해. 유니버스에 없는 것은 하지마. 그리고 병합해. DB"."""
+    sys.path.insert(0, str(R / 'collect' / 'citadel'))
+    import citadel as ct
+    assert not (R / 'collect' / 'citadel' / 'holdings_top10.csv').exists()
+    assert '395160' not in (R / 'collect' / 'citadel' / 'etfs_kr.csv').read_text(encoding='utf-8')
+    src = (R / 'collect' / 'blocks' / 'b09_citadel.py').read_text(encoding='utf-8')
+    assert 'kis_token' not in src and 'kr_components' not in src and 'to_csv(path' not in src
+    d = pd.bdate_range('2026-01-05', '2026-01-16')
+    L = pd.DataFrame({'날짜': list(d) * 2, '티커': ['XLK'] * 10 + ['091230.KS'] * 10, '시가': range(20), '고가': range(1, 21),
+                      '저가': range(20), '종가': range(20), '거래량': [1] * 20})
+    W = ct.weekly(L)
+    assert set(W['티커']) == {'XLK', '091230'} and len(W) == 4
+    k = W[(W['티커'] == 'XLK')].iloc[0]
+    assert (k['시가'], k['고가'], k['저가'], k['종가'], k['거래량']) == (0, 5, 0, 4, 5)
+    T, _ = ct.now_table(W, pd.DataFrame({'ETF': ['XLK']}))
+    assert list(T['구분']) == ['ETF']
+
+
+def test_keep_db_and_drop():
+    import px_store as PS
+    for n, k in PS.KEEP_DB.items():
+        assert PS.TABLES[k] == f'00_누적/{n}'
+    assert not set(PS.KEEP_DB) & set(PS.KEEP_DROP)

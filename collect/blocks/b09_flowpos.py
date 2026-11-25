@@ -6,10 +6,8 @@
 #              대통령 임기 주기(중간선거) 달력, 자사주 블랙아웃 창(어림)
 #   소스     : 야후 일봉(^GSPC ^NDX ^RUT ^SPXEW ^VIX ^VXN ^VIX3M), 2000년부터. 비용 0원.
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_수급포지셔닝.csv (항목 한 줄 + 달력 줄)
-#              수집데이터/00_누적/00_수급포지셔닝_이력.csv (2018년부터 일별, 매일 새로 계산해 덮어씀)
+#              10년치 데이터베이스 칸 1_data/가격10년_수급포지셔닝.csv.gz (2018년부터 일별, 매일 새로 계산해 덮어씀; 작업 폴더에선 옛 이름 KEEP/00_수급포지셔닝_이력.csv, b11이 칸으로 올림)
 #   쓰는 위원: 수급·포지셔닝 전담 새 위원(이름은 의장이 정함, 페르소나/수급위원_가칭.txt)
-#              (나) DBMF(SG CTA 지수 복제 ETF) 매일 보유 내역: 실제 S&P·나스닥·러셀 선물 계약 수 → 00_누적/00_DBMF보유이력.csv
-#                   (11/15 의장 "CTA 근거를 발표하는 데를 찾아야지". 운용사 사이트 형식 미확인 — 첫 실행으로 확인)
 #   주의     : CTA σ는 시타델 실제 모형이 아니라 가격 근사(보조 자료). 판정 문턱은 의장 승인 전이라 '룰 미정'.
 #   실패하면 : 점검 파일에 '실패'로 남기고 다음 블록은 계속 실행
 # ======================================================================
@@ -55,49 +53,7 @@ def _b09_flowpos():
     except Exception as e:
         traceback.print_exc()
         log(f'[9 수급] 실패: {type(e).__name__} {e}')
-
-
-    # (나) DBMF 보유 내역 — CTA 복제 ETF가 실제로 들고 있는 주가지수 선물 (매일 공개)
-    DBMF_PAGES = ['https://imgpfunds.com/imgp-dbi-managed-futures-strategy-etf/',
-                  'https://www.imgpfunds.com/imgp-dbi-managed-futures-strategy-etf/']
-    DBMF_KEYS = ('S&P', 'SP500', 'E-MINI', 'EMINI', 'NASDAQ', 'NDX', 'RUSSELL', 'RTY', 'MSCI', 'NIKKEI', 'TOPIX', 'EURO STOXX')
-    try:
-        import re as _re
-        links, page_err = [], []
-        for _url in DBMF_PAGES:
-            try:
-                r = requests.get(_url, headers=UA, timeout=20)
-                r.raise_for_status()
-                for h in _re.findall(r'href=["\']([^"\']+)["\']', r.text):
-                    if 'olding' in h and _re.search(r'\.(csv|xlsx?)(\?|$)', h, _re.I):
-                        links.append(h if h.startswith('http') else requests.compat.urljoin(_url, h))
-                if links:
-                    break
-            except Exception as e:
-                page_err.append(f'{_url.split("/")[2]} {type(e).__name__}')
-        if not links:
-            raise RuntimeError('보유 내역 파일 링크 없음 ' + '; '.join(page_err))
-        f = requests.get(links[0], headers=UA, timeout=30)
-        f.raise_for_status()
-        if links[0].lower().split('?')[0].endswith('.csv'):
-            tabs = [pd.read_csv(io.BytesIO(f.content), header=None, dtype=str)]
-        else:
-            tabs = list(pd.read_excel(io.BytesIO(f.content), header=None, dtype=str, sheet_name=None).values())
-        rows = []
-        for t in tabs:
-            for _, rr in t.fillna('').iterrows():
-                line = ' | '.join(str(x).strip() for x in rr if str(x).strip())
-                if any(k in line.upper() for k in DBMF_KEYS):
-                    rows.append(line)
-        hist = f'{KEEP}/00_DBMF보유이력.csv'
-        new = pd.DataFrame({'날짜': TODAY, '원문 줄': rows, '파일': links[0]})
-        old = pd.read_csv(hist, dtype=str) if os.path.exists(hist) else pd.DataFrame()
-        if len(old):
-            old = old[old['날짜'] != TODAY]
-        pd.concat([old, new], ignore_index=True).to_csv(hist, index=False, encoding='utf-8-sig')
-        log(f'[9 수급] DBMF 보유 주가지수 선물 {len(rows)}줄 | {links[0].rsplit("/", 1)[-1]}')
-    except Exception as e:
-        log(f'[9 수급] DBMF 보유 내역 실패: {type(e).__name__} {e}')
+    # (나) DBMF 보유 내역은 지움(11/23 B06에 안 넣기로 결정, 11/26 의장 카드 '안 쓰는 5개만 지움')
 
 
 _b09_flowpos()
