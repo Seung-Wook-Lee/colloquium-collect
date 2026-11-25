@@ -43,11 +43,8 @@ FETCH = [('fetch_px.py', '가격2년.csv'), (None, '지수2년.csv'), ('fetch_q.
          ('fetch_13f.py', '장기펀드13F.csv'), ('fetch_short.py', '공매도.csv'),
          ('fetch_risk_daily.py', '시장위험.csv')]   # 11/22 의장: B35 항복·B03 AAA 괴리   # 11/19 장기 펀드 13F(B21 보너스, SEC 무료), B22 공매도 잔고(미국, 야후)
 # 전날 것을 이어 쓰는 자료(드라이브 00_퀀트입력 → 없으면 저장소 meeting/seed/)
-# 11/25 의장 "드라이브에 다 저장해 놓으라고 했잖아": 재무·13F처럼 천천히 바뀌는 자료는 드라이브 저장본을 쓰고 7일에 한 번만 새로 받음.
-#   마지막으로 받은 날은 00_퀀트입력/보조갱신일.json에 적음. 가격(fetch_px)은 매번이지만 저장본에 최근 15일만 덧붙임.
-SLOW = {'분기원자료.csv', '분기실적.csv', '재무건전성.csv', '연매출.csv', 'FZ점수.csv', 'PER3년.csv', '장기펀드13F.csv', '공매도.csv'}
-SLOW_DAYS = 7
-MARK = '보조갱신일.json'
+# 11/25 의장 "구글 드라이브에 있는 것으로 계산한다, 거기 없을 때에만 받으라고" → 규칙은 store_first.py(테스트 tests/test_store_first.py)
+from store_first import SLOW, MARK, why_fetch, per_today   # noqa: E402
 CARRY_FILES = [MARK, '유니버스.csv', 'ETF보유.csv', 'ETF멤버.csv', '1달조합.csv', '블룸버그EPS.csv', '지수밸류.csv',
                '퀀트자료.csv', 'forward_log.csv', '아침보고.txt', '고가2년.csv', '저가2년.csv', '거래량2년.csv'] + [x for _, x in FETCH]
 LOG = []
@@ -181,8 +178,9 @@ def pull_teamq(IN):
 
 
 def fetch(W, IN, tday=None):
-    """야후 보조 자료. 실패하면 전날 사본(이미 IN에 있음)을 그대로 쓴다.
-    11/25: SLOW 자료는 저장본이 있고 마지막으로 받은 지 SLOW_DAYS일이 안 됐으면 받지 않고 저장본을 씀."""
+    """보조 자료. 11/25 의장 규칙(store_first.py): 계산은 드라이브 저장본(전날 사본, 이미 IN에 있음)으로 하고,
+    저장본에 없는 것만 받는다. 가격은 저장본 마지막 날 뒤만 덧붙이고, SLOW 자료는 why_fetch가 이유를 낼 때만 받는다.
+    받다가 실패하면 저장본을 그대로 쓴다."""
     import json
     import yfinance as yf
     done = []
@@ -191,15 +189,28 @@ def fetch(W, IN, tday=None):
         mk = json.load(open(f'{IN}/{MARK}', encoding='utf-8'))
     except Exception:   # 처음(표 없음): 드라이브 저장본을 오늘 받은 것으로 보고 시작(전날까지 매일 새로 받던 것이라 하루 이내)
         mk = {o: tday.isoformat() for o in SLOW if os.path.exists(f'{IN}/{o}')}
-    keep = []
+    keep, got = [], []
     for script, out in FETCH:
-        if out in SLOW and os.path.exists(f'{IN}/{out}') and out in mk:
-            age = (tday - dt.date.fromisoformat(mk[out])).days
-            if 0 <= age < SLOW_DAYS:
-                keep.append(f'{out}({mk[out][5:]})'); continue
+        if out in SLOW:
+            why = why_fetch(out, IN, mk, tday)
+            if why is None:
+                keep.append(out); continue
+            got.append(f'{out}({why})')
         try:
             if script is None:
-                px = yf.download(['^GSPC', '^KQ11', '^KS11'], period='2y', auto_adjust=True, progress=False)['Close']
+                # 11/25 의장 "오늘 가격만 받으면 되지": 저장본(드라이브 전날 사본)이 있으면 마지막 날 5일 전부터만 받아 덧붙임
+                try:
+                    old = pd.read_csv(f'{IN}/{out}', index_col=0, parse_dates=True, encoding='utf-8-sig')
+                except Exception:
+                    old = None
+                if old is not None and len(old.dropna(how='all')):
+                    s0 = (old.dropna(how='all').index.max() - pd.Timedelta(days=5)).date()
+                    px = yf.download(['^GSPC', '^KQ11', '^KS11'], start=str(s0), auto_adjust=True, progress=False)['Close']
+                    px.index = pd.to_datetime(px.index)
+                    px = px.combine_first(old).sort_index()
+                    px = px[px.index >= px.index.max() - pd.Timedelta(days=735)]
+                else:
+                    px = yf.download(['^GSPC', '^KQ11', '^KS11'], period='2y', auto_adjust=True, progress=False)['Close']
                 px.to_csv(f'{IN}/{out}', encoding='utf-8-sig')
             else:
                 bak = f'{IN}/{out}.bak'
@@ -221,7 +232,11 @@ def fetch(W, IN, tday=None):
         except Exception as e:
             log(f'[보조 자료] {out} 갱신 실패 → 전날 사본: {str(e)[:120]}')
     if keep:
-        log(f'[보조 자료] 드라이브 저장본 그대로(받은 날, {SLOW_DAYS}일마다 새로): {", ".join(keep)}')
+        log(f'[보조 자료] 드라이브 저장본 그대로: {", ".join(keep)}')
+    if got:
+        log(f'[보조 자료] 저장본에 없는 것이 있어 받음: {", ".join(got)}')
+    if 'PER3년.csv' in keep:
+        log(f'[보조 자료] PER3년 오늘 PER을 오늘 종가로 맞춤 {per_today(IN, mk)}종목')
     log(f'[보조 자료] 갱신 {len(done)}/{len(FETCH) - len(keep)}')
     json.dump(mk, open(f'{IN}/{MARK}', 'w', encoding='utf-8'), ensure_ascii=False)
     return done + [MARK]
