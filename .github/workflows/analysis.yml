@@ -32,9 +32,8 @@ jobs:
           python - <<'PY'
           import sys; sys.path[:0] = ['collect', 'collect/data']
           import drive, px_store as PS
-          for k in ('Close', 'DART재무', 'SEC재무'):
-              b = drive.get(f'{PS.BASE}/1_data/{PS.name(k)}')
-              print(PS.name(k), len(b) if b else '없음')
-              if b: open(f'work_db/{PS.name(k)}', 'wb').write(b)
+          b = drive.get(f'{PS.BASE}/1_data/{PS.name("Close")}'); open(f'work_db/{PS.name("Close")}', 'wb').write(b)
+          for k in ('DART재무', 'SEC재무'):   # 칸이 아직 없으면 PS.fetch가 옛 파일을 칸으로 옮기고 옛 파일은 휴지통(11/26 의장 카드)
+              print(PS.name(k), '받음' if PS.fetch(drive, k, 'work_db') else '없음')
           PY
           python "app/block33/$(basename "$SCRIPT")" work_db
