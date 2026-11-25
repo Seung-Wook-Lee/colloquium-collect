@@ -909,6 +909,7 @@ def macro_table(c):
 
 # ---------------------------------------------------------------- 4 엔진 블록 센터 · 뚜지
 def ttuji(c):
+<<<<<<< HEAD
     """4 엔진 블록 센터 · 뚜지(센터장). 11/26 의장 "뚜지는 종목 얘기해도 됨 — 엔진 블록의 결과가 좋은 기업 다섯 개를 설명하고,
     어떤 점이 좋은 점수를 받았는지 분석": 판정표 개별주 후보를 엔진 순위점수 순으로 5개, 기업마다
     ① 엔진 판정·순위점수·블록 예 비율·원칙 ② 점수 높은 블록(질문 + 점수) ③ 점수 낮은 블록 ④ 이 종목만 통과한 드문 공식(판정표 '왜')."""
@@ -960,12 +961,33 @@ def ttuji(c):
             out.append(L('하위 블록', f"적용 {len(tb) - len(Xo)} · 적용 안 함 {len(Xo)}" + (f" ({', '.join(r[1] + ' ' + r[2] for r in Xo[:8])})" if Xo else ''),
                          '비공개 subblocks.yaml 켜기 목록(블록 2 phase · 3 Analysis · 5 colloquium)'))
             G.append({'type': 'grid', 'title': '하위 블록 적용 여부', 'columns': ['블록', '번호', '이름', '상태'], 'rows': tb, 'source': 'subblocks.yaml'})
+=======
+    """4 엔진 블록 센터 · 뚜지(센터장): 블록33 엔진 판정 개수·선정 기준·하위 블록 적용 표. 종목 이름은 말하지 않는다(11/21 의장 회의 종목 추천 금지)."""
+    S = c.S
+    cnt = S['추천'].value_counts().to_dict()
+    out = [L('엔진 판정', ', '.join(f'{k} {v}' for k, v in cnt.items()), '퀀트센터 blocks.yaml 전 종목 계산(out_판정표)')]
+    rc = c.RC
+    out.append(L('선정 기준', f"블록 예 비율 {rc.get('추천선', 0.6667):.2f} 이상 추천·{rc.get('관찰선', 0.5):.2f} 이상 관찰, 국내 {rc.get('국내수', 5)} + 국내 상장 미국 ETF {rc.get('미국ETF수', 2)}, 60일 변동성 {rc.get('변동성상한', 60)}% 이하, 외국인 5·20일 동시 순매도 제외",
+                 '콜로키움_룰.txt 2장 + blocks.yaml 추천 설정'))
+    G = []
+    try:   # 11/20 의장: 블록 1~5 하위 블록(1-1 번호)은 언제든 넣고 뺀다 → 뚜지 발표에 켜짐·꺼짐 표
+        import qc_config as QCC
+        import subblocks as SBK
+        B = QCC.load_blocks()
+        rows = SBK.table(B)
+        if rows:
+            X = [r for r in rows if r[3] != '적용']
+            out.append(L('하위 블록', f"적용 {len(rows) - len(X)} · 적용 안 함 {len(X)}" + (f" ({', '.join(r[1] + ' ' + r[2] for r in X[:8])})" if X else ''),
+                         '비공개 subblocks.yaml 켜기 목록(블록 2 phase · 3 Analysis · 5 colloquium)'))
+            G.append({'type': 'grid', 'title': '하위 블록 적용 여부', 'columns': ['블록', '번호', '이름', '상태'], 'rows': rows, 'source': 'subblocks.yaml'})
+>>>>>>> 72f372228f9ac1ebbcee3f311c6648ee4948b606
     except Exception:   # noqa: BLE001
         pass
     return out, G
 
 
 # ---------------------------------------------------------------- 5 기술적 분석 · 미스 차트
+<<<<<<< HEAD
 def miss_chart(c):
     """5 기술적 분석 · 미스 차트(11/26 의장): SPYM·QQQM·TIGER 200 세 개만 보조지표로 설명, 종목 추천 없음.
     계산은 miss_chart.py(데이터베이스만 읽음), 숫자 문턱은 rules.yaml '미스 차트 지표'. 그림은 daily.py가 같은 코드로 그려 스트림릿에 띄움."""
@@ -1144,6 +1166,213 @@ def elpis(c):
     return out, []
 
 
+=======
+def miss_chart_market(c):
+    """11/23 의장 "종목 추천 안 하더라도 분석은 해야. 기술적 분석 페르소나 키우는 게 중요": 미스 차트가 시장·업종 기술 지표를
+    해석과 할 일까지 붙여 매일 발표한다(닉스.csv 전 종목 + 섹터.csv 업종 ETF)."""
+    N, S = c.N, _read(c.d, '섹터')
+    out, G = [], []
+    st = lambda col, pre: int(N[col].fillna('').astype(str).str.startswith(pre).sum()) if col in N else 0
+    tot = len(N)
+    up, bo, br = st('주_지지상태', '위'), st('주_지지상태', '반등'), st('주_지지상태', '이탈')
+    pat = N['주_패턴'].fillna('').astype(str) if '주_패턴' in N else pd.Series(dtype=str)
+    bot = int(pat.str.contains('바닥|역헤드').sum()); topp = int((pat.str.contains('천장') | pat.str.match('^헤드앤숄더')).sum())
+    w20 = int((pd.to_numeric(N.get('주_20주_이격도'), errors='coerce') >= 100).sum()) if '주_20주_이격도' in N else 0
+    out.append(L('주봉 지지선', f"전체 {tot}종목 중 지지선 위 {up} · 지지선 닿고 반등 {bo} · 지지선 이탈 {br}",
+                 ('이탈이 반등보다 많음 → 바닥은 아직 확인되지 않음. 새로 사는 것은 지지 반등 종목만 분할' if br > bo else
+                  '반등이 이탈보다 많음 → 바닥 다지기 시작. 지지 반등 종목부터 1/3 분할 매수 검토')))
+    out.append(L('주봉 패턴', f"바닥 패턴 {bot} · 천장 패턴 {topp}",
+                 ('천장 패턴이 더 많음 → 보유 종목은 넥라인 이탈 때 줄이기' if topp > bot else
+                  '바닥 패턴이 더 많음 → 넥라인 돌파 종목이 나오면 매수 후보')))
+    out.append(L('20주선', f"20주선 위 {w20}종목 / {tot}",
+                 '절반 아래 → 시장 전체는 중기 하락 추세. 비중 늘리기는 20주선 회복 뒤' if w20 < tot / 2 else '절반 위 → 중기 상승 추세 유지'))
+    if len(S):
+        s20 = int((S['20주선_위'] == '위').sum()) if '20주선_위' in S else 0
+        rrg = S['RRG_사분면'].value_counts().to_dict() if 'RRG_사분면' in S else {}
+        out.append(L('업종 ETF', f"20주선 위 {s20}/{len(S)} · 상대강도 " + ' '.join(f"{k} {v}" for k, v in rrg.items()),
+                     ('업종 모두 20주선 아래 → 한국 시장은 업종 가리지 않고 하락 추세. 선도·개선 업종만 지켜보기' if s20 == 0 else
+                      '20주선 위 업종이 있음 → 그 업종이 이번 반등을 이끄는 쪽')))
+        cols = [x for x in ['종목', 'RRG_사분면', '20주선_위', '주_RSI', '주_20주_이격도', '52주고점대비(%)', '주_지지상태', '판정'] if x in S]
+        G.append({'type': 'grid', 'title': '업종 ETF 기술 지표(모멘텀 순)', 'columns': ['업종 ETF', '상대강도', '20주선', '주봉 RSI', '20주 이격도', '고점 대비(%)', '주봉 지지', '미스 차트·닉스 판정'][:len(cols)],
+                  'rows': [[('' if not ok(r[k]) else (n(r[k], 1) if isinstance(r[k], float) else str(r[k]))) for k in cols] for _, r in S.iterrows()],
+                  'source': '섹터.csv'})
+    # 기술적 분석팀 추천(11/23 의장 "기술적 분석팀은 추천도 하라고 해"): 주봉 지지 반등 + 주봉 바닥 패턴, 주봉 RSI 낮은 순
+    if len(N) and '주_지지상태' in N:
+        X = N[N['주_지지상태'].fillna('').astype(str).str.startswith('반등') | pat.str.contains('바닥|역헤드')].copy()
+        X['_r'] = pd.to_numeric(X.get('주_RSI'), errors='coerce')
+        X['_both'] = X['주_지지상태'].fillna('').astype(str).str.startswith('반등') & X['주_패턴'].fillna('').astype(str).str.contains('바닥|역헤드')
+        X = X.sort_values(['_both', '_r'], ascending=[False, True]).head(10)
+        tk = lambda r: r['yfinance 티커'] if r.get('시장') == '미국' and ok(r.get('yfinance 티커')) else r['정식 종목명']
+        if len(X):
+            out.append(L('기술적 추천', ', '.join(tk(r) for _, r in X.head(5).iterrows()),
+                         '주봉 지지선 반등 + 주봉 바닥 패턴 둘 다 맞는 종목 먼저, 그 안에서 주봉 RSI 낮은 순. 넥라인 돌파 확인 뒤 1/3씩 분할'))
+            G.append({'type': 'grid', 'title': '미스 차트 기술적 추천 후보', 'columns': ['종목', '주봉 지지', '주봉 패턴', '주봉 RSI', '52주 고점 대비(%)'],
+                      'rows': [[tk(r), str(r.get('주_지지상태', '')), str(r.get('주_패턴', '') if ok(r.get('주_패턴')) else ''), n(r.get('주_RSI'), 0), n(r.get('52주고점대비(%)'), 1)] for _, r in X.iterrows()],
+                      'source': '닉스.csv'})
+    return out, G, '\n\n'.join(_gmd(x) for x in G)
+
+
+def miss_chart(c):
+    out = []
+    for r in c.top:
+        out.append(L(r['종목'], f"일봉 RSI {n(r.get('일_RSI'), 0)}, 주봉 RSI {n(r.get('주_RSI'), 0)}, 일봉 %B {n(r.get('일_볼린저_%B'), 2)}, 일목 구름 {r.get('일_일목_구름위치') if ok(r.get('일_일목_구름위치')) else '자료 없음'}, "
+                     f"주봉 MACD 오실레이터 {'상승' if (num(r.get('osc_w')) or 0) > (num(r.get('osc_w1')) or 0) else '하락'}",
+                     f"50일 이격 {n(r.get('gap50'), 1)}, 52주 고점 대비 {p(r.get('dd52'))} (닉스.csv)"))
+    rule = c.R['한종목']['미스 차트']
+    r, cnt = pick(c.T, rule)
+    out.append(c.pick_line('미스 차트', rule, r, cnt, ta))
+    return out, []
+
+
+# ---------------------------------------------------------------- 6 닉스 팀 · 클로토·라케시스·아트로포스
+def nyx(c, who):
+    rule = c.R['한종목'][who]
+    base = (c.T['층'] != 'S0') if '층' in c.T else None   # 11/20: 기준층(지수·현금·MMF·금·커버드콜)은 닉스 팀 한 종목 후보에서 뺀다(MMF가 '너무 많이 오름'으로 뽑힌 일)
+    r, cnt = pick(c.T, rule, base)
+    out = []
+    if who == '아트로포스':
+        X = c.T[(c.T['매도신호'].fillna('') != '') & (c.T['판정'] == '후보') & (base if base is not None else True)]
+        X = X.sort_values('rsi_d', ascending=False).head(3)
+        if len(X):
+            out.append(L('주의 깊게 지켜볼 종목', ', '.join(f"{x['종목']}({x['매도신호']})" for _, x in X.iterrows()), '엔진 매도 신호(이익 꺾임·사건 역풍·고점 부근·너무 많이 오름·외국인 5·20일 순매도)'))
+        else:
+            out.append(L('주의 깊게 지켜볼 종목', '없음', '후보 종목 중 엔진 매도 신호 0개'))
+        out.append(c.pick_line(who, rule, r, cnt, lambda r: f"{r['매도신호']} — {ta(r)}", mark='제외'))
+    else:
+        out.append(L('조건', rule.get('설명', ''), f"오늘 맞는 종목 {cnt}개"))
+        out.append(c.pick_line(who, rule, r, cnt, ta))
+    return out, [{'type': 'rsi', 'tickers': [r['ticker']]}] if r is not None and ok(r.get('ticker')) else []
+
+
+# ---------------------------------------------------------------- 7 밸류에이션 · 미스 밸류
+# 11/25 의장: 판정·합산에서 빼고 결과만 매번 보여 주는 블록(공식은 blocks.yaml에 그대로, 역할 정보)
+SHOW_ONLY = {'B18': 'B18 업종 자금(업종 ETF 60주선·5일 유입)', 'B20': 'B20 섹터 ETF 자금(5·20일 유입, 미국)', 'B21': 'B21 장기 큰손(13F 늘림, 미국)',
+             'B25': 'B25 돈은 잘 버나(F-Score·FCF·ROE)', 'B26': 'B26 빚에 안 무너지나(Altman Z·부채/EBITDA)'}
+
+
+def miss_value(c, desk_has):
+    """11/23 의장 "그냥 엔진에서 나오는대로 말하면 됨. 그때그때 코드를 바꾸면 되니까": 미스 밸류가 따로 줄 세우지 않고
+    엔진 판정표 순서(추천 → 관찰, 같은 등급 안 순위점수) 그대로, 밸류 블록 B15 점수·PER을 함께 보여 줌."""
+    T = c.T[(c.T['구분'] == '개별주') & (c.T['판정'] == '후보') & c.T['추천'].isin(['추천', '관찰'])].copy()
+    out, G = [], []
+    if len(T):
+        T['_g'] = T['추천'].map({'추천': 0, '관찰': 1})
+        T = T.sort_values(['_g', '순위점수'] if '순위점수' in T else ['_g'], ascending=[True, False] if '순위점수' in T else [True])
+        cnt = T['추천'].value_counts()
+        out.append(L('엔진 결과', f"추천 {cnt.get('추천', 0)}개, 관찰 {cnt.get('관찰', 0)}개(개별주 후보)", '엔진 판정표 추천 칸 그대로, 순서도 엔진 순위점수'))
+        tk = lambda r: r['ticker'] if r.get('시장') == '미국' and ok(r.get('ticker')) else r['종목']   # 11/22 의장: 미국은 티커
+        G.append({'type': 'grid', 'title': '엔진 추천·관찰 개별주(순서 = 엔진)', 'columns': ['종목', '엔진 추천', '원칙', '순위점수', 'B15 싼가 점수', 'PER'],
+                  'rows': [[tk(r), r['추천'], r.get('원칙', ''), n(r.get('순위점수'), 2), n(r.get('B15'), 2), n(r.get('PER'), 1, '배')] for _, r in T.head(10).iterrows()],
+                  'source': '판정표.csv(엔진)'})
+    else:
+        out.append(L('엔진 결과', '추천·관찰 개별주 없음', '엔진 판정표'))
+    # 11/25 의장 "빼..대신 결과는 매번 알려줘 아주 중요한 펀더멘탈이니까": 판정에서 뺀 블록 5개는 매일 결과를 따로 보여 줌(값 = 블록 공식 중 통과 비율)
+    F = c.T[(c.T['구분'] == '개별주') & c.T['추천'].isin(['추천', '관찰'])].copy() if '추천' in c.T else c.T.iloc[:0]
+    if len(F):
+        if '순위점수' in F: F = F.sort_values('순위점수', ascending=False)
+        tk2 = lambda r: r['ticker'] if r.get('시장') == '미국' and ok(r.get('ticker')) else r['종목']
+        v = lambda x: x if isinstance(x, str) else n(x, 2)
+        G.append({'type': 'grid', 'title': '판정에서 뺀 블록 결과(표시만, 공식 통과 비율)', 'columns': ['종목'] + list(SHOW_ONLY.values()),
+                  'rows': [[tk2(r)] + [v(r.get(b)) for b in SHOW_ONLY] for _, r in F.head(10).iterrows()],
+                  'source': '판정표.csv(엔진, 11/25 의장 판정 제외·표시만)'})
+    out.append(L('데스크 보고', '있음' if desk_has else '없음', '담당 종목 전일 ±3% 또는 3일 안 실적 공시가 있으면 있음'))
+    return out, G
+
+
+# ---------------------------------------------------------------- 8 섹터 데스크
+def mover_news(c, name):
+    """크게 움직인 종목 ① 무슨 일: 07시 수집 뉴스 첫 기사(데스크가 씀)."""
+    if not len(c.news):
+        return ''
+    hd = c.news[c.news.get('종목', pd.Series(dtype=str)).astype(str) == name]
+    return f" · 기사: {hd.iloc[0]['출처']} \"{hd.iloc[0]['제목']}\"" if len(hd) else ''
+
+
+def desk_of(name, sector, layer, D):
+    if layer == 'S0':
+        return None
+    for k, v in D['종목지정'].items():
+        if k == name:
+            return v
+    import re
+    for desk, pat in D['낱말']:
+        if re.search(pat, str(sector)):
+            return desk
+    return None
+
+
+def desks(c):
+    D = c.R['데스크']
+    T = c.T.copy()
+    T['데스크'] = [desk_of(r['종목'], r.get('sector', ''), r.get('층'), D) for _, r in T.iterrows()]
+    T = T[T['구분'] == '개별주']
+    px = dict(zip(c.px.get('번호', []), pd.to_numeric(c.px.get('등락률(%)', pd.Series(dtype=float)), errors='coerce')))
+    DA, SE = _read(c.d, 'DART'), _read(c.d, 'SEC')
+    lim = pd.Timestamp(c.today) - pd.Timedelta(days=D['실적일수'])
+    recent = {}
+    if len(DA) and '잠정 공시일' in DA:
+        for _, x in DA.iterrows():
+            dd = pd.to_datetime(str(x['잠정 공시일']), errors='coerce')
+            if ok(x.get('잠정 공시일')) and not pd.isna(dd) and dd >= lim:
+                recent[x['번호']] = f"{x['잠정 분기']} 잠정 매출 {n(x['잠정 매출(억원)'], 0, '억')}, 영업이익 {n(x['잠정 영업이익(억원)'], 0, '억')}, 순이익 {n(x['잠정 순이익(억원)'], 0, '억')}(DART {str(x['잠정 공시일'])[:10]})"
+    if len(SE) and '실적 받은날' in SE:
+        for _, x in SE.iterrows():
+            dd = pd.to_datetime(str(x['실적 받은날']), errors='coerce')
+            if not pd.isna(dd) and dd >= lim and ok(x.get('기준일(최근 분기 끝)')):
+                # 11/21 의장 "내용 하나당 한 줄": 백만$ → 억 달러('$'는 화면에서 수식으로 깨짐)
+                eok = lambda v: n(num(v) / 100 if num(v) is not None else None, 0, '억 달러')
+                recent.setdefault(x['번호'], f"{str(x['기준일(최근 분기 끝)'])[:7]} 분기 · 1년 매출 {eok(x['매출 TTM(백만$)'])} · 1년 영업이익 {eok(x['영업이익 TTM(백만$)'])} · PER {n(x['PER TTM(주가÷EPS)'], 1, '배')}")
+    res, has = {}, False
+    for desk in DESKS:
+        G = T[T['데스크'] == desk]
+        out = []
+        for _, r in G.iterrows():
+            mv = px.get(r['번호'])
+            if mv is not None and not math.isnan(mv) and abs(mv) >= D['보고문턱_등락(%)']:
+                # 11/21 의장 "내용 하나당 한 줄, CSV처럼 나열 금지, 엔진 판정을 앞에 두지 마" → 사실 한 줄, 기사는 다음 줄
+                # 11/21 10:00 의장 "한 기업당 한 칸만, 기사는 왜 따로 번호를 매기니" → 기사도 같은 칸 안 줄로
+                nw = mover_news(c, r['종목'])
+                out.append(L(f"{r['종목']} {p(mv, 2)}", f"20일 {p(r.get('20일(%)'))}" + (f" · {r['빠지는 이유']}" if mv < 0 and ok(r.get('빠지는 이유')) else '')
+                             + (' · 기사: ' + nw.replace(' · 기사: ', '', 1) if nw else ''),
+                             f"전일 ±{D['보고문턱_등락(%)']}% 이상"))
+            # 11/21 의장 "예전에 나온 실적을 다 적는 이유가 뭐야" → 데스크 칸에 실적 줄은 쓰지 않음
+        has = has or bool(out)
+        if not out:
+            out.append(L('담당 종목', f"{len(G)}종목, 전일 ±{D['보고문턱_등락(%)']}%·{D['실적일수']}일 안 실적 공시 없음", '시세.csv·DART·SEC'))
+        rule = c.R['한종목']['섹터 데스크']
+        r, cnt = pick(c.T, rule, extra=c.T['번호'].isin(G['번호']))
+        out.append(c.pick_line(desk, rule, r, cnt, lambda r: f"엔진 {r['추천']}, 블록 예 {n(r['블록예비율'], 2)}, 싼가 {n(r['싼가'], 2)}"))
+        res[desk] = out
+    return res, has
+
+
+# ---------------------------------------------------------------- 9 긍정 요인 · 엘피스
+def elpis(c):
+    out = []
+    b, o = c.burden_opp()
+    out.append(L('기회 블록', f"통과 {len(o)}개" if o else '통과 없음', '엔진 시장 블록 중 방향 = 기회, 결과 = 통과'))
+    out += c.block_lines('기회')
+    G = _read(c.d, '공포탐욕')
+    if len(G):
+        sc = num(G[G['구분'] == '종합'].iloc[0]['점수'])
+        pull = c.T[(c.T['갈래'] == '눌림') & (c.T['추천'].isin(['추천', '관찰']))]   # 11/19 가짜 바닥 검사 폐지
+        bd = c.band200; rng = f"200일선의 {n(bd['하단'], 2)}~{n(bd['상단'], 2)}배"
+        inn, broke = pull[pull['구간200'] == '안'], pull[pull['구간200'] == '추세 무너짐']
+        out.append(L('공포 속 기회', f"Fear & Greed {n(sc, 1)}, 52주 고점에서 10% 넘게 떨어진 추천·관찰 종목 중 {rng} 사이 {len(inn)}종목"
+                     + (f" (추세 무너짐으로 뺌 {len(broke)}종목: {', '.join(broke['종목'].head(5))})" if len(broke) else ''),
+                     f"52주 고점에서 10% 넘게 떨어진 종목(눌림) 중 현재가가 {rng} 사이. {n(bd['하단'], 2)}배 아래 = 추세 무너짐"))
+    for it in ('WTI', '금', '원/달러'):
+        r = c.mac_row(it)
+        if r is not None:
+            out.append(L(it, f"{n(r['값'], 2)}(1달 {p(r['1달'])}, YTD {p(r['YTD'])})", f"{r['기준일']} {r['출처']}"))
+    rule = dict(c.R['한종목']['엘피스'])
+    rule['설명'] = rule.get('설명', '').replace('{하단}', n(c.band200['하단'], 2)).replace('{상단}', n(c.band200['상단'], 2))
+    r, cnt = pick(c.T, rule)
+    out.append(c.pick_line('엘피스', rule, r, cnt, lambda r: f"52주 고점 대비 {p(r.get('dd52'))}, 블록 예 {n(r['블록예비율'], 2)}, 현재가 ÷ 200일선 {n(r.get('px_ma200'), 2)}(200일선 {n(r.get('ma200'), 2)})"))
+    return out, []
+
+
+>>>>>>> 72f372228f9ac1ebbcee3f311c6648ee4948b606
 # ---------------------------------------------------------------- 묶기: 발표 순서대로 칸을 모으고 글로 바꿈
 def _safe(fn, n, *args):
     """11/21 의장 '병렬식': 위원 한 칸이 실패해도 다른 칸은 그대로 나온다. 실패한 칸엔 한 줄만 남김.
@@ -1163,8 +1392,13 @@ ORDER = [
     ('1 시장', '미스터 마켓', '마켓 센터장'),
     ('2 수급·포지셔닝', '미스 시타델', '수급·포지셔닝'),
     ('3 리스크', '미스 리스크', '리스크·공포와 탐욕'),
+<<<<<<< HEAD
     ('4 엔진 블록 센터', '뚜지(센터장)', '블록33 엔진 결과가 좋은 기업 5개'),
     ('5 기술적 분석', '미스 차트(퀀트센터 팀장)', 'SPYM·QQQM·TIGER 200 보조지표(종목 추천 없음)'),
+=======
+    ('4 엔진 블록 센터', '뚜지(센터장)', '블록33 엔진 결과'),
+    ('5 기술적 분석', '미스 차트(퀀트센터 팀장)', '시장·업종·종목 기술 지표와 기술적 추천'),
+>>>>>>> 72f372228f9ac1ebbcee3f311c6648ee4948b606
     ('6 닉스 팀', '클로토', '바닥 진입'),
     ('6 닉스 팀', '라케시스', '추세·비중 확대'),
     ('6 닉스 팀', '아트로포스', '과열 분할 매도'),
@@ -1172,8 +1406,13 @@ ORDER = [
     ('8 섹터 데스크', '섹터 데스크', '섹터 데스크'),
     ('9 긍정 요인', '엘피스', '긍정 요인'),
 ]
+<<<<<<< HEAD
 # 11/21 1:29 의장 "회의에서 종목 추천하지 마" — 닉스 팀(6)만 추천함(11/23 의장). 미스 차트(5)는 11/26 의장 "종목 추천은 하지 말고".
 TECH = ('6 닉스 팀',)
+=======
+# 11/21 1:29 의장 "회의에서 종목 추천하지 마" — 기술적 분석(5·6)만 추천함(11/23 의장). 나머지 칸의 종목 고르는 줄은 뺀다.
+TECH = ('5 기술적 분석', '6 닉스 팀')
+>>>>>>> 72f372228f9ac1ebbcee3f311c6648ee4948b606
 NO_PICK = _re.compile(r'오늘의 한 종목|눈에 띄는 저평가|의장 기준가|가장 싼 쪽|가장 비싼 쪽|지켜볼 종목|공포 속 기회|^추천 \d|^제외 |오늘의 추천 종목')
 
 
@@ -1205,8 +1444,15 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     a1, g1 = _safe(rio, 2, c)   # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)를 합친 위원
     a2, g2, tbl = _safe(phobos, 3, c)
     add('미스 리스크', a1 + a2, g1 + g2, ('\n\n'.join(_gmd(x) for x in g1) + '\n\n' + tbl + '\n\n' + _safe(macro_table, 0, c)).strip())
+<<<<<<< HEAD
     a, g = _safe(ttuji, 2, c); add('뚜지(센터장)', a, g, '\n\n'.join(_gmd(x) for x in g[:1]))
     a, g, tbl = _safe(miss_chart, 3, c); add('미스 차트(퀀트센터 팀장)', a, g, tbl)
+=======
+    a, g = _safe(ttuji, 2, c); add('뚜지(센터장)', a, g)
+    a1, g1, tbl = _safe(miss_chart_market, 3, c)
+    a2, g2 = _safe(miss_chart, 2, c)
+    add('미스 차트(퀀트센터 팀장)', a1 + a2, g1 + g2, tbl)
+>>>>>>> 72f372228f9ac1ebbcee3f311c6648ee4948b606
     for who in ('클로토', '라케시스', '아트로포스'):
         a, g = _safe(nyx, 2, c, who); add(who, a, g)
     try:
