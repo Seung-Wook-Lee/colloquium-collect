@@ -168,7 +168,7 @@ def _one(args):
         f = feats(tmp, B)
         close = L['가격2년'].loc[:t].ffill().iloc[-1].to_dict()
         f = HF.apply(f, t, close, d, (B.get('메모리반대') or {}).get('종목', []))
-        f = HS.apply(f, t, d)   # B18 업종 ETF 60주선 이격(역도산 주봉 창고)
+        f = HS.apply(f, t, d)   # B18 업종 ETF 60주선 이격(시타델 주봉 창고)
         f = HK.apply(f, t, d)   # B19·B14·B22 한국 수급(한투 일별 투자자)
         f = H13.apply(f, t, d)   # B21 장기 펀드 13F(공시일 기준)
         f = HSH.apply(f, t, d)   # B22 미국 공매도(FINRA 결제일, 공표 뒤)
@@ -276,7 +276,7 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     keep, mask = price_vars(d, L, B, [dates[-1], dates[-13], dates[-53]])
     if os.path.exists(f'{d}/장기/SEC재무_분기.csv.gz') or os.path.exists(f'{d}/장기/DART재무_분기.csv.gz'):
         mask = mask - HF.VARS; keep = keep | (HF.VARS & formula_vars(B['종목']))   # 재무 칸은 공시일 기준 과거 값으로 채움
-    if os.path.exists(f'{d}/장기/역도산_주봉.csv'):
+    if os.path.exists(f'{d}/장기/시타델_주봉.csv'):
         mask = mask - HS.VARS; keep = keep | (HS.VARS & formula_vars(B['종목']))   # B18 60주선 이격은 주봉 창고로 그 주 값
     if os.path.exists(f'{d}/장기/국내수급_일별.csv.gz'):
         mask = mask - HK.VARS; keep = keep | (HK.VARS & formula_vars(B['종목']))   # 한국 수급은 일별 기록으로 그 주 값

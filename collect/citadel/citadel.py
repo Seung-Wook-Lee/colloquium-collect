@@ -1,8 +1,8 @@
-# 미스터 역도산(2026-11-07 신설) 공용 계산 — 매일 수집 블록(b09_yeokdosan)과 과거 자료 채우기(research/yeokdosan_backfill.py)가 같이 쓴다.
-#   자료 창고 : 드라이브 '콜로키움 수집데이터/00_누적/00_역도산_주봉.csv' (한투 해외 주봉, 수정주가, 긴 표: 티커,날짜,시가,고가,저가,종가,거래량)
+# 섹터 ETF 주봉 창고·섹터 지도 공용 계산(미스 시타델 수급 자료) — 매일 수집 블록 b09_citadel이 쓴다.
+#   자료 창고 : 드라이브 '콜로키움 수집데이터/00_누적/00_시타델_주봉.csv' (한투 해외 주봉, 수정주가, 긴 표: 티커,날짜,시가,고가,저가,종가,거래량)
 #              날짜는 그 주 금요일. 진행 중인 주는 매일 덮어써서 금요일 종가로 굳는다.
-#   종목 목록 : 해외 yeokdosan/holdings_top10.csv (SPDR 섹터 ETF 11개 × 상위 10, 의장이 바꾸면 여기만 고친다)
-#              국내 yeokdosan/etfs_kr.csv (국내 섹터 ETF 13개) + 상위 10은 한투 ETF 구성종목에서 매일 받아 00_누적/00_역도산_국내구성.csv
+#   종목 목록 : 해외 citadel/holdings_top10.csv (SPDR 섹터 ETF 11개 × 상위 10, 의장이 바꾸면 여기만 고친다)
+#              국내 citadel/etfs_kr.csv (국내 섹터 ETF 13개) + 상위 10은 한투 ETF 구성종목에서 매일 받아 00_누적/00_시타델_국내구성.csv
 #              국내 티커는 6자리 코드. 해외·국내 모두 같은 창고, 같은 계산(11/9 의장: 완전히 같이 움직이고 보고만 따로).
 #   기준      : 아래 CFG. 이론을 바꾸면 CFG만 고치고, 백테스트(Team_Q contrarian/)도 같은 CFG 숫자로 다시 돌린다(룰 변경은 의장 승인 뒤).
 import time, requests, pandas as pd, numpy as np
@@ -179,7 +179,7 @@ def signals(w):
 
 
 def now_table(store, holdings):
-    """지금판: ETF와 상위 10의 마지막 주 상태. 끼어들기 = ETF 60주선 첫 터치."""
+    """섹터 지도: ETF와 상위 10의 마지막 주 상태. 두 번째 값 = 60주선 첫 터치 ETF."""
     rows = []
     g = {t: x.set_index('날짜').sort_index() for t, x in store.groupby('티커')}
     r26 = {t: (w.종가.iloc[-1] / w.종가.iloc[-27] - 1) * 100 for t, w in g.items() if len(w) > 27}

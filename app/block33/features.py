@@ -229,7 +229,7 @@ def stocks(d):
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('1달조합', e)
     # 업종 ETF(섹터 60주·자금): 종목이 상위 10에 든 섹터 ETF 값
-    Y = _r(d, '역도산')
+    Y = _r(d, '시타델')
     try:
         if len(Y):
             etf = Y[Y['구분'] == 'ETF'].set_index('ETF')
@@ -246,7 +246,7 @@ def stocks(d):
                 fill = f.groupby(['시장', 'layer'])[c].transform('median')
                 f[c] = f[c].where(f[c].notna() | (f['구분'] != '개별주'), fill)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
-        _fail('역도산', e)
+        _fail('시타델', e)
     # 재무 건전성·연매출(야후 info, 200종목)
     H = _r(d, '재무건전성')
     try:
