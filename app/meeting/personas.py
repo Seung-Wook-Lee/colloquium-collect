@@ -807,28 +807,7 @@ def rio(c):
         out.append(L('시장 이격', f"코스피 50일 이격 {g:.1f}", '10년치 데이터베이스 계산', val=f"코스피 50일 이격 {g:.1f}",
                      crit=f"{warn} 과열 주의 · {hot} 과열" + (' → 과열' if g >= hot else (' → 과열 주의' if g >= warn else '')),
                      sig='red' if g >= hot else ('orange' if g >= warn else '')))
-    b, o = c.burden_opp()   # 11/20 의장: 시장 블록은 칸 맨 아래 표로 자세히(macro_table)
-    dfn = any(c.m.get(f'DEF_{mk}') for mk in ('한국', '미국'))
-    go = eval(c.R['미스 리스크']['여건_규칙'], {'__builtins__': {}}, {'기회': len(o), '부담': len(b), '방어': dfn})
-    out.append(L('현금 집행 여건', '됨' if go else '아님', f"기회 {len(o)}, 부담 {len(b)}, 방어 국면 {'예' if dfn else '아니오'}",
-                 crit=f"규칙: {c.R['미스 리스크']['여건_규칙']}", sig='green' if go else 'orange'))
-    # 11/23 의장 "현금집행 여건은 달랑 보여주지 말고 자세한 설명 표가 있어야지": 어떤 공식이 기회·부담으로 셈됐는지, 방어 국면 이유, 규칙
-    G, M = [], c.M
-    rows = []
-    if len(M):
-        X = M[M['결과'] == '통과']
-        for side in ('기회', '부담'):
-            for _, r in X[X['방향'] == side].iterrows():
-                val = next((str(r[k]) for k in ('오늘', '값', '지표값') if k in r and ok(r.get(k))), '')
-                rows.append([side, str(r.get('블록', '')), str(r.get('질문', '')), _re.sub(r'\((기회|부담)\)', '', str(r['공식'])).strip(), val])
-    for mk in ('미국', '한국'):
-        g = c.regime(mk)
-        if g:
-            rows.append(['방어 국면' if g[0] == '방어' else '국면', mk, str(g[0]), ' · '.join(str(x) for x in g[1:] if ok(x))[:120], ''])
-    rows.append(['규칙', '', '', f"{c.R['미스 리스크']['여건_규칙']} → 기회 {len(o)} {'>' if len(o) > len(b) else '≤'} 부담 {len(b)}, 방어 {'예' if dfn else '아니오'}", '됨' if go else '아님'])
-    G.append({'type': 'grid', 'title': f"현금 집행 여건 — {'됨' if go else '아님'} (기회 {len(o)} · 부담 {len(b)} · 방어 국면 {'예' if dfn else '아니오'})",
-              'columns': ['구분', '블록', '질문', '공식·이유', '오늘'], 'rows': rows, 'source': '엔진 시장 블록(통과한 공식) · 국면'})
-    return out, G
+    return out, []
 
 
 def phobos(c):
@@ -869,6 +848,48 @@ def macro_table(c):
             rows.append(f"| {i + 1} | {r['항목']} | {r['값']} | {r.get('1주 전', '')} | {r.get('1달 전', '')} | {r.get('최근 고점', '')} | {r.get('최근 저점', '')} | "
                         f"{j} | {r.get('나쁜 쪽', '')} 나쁨, {r.get('문턱(가정치)', '')} | {r.get('출처', '')} |")
         out += [f"**매크로 체크리스트 · {head} · 좋아질 기미 {good}/{len(X)}, 나빠질 기미 {bad}/{len(X)}**", '', '\n'.join(rows).replace('nan', ''), '']
+    K = _read(c.d, '리스크')
+    if len(K) and '신호' in K and c.R.get('미스 리스크', {}).get('빨강주황_표', False):   # 11/21 의장: 위 줄·시장 신호와 겹쳐 기본은 뺌
+        Z = K[K['신호'].astype(str).str.contains('빨강|주황')].reset_index(drop=True)
+        if len(Z):
+            rows = ['| 번호 | 구분 | 항목 | 값 | 신호 | 이유 | 의장 기준 |', '|---|---|---|---|---|---|---|']
+            for i, r in Z.iterrows():
+                rows.append(f"| {i + 1} | {r.get('구분', '')} | {r['항목']} | {r['값']}{'' if str(r.get('단위', 'nan')) == 'nan' else r.get('단위')} | "
+                            f"{r['신호']} | {r.get('표시', '')} | {r.get('의장 기준(참고)', '')} |")
+            out += [f"**리스크 표 빨강·주황 박스 {len(Z)}개**", '', '\n'.join(rows).replace('nan', ''), '']
+    return '\n'.join(out)
+
+
+def cash_gate(c):
+    """현금 집행 여건(엔진 시장 블록 B01~B10의 기회·부담 개수 + 방어 국면). 11/26 의장: 미스 리스크에서 뚜지로 옮김."""
+    out = []
+    b, o = c.burden_opp()   # 11/20 의장: 시장 블록은 칸 맨 아래 표로 자세히(macro_table)
+    dfn = any(c.m.get(f'DEF_{mk}') for mk in ('한국', '미국'))
+    go = eval(c.R['미스 리스크']['여건_규칙'], {'__builtins__': {}}, {'기회': len(o), '부담': len(b), '방어': dfn})
+    out.append(L('현금 집행 여건', '됨' if go else '아님', f"기회 {len(o)}, 부담 {len(b)}, 방어 국면 {'예' if dfn else '아니오'}",
+                 crit=f"규칙: {c.R['미스 리스크']['여건_규칙']}", sig='green' if go else 'orange'))
+    # 11/23 의장 "현금집행 여건은 달랑 보여주지 말고 자세한 설명 표가 있어야지": 어떤 공식이 기회·부담으로 셈됐는지, 방어 국면 이유, 규칙
+    G, M = [], c.M
+    rows = []
+    if len(M):
+        X = M[M['결과'] == '통과']
+        for side in ('기회', '부담'):
+            for _, r in X[X['방향'] == side].iterrows():
+                val = next((str(r[k]) for k in ('오늘', '값', '지표값') if k in r and ok(r.get(k))), '')
+                rows.append([side, str(r.get('블록', '')), str(r.get('질문', '')), _re.sub(r'\((기회|부담)\)', '', str(r['공식'])).strip(), val])
+    for mk in ('미국', '한국'):
+        g = c.regime(mk)
+        if g:
+            rows.append(['방어 국면' if g[0] == '방어' else '국면', mk, str(g[0]), ' · '.join(str(x) for x in g[1:] if ok(x))[:120], ''])
+    rows.append(['규칙', '', '', f"{c.R['미스 리스크']['여건_규칙']} → 기회 {len(o)} {'>' if len(o) > len(b) else '≤'} 부담 {len(b)}, 방어 {'예' if dfn else '아니오'}", '됨' if go else '아님'])
+    G.append({'type': 'grid', 'title': f"현금 집행 여건 — {'됨' if go else '아님'} (기회 {len(o)} · 부담 {len(b)} · 방어 국면 {'예' if dfn else '아니오'})",
+              'columns': ['구분', '블록', '질문', '공식·이유', '오늘'], 'rows': rows, 'source': '엔진 시장 블록(통과한 공식) · 국면'})
+    return out, G
+
+
+def market_block_md(c):
+    """엔진 시장 블록 B01~B10 표(블록·질문·지표·오늘·공식). 11/26 의장: 미스 리스크에서 뚜지로 옮김. 스트림릿은 '시장 블록' 제목을 보고 신호 칩으로 그림."""
+    out = []
     M = c.M
     if len(M):
         X = M.copy()
@@ -895,20 +916,11 @@ def macro_table(c):
             same = r['블록'] == prev; prev = r['블록']
             rows.append(f"| {'' if same else r['블록']} | {'' if same else r['질문']} | {en_} | {r.get('값', '') if ok(r.get('값')) else '자료 없음'} | {ex} |")
         out += [f"**시장 블록 · 공식 {len(X)}개**", '', '\n'.join(rows), '']
-    K = _read(c.d, '리스크')
-    if len(K) and '신호' in K and c.R.get('미스 리스크', {}).get('빨강주황_표', False):   # 11/21 의장: 위 줄·시장 신호와 겹쳐 기본은 뺌
-        Z = K[K['신호'].astype(str).str.contains('빨강|주황')].reset_index(drop=True)
-        if len(Z):
-            rows = ['| 번호 | 구분 | 항목 | 값 | 신호 | 이유 | 의장 기준 |', '|---|---|---|---|---|---|---|']
-            for i, r in Z.iterrows():
-                rows.append(f"| {i + 1} | {r.get('구분', '')} | {r['항목']} | {r['값']}{'' if str(r.get('단위', 'nan')) == 'nan' else r.get('단위')} | "
-                            f"{r['신호']} | {r.get('표시', '')} | {r.get('의장 기준(참고)', '')} |")
-            out += [f"**리스크 표 빨강·주황 박스 {len(Z)}개**", '', '\n'.join(rows).replace('nan', ''), '']
     return '\n'.join(out)
 
 
 # ---------------------------------------------------------------- 4 엔진 블록 센터 · 뚜지
-def ttuji(c):
+def _top5(c):
     """4 엔진 블록 센터 · 뚜지(센터장). 11/26 의장 "뚜지는 종목 얘기해도 됨 — 엔진 블록의 결과가 좋은 기업 다섯 개를 설명하고,
     어떤 점이 좋은 점수를 받았는지 분석": 판정표 개별주 후보를 엔진 순위점수 순으로 5개, 기업마다
     ① 엔진 판정·순위점수·블록 예 비율·원칙 ② 점수 높은 블록(질문 + 점수) ③ 점수 낮은 블록 ④ 이 종목만 통과한 드문 공식(판정표 '왜')."""
@@ -963,6 +975,93 @@ def ttuji(c):
     except Exception:   # noqa: BLE001
         pass
     return out, G
+
+
+def _switch(c):
+    """① 시장 스위치(블록33 B01): CTM 빨간불·MA 클러스터 빨간불 = 현금 전환, CTM 초록불 = 1/3씩. 신호가 나왔든 안 나왔든 매일 숫자로."""
+    m = c.m if isinstance(c.m, dict) else {}
+    sig = lambda k: '신호 나옴' if m.get(k) == 1 else '계산 중, 오늘은 조건을 채우지 못해 신호 안 나옴'
+    out = [L('시장 스위치 · CTM 빨간불', sig('CTM_RED'), f"S&P 주봉 Chande Trend Meter {n(m.get('CTM_SPX'), 1)} · QQQ {n(m.get('CTM_QQQ'), 1)} — 30 아래 4주 연속이면 현금 전환(지금 30 아래 {m.get('CTM_LOW_WEEKS', 0)}주)",
+               sig='red' if m.get('CTM_RED') == 1 else ''),
+           L('시장 스위치 · MA 클러스터 빨간불', sig('MA_CLUSTER_RED'), f"S&P 주봉 종가가 50~75주선 맨 아래({n(m.get('MA_CLUSTER_BOT'), 0)}) 밑 + 가운데 4주 기울기 {p(m.get('MA_CLUSTER_SLOPE'), 2)} 마이너스면 현금 전환",
+               sig='red' if m.get('MA_CLUSTER_RED') == 1 else ''),
+           L('시장 스위치 · CTM 초록불', (f"신호 나옴 {m.get('CTM_GREEN_STAGE')}단계/3" if m.get('CTM_GREEN') == 1 else sig('CTM_GREEN')),
+             'CTM 26주 최고 70 이상 → 8주 최저 45 아래 → 최저 뒤 처음 오른 주부터 3주 동안 1/3씩', sig='green' if m.get('CTM_GREEN') == 1 else '')]
+    return out
+
+
+def _layers(c):
+    """③ 층 상대강도(엔진 orders.layer_rs, AQR 방식): 시장별 층 바스켓 63·126·252일 수익률 평균 순위(1 = 가장 강함). 층 수의 1/3 이내 = 주도 층."""
+    S, NM = c.T, (c.R.get('뚜지') or {}).get('층이름', {})
+    if '층순위' not in S or '층' not in S:
+        return [L('층 상대강도', '자료 없음', '판정표에 층순위 칸 없음(엔진 다음 실행부터)')], []
+    X = S[pd.to_numeric(S['층순위'], errors='coerce').notna()]
+    out, rows = [], []
+    for mk in ('미국', '한국'):
+        Y = X[X['시장'] == mk].groupby('층').agg(순위=('층순위', 'first'), 종목수=('종목', 'size')).reset_index().sort_values('순위')
+        if not len(Y):
+            continue
+        k = max(1, len(Y) // 3)
+        name = lambda r: f"{r['층']} {NM.get(r['층'], '')}".strip()
+        out.append(L(f'{mk} 층 상대강도', ' > '.join(f"{int(r['순위'])}위 {name(r)}" for _, r in Y.iterrows()),
+                     f"주도 층(층 수의 1/3 이내, {k}개): {', '.join(name(r) for _, r in Y.head(k).iterrows())} — 층 바스켓 63·126·252일 수익률 평균 순위"))
+        rows += [[mk, str(int(r['순위'])), name(r), str(int(r['종목수'])), '주도 층' if r['순위'] <= k else ''] for _, r in Y.iterrows()]
+    G = [{'type': 'grid', 'title': '층 상대강도 — 1위가 가장 강함', 'columns': ['시장', '순위', '층', '종목 수', '구분'], 'rows': rows,
+          'source': '블록33 엔진 orders.layer_rs(63·126·252일 수익률 평균)'}] if rows else []
+    return out, G
+
+
+def _limits(c):
+    """④ 비중 한도(엔진 주문승수·경보: 대장 이탈·확정 대형 이벤트·쏠림·CTA 전환). 승수 1 미만 = 그 층 주문을 줄임."""
+    S = c.T
+    if '주문승수' not in S:
+        return []
+    mu = pd.to_numeric(S['주문승수'], errors='coerce')
+    X = S[mu < 1]
+    why = X['경보'].astype(str).str.split(' / ').explode() if len(X) and '경보' in X else pd.Series(dtype=str)
+    why = why[why.str.strip().astype(bool) & (why != 'nan')].value_counts()
+    return [L('비중 한도', f"주문 승수 1 미만 {len(X)}종목 / 전체 {len(S)}종목",
+              ' · '.join(f'{k} {v}종목' for k, v in why.head(4).items()) or '걸린 경보 없음 — 대장 이탈·확정 대형 이벤트·쏠림·CTA 전환 모두 신호 안 나옴')]
+
+
+def _accuracy(c):
+    """⑥ 블록 정확도(블록성적.csv, 매주 금요일 backtest.py가 블록점수이력 2017-12~로 계산): 블록 점수와 N주 뒤 수익의 순위 상관(IC) 평균."""
+    R = c.R.get('뚜지') or {}
+    A = _read(c.d, '블록성적')
+    if not len(A) or 'IC평균' not in A:
+        return [L('블록 정확도', '자료 없음', '블록성적.csv 없음(금요일 성적표 계산 뒤부터 매일 나옴)')], []
+    hz = R.get('IC_기간', '26주')
+    X = A[A['기간'].astype(str) == hz].copy()
+    X['IC평균'] = pd.to_numeric(X['IC평균'], errors='coerce')
+    X = X.dropna(subset=['IC평균']).sort_values('IC평균', ascending=False)
+    if not len(X):
+        return [L('블록 정확도', '자료 없음', f'블록성적.csv에 {hz} 줄 없음')], []
+    k = int(R.get('IC_줄수', 3))
+    f_ = lambda Y: ', '.join(f"{r['블록']} {r['질문']} {r['IC평균']:+.3f}" for _, r in Y.iterrows())
+    out = [L(f'블록 정확도 상위 {k}개', f_(X.head(k)), f"블록 점수와 {hz} 뒤 수익의 순위 상관(IC) 평균, 2017-12~ 매주"),
+           L(f'블록 정확도 하위 {min(k, max(len(X) - k, 0))}개', f_(X.tail(min(k, max(len(X) - k, 0))).iloc[::-1]) or '없음', 'IC가 0 아래면 점수가 높을수록 오히려 수익이 낮았던 블록')]
+    rows = [[str(r['블록']), str(r['질문']), str(r.get('국면', '')), f"{r['IC평균']:+.3f}", n(r.get('IC_t'), 2), n(r.get('예_승률'), 1, '%'), n(r.get('아니오_승률'), 1, '%'), str(r.get('날짜수', ''))]
+            for _, r in X.iterrows()]
+    return out, [{'type': 'grid', 'title': f'블록 정확도 — {hz} 뒤 수익과의 순위 상관(IC)', 'columns': ['블록', '질문', '국면', 'IC 평균', 'IC t값', '예 승률', '아니오 승률', '주 수'],
+                  'rows': rows, 'source': '블록성적.csv(backtest.py, 블록점수이력 2017-12~)'}]
+
+
+def ttuji(c):
+    """4 엔진 블록 센터 · 뚜지(센터장). 11/26 의장 "엔진 앞부분 시장에 관한 내용도 보고해야 하지 않나? 뚜지가 발표할만한 것을 정리해서 코딩":
+    엔진 계산 순서대로 ① 시장 스위치(B01) ② 시장 블록 B01~B10·현금 집행 여건(미스 리스크에서 옮김) ③ 층 상대강도
+    ④ 판정 개수·비중 한도 ⑤ 순위점수 상위 5개 기업 ⑥ 블록 정확도(IC) ⑦ 하위 블록. 돌려주는 값 = (줄, 표, 원고 아래 표 md)."""
+    out, G = _switch(c), []
+    a, g = cash_gate(c); out += a; G += g
+    a, g = _layers(c); out += a; G += g
+    a5, g5 = _top5(c)
+    sub = [x for x in a5 if x.title == '하위 블록']
+    a5 = [x for x in a5 if x.title != '하위 블록']
+    out += a5[:1] + _limits(c) + a5[1:]
+    G += g5[:1]
+    a, g = _accuracy(c); out += a; G += g
+    out += sub; G += g5[1:]
+    md = '\n\n'.join([market_block_md(c)] + [_gmd(x) for x in G if not x.get('title', '').startswith('하위 블록')])
+    return out, G, md
 
 
 # ---------------------------------------------------------------- 5 기술적 분석 · 미스 차트
@@ -1204,8 +1303,8 @@ def build(d, S, M, m, f, R, RC, today, EV=None, CAL=None, session='국장전'):
     a, g, tbl = _safe(miss_citadel, 3, c); add('미스 시타델', a, g, tbl)
     a1, g1 = _safe(rio, 2, c)   # 11/20 의장: 리오(매크로 여건)·포보스(공포탐욕)를 합친 위원
     a2, g2, tbl = _safe(phobos, 3, c)
-    add('미스 리스크', a1 + a2, g1 + g2, ('\n\n'.join(_gmd(x) for x in g1) + '\n\n' + tbl + '\n\n' + _safe(macro_table, 0, c)).strip())
-    a, g = _safe(ttuji, 2, c); add('뚜지(센터장)', a, g, '\n\n'.join(_gmd(x) for x in g[:1]))
+    add('미스 리스크', a1 + a2, g1 + g2, (tbl + '\n\n' + _safe(macro_table, 0, c)).strip())
+    a, g, tbl = _safe(ttuji, 3, c); add('뚜지(센터장)', a, g, tbl)
     a, g, tbl = _safe(miss_chart, 3, c); add('미스 차트(퀀트센터 팀장)', a, g, tbl)
     for who in ('클로토', '라케시스', '아트로포스'):
         a, g = _safe(nyx, 2, c, who); add(who, a, g)
