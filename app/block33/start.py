@@ -64,6 +64,8 @@ else:   # 손 시험용(드라이브 없는 곳): 미리 만든 판정표. 답�
 BH = pd.read_csv(f'{H}/bhist.csv', low_memory=False)
 K = pd.read_csv(f'{H}/Core50.csv') if os.path.exists(f'{H}/Core50.csv') else pd.read_csv(sorted([f'{UP}/{x}' for x in os.listdir(UP) if x.startswith('Core50_AI_비AI_Ver')])[-1])
 SB = [f'B{i}' for i in range(11, 35)]
+SHOW_ONLY = ['B18', 'B20', 'B21', 'B25', 'B26']   # 11/25 의장 "빼..대신 결과는 매번 알려줘": 판정·조합에서 빼고 표시만
+SBJ = [b for b in SB if b not in SHOW_ONLY]
 REV = {'B28'}                                  # 높을수록 나쁜 블록(과열) → 1−값
 MEM = {'G09', 'K01', 'K11', 'G13', 'G56'}      # blocks.yaml 메모리반대: B15는 엔진이 이미 뒤집음, B23은 여기서
 W = {'L1': (.7, .1, .2), 'L2': (.6, .2, .2), 'L3': (.5, .3, .2), 'L4': (.4, .4, .2), 'L5': (.3, .5, .2)}
@@ -104,10 +106,11 @@ for (mk, kd), s in use.items():
 BL.to_csv(f'{OD}/{TAG}_블록.csv', index=False, encoding='utf-8-sig')
 
 # ② ③ 조합
-G3 = {'가치퀄리티': ['B15', 'B23', 'B25', 'B26', 'B27', 'B28'],
+# 11/25 의장: B18·B20·B21·B25·B26은 판정에서 빼고 표시만 → 조합에서도 뺌(이전 G3 가치퀄리티에 B25·B26, 전망과매도에 B18·B20·B21, G0 가치퀄리티 [B15, B25, B26])
+G3 = {'가치퀄리티': ['B15', 'B23', 'B27', 'B28'],
       '추세바닥': ['B11', 'B12', 'B13', 'B14', 'B17', 'B29', 'B30', 'B31', 'B32', 'B33'],
-      '전망과매도': ['B24', 'B16', 'B18', 'B19', 'B20', 'B21', 'B22', 'B34']}
-G0 = {'가치퀄리티': ['B15', 'B25', 'B26'], '추세바닥': ['B30', 'B31', 'B11', 'B12'], '전망과매도': ['B24', 'B16']}   # blocks.yaml 원칙.층별 묶음 그대로
+      '전망과매도': ['B24', 'B16', 'B19', 'B22', 'B34']}
+G0 = {'가치퀄리티': ['B15'], '추세바닥': ['B30', 'B31', 'B11', 'B12'], '전망과매도': ['B24', 'B16']}   # blocks.yaml 원칙.층별 묶음 그대로
 
 def eq(D, bs):
     return D[[b for b in bs if b in D]].mean(axis=1)
@@ -119,7 +122,7 @@ def layered(D, G):
     return pd.Series(np.where(den > 0, np.nansum(np.where(ok, v, 0) * w, 1) / np.where(den > 0, den, 1), np.nan), index=D.index)
 
 COMBO = {
-    'C0 최대(쓸 수 있는 블록 전부, 같은 무게)': ('eq', SB),
+    'C0 최대(쓸 수 있는 블록 전부, 같은 무게)': ('eq', SBJ),
     'C1 층별 가중 + 블록 전부 세 묶음': ('lay', G3),
     'C2 층별 가중 원래 묶음(blocks.yaml 원칙)': ('lay', G0),
     'C3 가격 바닥(B11~B14·B16·B17·B29)': ('eq', ['B11', 'B12', 'B13', 'B14', 'B16', 'B17', 'B29']),
@@ -142,7 +145,7 @@ HB['NDX낙폭'] = _DD.reindex(HB['날짜'], method='ffill').values
 HB['비슷'] = HB['NDX낙폭'].between(*BAND).astype(int)
 if TGT == 'core50': HB = HB[HB['번호'].isin(K['번호'])]
 if KIND in ('주식', 'ETF'): HB = HB[HB['구분'] == ('개별주' if KIND == '주식' else 'ETF')]
-HAVE = [b for b in SB if HB[b].notna().mean() > .3]
+HAVE = [b for b in SBJ if HB[b].notna().mean() > .3]
 
 def acc(s, D):
     D = D.assign(s=s).dropna(subset=['s', HZ])

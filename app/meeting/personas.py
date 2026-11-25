@@ -711,6 +711,11 @@ def nyx(c, who):
     return out, [{'type': 'rsi', 'tickers': [r['ticker']]}] if r is not None and ok(r.get('ticker')) else []
 
 
+# 11/25 의장: 판정·합산에서 빼고 결과만 매번 보여 주는 블록(공식은 blocks.yaml에 그대로, 역할 정보)
+SHOW_ONLY = {'B18': 'B18 업종 자금(업종 ETF 60주선·5일 유입)', 'B20': 'B20 섹터 ETF 자금(5·20일 유입, 미국)', 'B21': 'B21 장기 큰손(13F 늘림, 미국)',
+             'B25': 'B25 돈은 잘 버나(F-Score·FCF·ROE)', 'B26': 'B26 빚에 안 무너지나(Altman Z·부채/EBITDA)'}
+
+
 def miss_value(c, desk_has):
     """11/23 의장 "그냥 엔진에서 나오는대로 말하면 됨. 그때그때 코드를 바꾸면 되니까": 미스 밸류가 따로 줄 세우지 않고
     엔진 판정표 순서(추천 → 관찰, 같은 등급 안 순위점수) 그대로, 밸류 블록 B15 점수·PER을 함께 보여 줌."""
@@ -727,6 +732,15 @@ def miss_value(c, desk_has):
                   'source': '판정표.csv(엔진)'})
     else:
         out.append(L('엔진 결과', '추천·관찰 개별주 없음', '엔진 판정표'))
+    # 11/25 의장 "빼..대신 결과는 매번 알려줘 아주 중요한 펀더멘탈이니까": 판정에서 뺀 블록 5개는 매일 결과를 따로 보여 줌(값 = 블록 공식 중 통과 비율)
+    F = c.T[(c.T['구분'] == '개별주') & c.T['추천'].isin(['추천', '관찰'])].copy() if '추천' in c.T else c.T.iloc[:0]
+    if len(F):
+        if '순위점수' in F: F = F.sort_values('순위점수', ascending=False)
+        tk2 = lambda r: r['ticker'] if r.get('시장') == '미국' and ok(r.get('ticker')) else r['종목']
+        v = lambda x: x if isinstance(x, str) else n(x, 2)
+        G.append({'type': 'grid', 'title': '판정에서 뺀 블록 결과(표시만, 공식 통과 비율)', 'columns': ['종목'] + list(SHOW_ONLY.values()),
+                  'rows': [[tk2(r)] + [v(r.get(b)) for b in SHOW_ONLY] for _, r in F.head(10).iterrows()],
+                  'source': '판정표.csv(엔진, 11/25 의장 판정 제외·표시만)'})
     out.append(L('데스크 보고', '있음' if desk_has else '없음', '담당 종목 전일 ±3% 또는 3일 안 실적 공시가 있으면 있음'))
     return out, G
 
