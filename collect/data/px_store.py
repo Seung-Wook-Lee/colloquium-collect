@@ -159,7 +159,14 @@ def update(B, U, now_kst, log=print):
     NEW = missing(B, t)
     c = B.get('Close')
     N, frames = {}, []
+    import os
+    kis_off = os.environ.get('KIS_OFF') == '1'   # 11/25 의장: 아침 8시엔 미국만, 한국은 저녁 8시 수집이 한투로
+    if kis_off:
+        NEW = [x for x in NEW if mk[x] != '한국']
     for m in ('미국', '한국'):
+        if m == '한국' and kis_off:
+            log('가격 한국: 아침엔 받지 않음(저녁 8시 수집이 한투로 덧붙임)')
+            continue
         tt = [x for x in t if mk[x] == m and x not in NEW]
         if not tt:
             continue

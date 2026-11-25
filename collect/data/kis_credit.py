@@ -1,5 +1,5 @@
 """국내 종목 신용잔고(융자) 일별 — 한투 FHPST04760000 → 드라이브 '콜로키움 수집데이터/1_data/신용잔고_일별.csv' (11/23 의장: 강제 매도 반등 검정).
-칸: 날짜, 코드, 융자잔고주수, 잔고율(%), 융자금액. 처음엔 받을 수 있는 만큼(최대 10년), 그다음은 최근 60일을 덧붙인다."""
+칸: 날짜, 코드, 융자잔고주수, 잔고율(%), 융자금액. 처음엔 받을 수 있는 만큼(최대 10년), 그다음은 저장본 마지막 날 뒤만 덧붙인다(11/25 의장)."""
 import io
 import os
 import sys
@@ -19,9 +19,11 @@ if drive.ready():
     if b:
         old = pd.read_csv(io.BytesIO(b), dtype={'코드': str}, parse_dates=['날짜'], encoding='utf-8-sig')
 have = set(old['코드']) if old is not None else set()
+import datetime as _dt
+since = {} if old is None else {c: max(5, (_dt.date.today() - d.date()).days + 3) for c, d in old.groupby('코드')['날짜'].max().items()}
 parts, rep = [], []
 for i, c in enumerate(codes):
-    d = kis.credit_kr(c, days=60 if c in have else 3650, probe=(i == 0))
+    d = kis.credit_kr(c, days=since.get(c, 3650), probe=(i == 0))   # 11/25 의장: 받아 둔 것에 그날 것만(저장본 마지막 날 3일 전부터)
     rep.append(f'{c} {len(d)}일' + (f' {d.index[0]:%Y-%m-%d}~{d.index[-1]:%Y-%m-%d}' if len(d) else ' 못 받음'))
     if len(d):
         parts.append(d.reset_index().assign(코드=c))
