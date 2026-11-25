@@ -45,6 +45,9 @@ jobs:
           cache: pip
       - name: 라이브러리 설치
         run: pip install -r requirements.txt pyyaml
+      - name: 한글 글꼴(미스 차트 그림, 11/26)
+        continue-on-error: true
+        run: sudo apt-get install -y -q fonts-nanum && rm -rf ~/.cache/matplotlib
       - name: 회의 원고 만들기
         env:
           TZ: Asia/Seoul

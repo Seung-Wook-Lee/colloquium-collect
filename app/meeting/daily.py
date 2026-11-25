@@ -440,6 +440,15 @@ def main():
         log('[변곡점 판] ' + ' '.join(f'{k}:{v}' for k, v in _r.items()))
     except Exception as e:   # noqa: BLE001
         log(f'[변곡점 판] 실패: {str(e)[:160]}')
+    try:   # 11/26 의장 "미스 차트는 그래프로, 선도 지지선·저항선도, 큼지막하게": SPYM·QQQM·TIGER 200 그림(스트림릿 5 기술적 분석 칸)
+        import tempfile
+        import miss_chart as MC
+        _md = tempfile.mkdtemp()
+        for _i, _nm, _p in MC.draw_all(IN, R['미스 차트 지표'], _md):
+            outs[f'{PFX}미스차트_{_i}.png'] = open(_p, 'rb').read()
+            log(f'[미스 차트 그림] {_i} {_nm}')
+    except Exception as e:   # noqa: BLE001
+        log(f'[미스 차트 그림] 실패: {str(e)[:160]}')
     try:   # 11/23 의장: 시장기록 장부 — 지수 기록(올해 상승분 반납 등)을 날마다 쌓아 몇 달 뒤에도 '언제였지?'에 답함
         import records as REC
         px = {k: v for k, v in PER.LAST_PX.items() if k != '_gap'}

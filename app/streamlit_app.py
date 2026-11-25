@@ -948,6 +948,16 @@ def _turn_png(day, n):
     return drive.get(f'{D_DATA}/{rel}')
 
 
+@st.cache_data(ttl=3 * 3600, show_spinner=False)
+def _day_png(day, stem):
+    """날짜 폴더의 그림 한 장(YYYYMMDD/YYYYMMDD_{stem}.png)."""
+    rel = f'{day}/{day}_{stem}.png'
+    if LOCAL:
+        p = Path(LOCAL) / rel
+        return p.read_bytes() if p.exists() else None
+    return drive.get(f'{D_DATA}/{rel}')
+
+
 TURN_COL = {'상향 돌파': '#1b8a2e', '하향 돌파': '#c8372d', '위에서 닿음': '#e67e22', '아래에서 닿음': '#e67e22', '위': '#333', '아래': '#333'}
 
 
@@ -1113,4 +1123,9 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
             with st.container(border=True):
                 title = title.replace('수급·포지셔닝', 'Flows & Positioning')   # 11/20 의장: 수급·포지셔닝은 영어로
                 st.markdown(sec_title(title), unsafe_allow_html=True)
+                if '기술적 분석' in title:   # 11/26 의장 "미스 차트는 그래프로, 큼지막하게": SPYM·QQQM·TIGER 200 그림을 칸 맨 위에 크게
+                    for _i in (1, 2, 3):
+                        _b = _day_png(day, f"{'미장전_' if name.startswith('미장전') else ''}미스차트_{_i}")
+                        if _b:
+                            st.image(_b, use_container_width=True)
                 render(body)
