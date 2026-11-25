@@ -1,6 +1,6 @@
 """블록점수이력용 과거 재무 칸 (11/23 의장: "24개 블록의 과거 값부터 채워. 안 되는 블록은 버려").
 backtest.py는 그 주까지의 가격만 다시 계산하고, 재무 칸(B15·B23·B25·B26)은 오늘 값으로 고정돼 비워 왔다.
-여기서는 우리 1_data의 SEC재무_분기·DART재무_분기(공시일 기준)와 PER_EPS_주별(공시일 기준 주별 PER)로
+여기서는 우리 1_data의 SEC재무_분기·DART재무_분기(공시일 기준)와 10년치 데이터베이스 EPS 칸(공시일 기준, PER = 종가 ÷ EPS)로
 '그 주에 공시돼 있던 분기'만 써서 엔진과 같은 칸을 다시 만든다.
   B23: op_yoy·rev_yoy·opm_yoy·opm2·earn_ok (분기 전년 같은 분기 대비, 영업이익 없으면 순이익)
   B25: fscore(피오트로스키 9항목, 4분기 합 기준)·fcf(영업현금흐름−설비투자, 4분기 합)·roe(순이익 4분기 합÷자본)
@@ -11,6 +11,10 @@ import os
 
 import numpy as np
 import pandas as pd
+
+import sys as _sys
+_sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'collect', 'data'))
+import px_store as PS  # noqa: E402  10년치 데이터베이스
 
 VARS = {'mcap_kr', 'ev_ebitda', 'op_yoy', 'opm_yoy', 'opm2', 'rev_yoy', 'earn_ok', 'roe', 'fcf', 'fcf_yield', 'debt_ebitda', 'z', 'fscore',
         'per_ttm', 'pbr', 'per_rank', 'pbr_rank', 'per_pct3'}
@@ -60,10 +64,7 @@ def _load(d):
     E = pd.concat(ev, ignore_index=True).sort_values('이용일')
     E['이용일'] = E['이용일'].astype('datetime64[ns]')
     P = None
-    pp = f'{d}/장기/PER_EPS_주별.csv.gz'
-    if os.path.exists(pp):
-        P = pd.read_csv(pp, usecols=['날짜', 'ticker', 'PER', 'PER_3년백분위'], parse_dates=['날짜']).sort_values('날짜')
-        P['날짜'] = P['날짜'].astype('datetime64[ns]')
+    P = PS.per_weekly(d)   # 11/26 10년치 데이터베이스(종가 ÷ EPS 칸), 공시일 기준
     return E, P
 
 

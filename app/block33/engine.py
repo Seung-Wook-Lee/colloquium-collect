@@ -344,7 +344,7 @@ def run(d, cfg=None):
         # B22 분할 차수
         four = all(_ev(e, row) for e in ['rsi_d <= 30', 'gap50 <= 90', 'close < m5', 'osc_w > osc_w1'])
         out[K_SPLIT] = '3차' if four else ('2차' if _ev('osc_w > osc_w1', row) else '1차')
-        # B23 비중 상한(BLOCK20 반켈리)
+        # B23 비중 상한(반켈리, cap 칸이 없으면 빈칸)
         out[K_CAP] = None if pd.isna(row.get('cap')) else round(row['cap'] * 100, 1)
         # B24 팔 때인가
         sell = []

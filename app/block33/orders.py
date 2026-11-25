@@ -1,6 +1,10 @@
 """국면(B08, 구 B00)과 주문 한도(대장 이탈·확정 이벤트·수급 이동, 챗지 구 B27~B29)·분할·층별 바구니. 모든 수치는 blocks.yaml '국면'·'주문' 칸에서 읽는다.
 11/17 의장 지시: 외부 AI 검토(챗지 B00·B27~B30, 제이미 C_rate·C_techvol·C_breadth 기록) 반영. 클로드 판단 없이 식으로만."""
 import numpy as np, pandas as pd
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))), 'collect', 'data'))
+import px_store as PS  # noqa: E402  10년치 데이터베이스 하나만 읽는다
 
 AI, DEFL = ('S1', 'S2', 'S3'), ('S5', 'S6')
 
@@ -163,9 +167,8 @@ def crowding(d, P, f, m, O):
 
 def cta_flip(d):
     """CTA 매도 전환까지 남은 %(JPM 방식): 21·63·100일 추세 신호가 뒤집히는 지수 수준까지 거리. 지금 플러스인 신호 중 가장 가까운 것."""
-    try:
-        I = pd.read_csv(f'{d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-    except FileNotFoundError:
+    I = PS.index(d, 735)
+    if I.empty:
         return {}
     out = {}
     for mk, k in (('미국', '^GSPC'), ('한국', '^KS11')):
@@ -179,9 +182,8 @@ def cta_flip(d):
 
 def index_regime(d):
     """지수 252·21일 추세 4국면(BlackRock·MSCI·GS) — 기록만(발동식은 B00)."""
-    try:
-        I = pd.read_csv(f'{d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-    except FileNotFoundError:
+    I = PS.index(d, 735)
+    if I.empty:
         return {}
     out = {}
     for mk, k in (('미국', '^GSPC'), ('한국', '^KS11')):
@@ -299,7 +301,7 @@ def country(m, f, P, adv_avg, CC):
         s = CC['국면차_이동'] * (1 if dus else -1); us -= s; kr += s
         why.append(f"B00 국면 차이({'미국' if dus else '한국'}만 방어) → {CC['국면차_이동']}%p 이동")
     try:
-        I = pd.read_csv(f"{m.get('_d')}/지수2년.csv", encoding='utf-8-sig', index_col=0)
+        I = PS.index(m.get('_d'), 735)
         g = lambda k: I[k].dropna().iloc[-1] / I[k].dropna().iloc[-64] - 1
         rs = (g('^GSPC') - g('^KS11')) * 100
         if abs(rs) >= CC['지수RS_문턱']:

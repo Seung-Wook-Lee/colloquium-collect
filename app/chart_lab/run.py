@@ -2,7 +2,7 @@
 # 차트 실험실 — 실험 실행기 (2026-11-13 의장)
 #   실험 하나 = chart_lab/experiments/<이름>.yaml 하나.
 #   실행: python chart_lab/run.py <이름> [<이름> ...]      (GitHub Actions '차트 실험실 실행'이 이걸 부른다)
-#   자료: 드라이브 '콜로키움 수집데이터/00_누적/00_한투_일봉·주봉·월봉.csv'(한투 창고, 읽기만)
+#   자료: 드라이브 10년치 데이터베이스 '콜로키움 수집데이터/1_data/가격10년_*'(읽기만, 주봉·월봉은 일봉에서 만듦)
 #         또는 설정에서 '자료: 야후'면 야후 수정주가. 지수(^KS11·^GSPC·^N225)는 야후.
 #   결과: 드라이브 '콜로키움 수집데이터/차트실험실/<이름>/' 에
 #         <이름>_요약_Ver.YYYYMMDD_HHMM.csv   규칙별 1·3·6달(주봉이면 4·13·26주) 중앙값, 지수 대비, 아무 날 대비, 건수
@@ -67,16 +67,25 @@ def _norm(df):
     return df.sort_values('date').drop_duplicates('date').set_index('date')[['open', 'high', 'low', 'close', 'volume']]
 
 
-def load_kis(gd, tfs):
-    """한투 창고 → {tf: {번호: DataFrame}}"""
-    files = {'D': '00_한투_일봉.csv', 'W': '00_한투_주봉.csv', 'M': '00_한투_월봉.csv'}
-    local = os.environ.get('CHART_LAB_DATA', '')
-    out = {}
-    for tf in tfs:
-        src = f'{local}/{files[tf]}' if local else io.BytesIO(gd.get(f'{D_DATA}/00_누적/{files[tf]}'))
-        t = pd.read_csv(src, dtype={'번호': str, '코드': str})
-        out[tf] = {k: _norm(g) for k, g in t.groupby('번호')}
-        log(f'[한투 창고] {files[tf]} {len(t):,}줄, {len(out[tf])}종목')
+def load_db(gd, u, tfs):
+    """10년치 데이터베이스(드라이브 1_data/가격10년_*) → {tf: {번호: DataFrame}}. 주봉·월봉은 일봉에서 만든다(11/26 한투 창고 없앰)."""
+    import tempfile
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), 'collect', 'data'))
+    import px_store as PS
+    d = os.environ.get('CHART_LAB_DATA', '') or tempfile.mkdtemp()
+    for k in PS.F:
+        if not os.path.exists(f'{d}/{PS.name(k)}'):
+            open(f'{d}/{PS.name(k)}', 'wb').write(gd.get(f'{D_DATA}/1_data/{PS.name(k)}'))
+    X = {c: PS.frame(d, k) for k, c in (('Open', 'open'), ('High', 'high'), ('Low', 'low'), ('Close', 'close'), ('Volume', 'volume'))}
+    out = {tf: {} for tf in tfs}
+    for _, s in u.iterrows():
+        t = s['yfinance 티커']
+        if t not in X['close']:
+            continue
+        df = pd.DataFrame({c: X[c][t] for c in X if t in X[c]}).dropna(subset=['close'])
+        for tf in tfs:
+            out[tf][s['번호']] = df if tf == 'D' else _resample(df, 'W-FRI' if tf == 'W' else 'ME')
+    log(f'[데이터베이스] 가격10년 {len(out[tfs[0]])}종목')
     return out
 
 
@@ -85,7 +94,7 @@ def _resample(df, rule):
     r = pd.DataFrame({'open': g['open'].first(), 'high': g['high'].max(), 'low': g['low'].min(),
                       'close': g['close'].last(), 'volume': g['volume'].sum()})
     last = df['close'].groupby(pd.Grouper(freq=rule)).apply(lambda s: s.index.max())
-    r.index = pd.DatetimeIndex(last.reindex(r.index).values)     # 봉 날짜 = 그 봉의 마지막 거래일(한투 창고와 같게)
+    r.index = pd.DatetimeIndex(last.reindex(r.index).values)     # 봉 날짜 = 그 봉의 마지막 거래일
     return r.dropna(subset=['close'])
 
 
@@ -239,7 +248,7 @@ def run(name):
                                  '층': e.get('층', ''), '구분': e.get('구분', 'ETF')} for e in extra])
             u = pd.concat([u, add], ignore_index=True)
             log(f'[추가종목] {", ".join(add["yfinance 티커"])}')
-    data = load_yahoo(u, tfs) if src == '야후' else load_kis(gd, tfs)
+    data = load_yahoo(u, tfs) if src == '야후' else load_db(gd, u, tfs)
     idx = load_index()
     log(f'[실험] {name} | 기본봉 {cfg.get("기본봉", "일봉")} | 자료 {src} | 대상 {len(u)}종목 | 규칙 {len(rules)}개 | 중복 제외 {cd}봉')
 
@@ -317,7 +326,7 @@ def run(name):
     hz = ', '.join(f'{n}={h}봉' for n, h in hs)
     note = f"""차트 실험실 결과 — {cfg.get('제목', name)}
 실행: {STAMP} KST | 실험 파일 chart_lab/experiments/{name}.yaml
-자료: {src} {'창고(드라이브 00_누적, 수정주가)' if src == '한투' else '수정주가'} | 기본봉 {cfg.get('기본봉', '일봉')} | 기간 {first.date() if first is not None else ''} ~ {last.date() if last is not None else ''}
+자료: {src} {'10년치 데이터베이스(드라이브 1_data)' if src == '한투' else '수정주가'} | 기본봉 {cfg.get('기본봉', '일봉')} | 기간 {first.date() if first is not None else ''} ~ {last.date() if last is not None else ''}
 대상: {len(frames)}종목(현금성 ETF 제외) | 지수: 한국 ^KS11, 미국 ^GSPC, 일본 ^N225(야후)
 뒤 수익률: 신호 봉 종가 → {hz} 뒤 종가. 지수 대비 = 같은 기간 지수 수익률을 뺀 값. '{hs[1][0]}안 최저·최고'는 다음 봉부터 {hs[1][1]}봉.
 아무 날: 같은 대상 종목의 같은 기간 모든 봉(지표 준비 {WARMUP}봉 뒤)을 샀다고 볼 때의 중앙값.

@@ -5,11 +5,9 @@
   확정 = 예 이고 영향 층이 있으면 엔진 orders.py B28(주문 50%)이 읽는다."""
 import re
 import datetime as dt
-import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 
 import pandas as pd
-import requests
 
 KST = dt.timezone(dt.timedelta(hours=9))
 LOG_COLS = ['날짜', '매체', '제목', '링크']
@@ -37,26 +35,6 @@ def _date(s):
         return pd.Timestamp(s).tz_localize(None).date() if pd.Timestamp(s).tzinfo is None else pd.Timestamp(s).tz_convert(KST).date()
     except Exception:
         return None
-
-
-def fetch_rss(R, timeout=20):
-    """승인 매체 RSS 제목. 실패한 주소는 건너뛰고 이유를 돌려준다."""
-    rows, fail = [], []
-    for media, url in R.get('RSS', []):
-        try:
-            r = requests.get(url, timeout=timeout, headers={'User-Agent': 'Mozilla/5.0 (colloquium rss)'})
-            r.raise_for_status()
-            root = ET.fromstring(r.content)
-            items = root.findall('.//item') or root.findall('.//{http://www.w3.org/2005/Atom}entry')
-            for it in items:
-                g = lambda k: (it.findtext(k) or it.findtext('{http://www.w3.org/2005/Atom}' + k) or '').strip()
-                link = g('link') or (it.find('{http://www.w3.org/2005/Atom}link').get('href') if it.find('{http://www.w3.org/2005/Atom}link') is not None else '')
-                day = _date(g('pubDate') or g('published') or g('updated') or g('{http://purl.org/dc/elements/1.1/}date'))
-                if g('title') and day:
-                    rows.append(dict(날짜=str(day), 매체=media, 제목=g('title'), 링크=link))
-        except Exception as e:
-            fail.append(f'{media}({type(e).__name__})')
-    return pd.DataFrame(rows, columns=LOG_COLS), fail
 
 
 def news_csv_rows(d, R, today):

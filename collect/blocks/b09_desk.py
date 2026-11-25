@@ -3,7 +3,7 @@
 #   하는 일  : 데스크마다 담당 종목·테마 ETF와 업종 대표 ETF(유니버스 밖, 미국)의
 #              1·4·12주 초과수익, 섹터 로테이션 사분면(RRG), 거래대금 배율(5일/60일), 20주선 위·아래를 계산하고
 #              데스크별 한 줄 요약(중앙값, 거래대금 늘며 오른 것·빠진 것)을 만든다. 계산식은 desk.py
-#   소스     : 수집데이터/00_누적/00_가격이력.csv (블록 1) + 야후(업종 대표 ETF·닛케이225, 2년 일봉)
+#   소스     : 10년치 데이터베이스 1_data/가격10년_*(블록 1, PS.long) + 야후(업종 대표 ETF·닛케이225, 2년 일봉)
 #   만드는 것: 수집데이터/YYYYMMDD/YYYYMMDD_데스크수급.csv (데스크 요약)
 #              수집데이터/YYYYMMDD/YYYYMMDD_데스크수급상세.csv (종목·ETF 한 줄씩)
 #   쓰는 위원: 섹터 데스크 5명(미스 세마이·미스터 빅스·미스 파이낸스·일라이 존슨·미스터 로보), 피터
@@ -13,7 +13,7 @@
 import desk
 
 try:
-    hist = pd.read_csv(f'{KEEP}/00_가격이력.csv', parse_dates=['날짜'], dtype={'티커': str})
+    hist = PS.long(PXD, days=5 * 366)   # 10년치 데이터베이스(블록 1)
     ext = _yf(desk.extra_tickers(), '2y')          # 블록 1의 야후 함수
     allp = pd.concat([hist, ext]) if len(ext) else hist
     px = {t: g.set_index('날짜').sort_index() for t, g in allp.groupby('티커')}

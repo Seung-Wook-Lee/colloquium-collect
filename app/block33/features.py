@@ -3,6 +3,10 @@
 import re
 import numpy as np
 import pandas as pd
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))), 'collect', 'data'))
+import px_store as PS  # noqa: E402  11/26 의장: 가격·지수는 10년치 데이터베이스 하나에서만 읽음
 
 EVENT = {'방산': ['종전', '휴전', '평화협상', 'ceasefire', 'peace deal', 'truce'],
          '우주': ['종전', '휴전', 'ceasefire'],
@@ -46,11 +50,9 @@ def _streak(x):
 
 def _px(d):
     try:
-        return pd.read_csv(f'{d}/가격2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-    except FileNotFoundError:
-        return pd.DataFrame()
+        return PS.stocks(d, 'Close', 735)
     except Exception as e:   # noqa: BLE001
-        _fail('가격2년', e)
+        _fail('가격 데이터베이스', e)
         return pd.DataFrame()
 
 
@@ -121,8 +123,16 @@ def stocks(d):
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('for name, per, roe in (("DART", "PER TTM', e)
     nan = pd.Series(np.nan, index=f.index)
+    # 자기역사 PER 3년·52주 밴드(11/16 의장: 3년치만) — 11/26 10년치 데이터베이스(종가 ÷ EPS 칸, px_store.per_band)
     try:
-        f['per_ttm'] = f.get('per_DART', nan).combine_first(f.get('per_SEC', nan)).combine_first(f.get('per_kis', nan))
+        f = f.merge(PS.per_band(d), on='ticker', how='left')
+    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
+        _fail('PER 밴드(데이터베이스)', e)
+    for k in ('per_now', 'per_med3', 'per_pct3', 'per_med1', 'per_pct1'):
+        if k not in f:
+            f[k] = np.nan
+    try:   # 11/26 PER은 데이터베이스(종가 ÷ EPS)가 먼저 — 과거 판정(hist_fund)과 같은 값. 없으면 DART·SEC·한투 표
+        f['per_ttm'] = f['per_now'].combine_first(f.get('per_DART', nan)).combine_first(f.get('per_SEC', nan)).combine_first(f.get('per_kis', nan))
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('f["per_ttm"] = f.get("per_DART", nan).co', e)
     try:
@@ -203,25 +213,6 @@ def stocks(d):
                         on='ticker', how='left')
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('장기펀드13F', e)
-    # 퀀트센터 자료(BLOCK20 quant_live)
-    K = _r(d, '퀀트자료')
-    try:
-        if len(K):
-            k = pd.DataFrame({'ticker': K['ticker'], 'surprise': _num(K['서프라이즈_최근(%)']),
-                              'surp4': _num(K['서프라이즈_최근4번_플러스']), 'fcf': _num(K['FCF(TTM)']),
-                              'fcf_yield': _num(K['FCF수익률(%)']), 'z': _num(K['Z점수']), 'accel': _num(K['영업이익가속(%p)']),
-                              'fscore': _num(K['F점수(대용)']), 'pension20': _num(K['연기금_20일(억)'])})
-            f = f.merge(k, on='ticker', how='left')
-    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
-        _fail('퀀트자료', e)
-    L = _r(d, 'forward_log')
-    try:
-        if len(L):
-            L.columns = [c.lstrip('﻿') for c in L.columns]
-            L = L[L['asof'] == L['asof'].max()]
-            f = f.merge(L[['ticker', 'p63', 'n0_63', 'p126', 'n0_126', 'p252', 'n0_252', 'cap']], on='ticker', how='left')
-    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
-        _fail('forward_log', e)
     C = _r(d, '1달조합')
     try:
         if len(C):
@@ -262,7 +253,7 @@ def stocks(d):
             f['fcf_yield'] = f['fcf_yield'].combine_first(f['fcf_y'] / f['mcap'] * 100)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('재무건전성', e)
-    FZ = _r(d, 'FZ점수')   # 200종목 직접 계산(야후 연간 재무제표), 퀀트자료 없는 종목 채움
+    FZ = _r(d, 'FZ점수')   # 직접 계산(야후 연간 재무제표, 아침 8시 수집)
     try:
         if len(FZ):
             fz = pd.DataFrame({'번호': FZ['번호'], 'f_y': _num(FZ['F점수']), 'z_y': _num(FZ['Z점수'])})
@@ -271,28 +262,13 @@ def stocks(d):
                 f[k] = (f[k] if k in f else pd.Series(np.nan, index=f.index)).combine_first(f[y])
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('FZ점수', e)
-    # 자기역사 PER 3년 밴드(11/16 의장: 3년치만)
-    P3 = _r(d, 'PER3년')
-    try:
-        if P3 is not None and len(P3):
-            f = f.merge(P3[[k for k in ('번호', 'per_now', 'per_med3', 'per_pct3', 'per_med1', 'per_pct1') if k in P3]], on='번호', how='left')
-        else:
-            f['per_pct3'] = np.nan; f['per_med3'] = np.nan
-    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
-        _fail('PER3년', e)
-    try:
-        for k in ('per_now', 'per_med1', 'per_pct1'):   # 11/20 52주 PER(옛 PER3년.csv엔 없음)
-            if k not in f:
-                f[k] = np.nan
-    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
-        _fail('for k in ("per_now", "per_med1", "per_pc', e)
     RV = _r(d, '연매출')
     try:
         if len(RV):
             f = f.merge(pd.DataFrame({'번호': RV['번호'], 'rev_krw': _num(RV['연매출(원)'])}), on='번호', how='left')
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('연매출', e)
-    # 가격 2년(야후): 종목 위험(변동성·꼬리) 
+    # 10년치 데이터베이스 최근 2년: 종목 위험(변동성·꼬리)
     P = _px(d)
     try:
         if len(P):
@@ -302,10 +278,7 @@ def stocks(d):
             f['vol60'] = f['ticker'].map(vol)
             f['es5'] = f['ticker'].map(es)
             # 돈의 방향: 시장(코스피·코스닥·S&P500) 대비 5·20일 상대수익, 같은 층 대비, 50일선
-            try:
-                I = pd.read_csv(f'{d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-            except FileNotFoundError:
-                I = pd.DataFrame()
+            I = PS.index(d, 735)
             def ret(x, n):
                 x = x.dropna(); return (x.iloc[-1] / x.iloc[-1 - n] - 1) * 100 if len(x) > n else np.nan
             r5 = P.apply(lambda x: ret(x, 5)); r20 = P.apply(lambda x: ret(x, 20))
@@ -381,11 +354,11 @@ def stocks(d):
             f['shock_layer_share'] = share.max(axis=1)
             f['shock_layer'] = (f['shock_layer_share'] >= 0.5).astype(int).where(f['shock_layer_share'].notna())
             f['resmom_mpct'] = f.groupby('시장')['resmom'].rank(pct=True)
-            # 11/19 의장 B20 큰돈이 모으나: Chaikin Money Flow(20일)·Money Flow Index(14일), 고가·저가·거래량(fetch_px.py)
+            # 11/19 의장 B20 큰돈이 모으나: Chaikin Money Flow(20일)·Money Flow Index(14일), 고가·저가·거래량(10년치 데이터베이스)
             try:
-                Hh = pd.read_csv(f'{d}/고가2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-                Ll = pd.read_csv(f'{d}/저가2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-                Vv = pd.read_csv(f'{d}/거래량2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
+                Hh = PS.stocks(d, 'High', 735)
+                Ll = PS.stocks(d, 'Low', 735)
+                Vv = PS.stocks(d, 'Volume', 735)
                 C_ = P.reindex(index=Hh.index, columns=Hh.columns)
                 mfm = ((C_ - Ll) - (Hh - C_)) / (Hh - Ll).replace(0, np.nan)          # 종가가 그날 고가 쪽이면 +1, 저가 쪽이면 −1
                 f['cmf20'] = f['ticker'].map((mfm * Vv).tail(20).sum() / Vv.tail(20).sum().replace(0, np.nan))
@@ -411,7 +384,7 @@ def stocks(d):
             f['max21'] = f['ticker'].map(r.tail(21).max() * 100)
             f['max21_mpct'] = f.groupby('시장')['max21'].rank(pct=True)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
-        _fail('가격2년', e)
+        _fail('가격 데이터베이스', e)
     # 블룸버그 12개월 선행 EPS(톰스뉴스 표, 미국 상위 30): 1주·YTD 변화, 선행 PER
     BB = _r(d, '블룸버그EPS')
     try:
@@ -599,7 +572,7 @@ def stocks(d):
         _bottom_cols(d, f)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('_bottom_cols(d, f)', e)
-    try:   # 11/24 B24 실제 이익 공식 3개(1_data PER_EPS_주별, 과거 값과 같은 식 — eps_proxy.py)
+    try:   # 11/24 B24 실제 이익 공식 3개(데이터베이스 EPS 칸, 과거 값과 같은 식 — eps_proxy.py)
         import eps_proxy as EP
         f = EP.apply(f, None, d)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
@@ -634,10 +607,7 @@ def _bottom_cols(d, f):
     os4 = pd.Series([float(sum(bool(ev(e, r)) for e in ose) >= 2) if r.get('rsi_d') is not None and ose else np.nan for r in rows], index=f.index, dtype=float)
     below = (f['close'] < f['ma200']).astype(float).where(f['ma200'].notna() & f['close'].notna()) if 'ma200' in f else pd.Series(np.nan, index=f.index)
     stock = f['구분'] == '개별주'
-    try:
-        I = pd.read_csv(f'{d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-    except FileNotFoundError:
-        I = pd.DataFrame()
+    I = PS.index(d, 735)
     R = _r(d, '리스크')
     g = dict(zip(R['항목'], _num(R['값']))) if len(R) else {}
     f['vix'] = g.get('VIX'); f['vix_vix3m'] = g.get('VIX − VIX3M')
@@ -726,7 +696,7 @@ def market(d):
         if len(V2):
             v = V2.iloc[-1]; m['SPX_FPER'] = float(v['선행PER'])
             try:   # 11/23 의장: PER은 오늘 S&P500 ÷ 선행 EPS(지수밸류.csv 값이 옛 날짜로 남는 것 막기)
-                ix = pd.read_csv(f'{d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)['^GSPC'].dropna()
+                ix = PS.index(d)['^GSPC'].dropna()
                 eps = float(v['선행EPS'])
                 if len(ix) and eps > 0:
                     m['SPX_CLOSE'], m['SPX_CLOSE_DATE'] = float(ix.iloc[-1]), f'{ix.index[-1]:%Y-%m-%d}'
@@ -743,7 +713,7 @@ def market(d):
             s['날짜'] = pd.to_datetime(s['날짜']); s = s.dropna(subset=['선행PE']).sort_values('날짜')
             old = pd.to_datetime(V2['날짜'].iloc[-1]) if len(V2) else pd.Timestamp('1900-01-01')
             if len(s) and s['날짜'].iloc[-1] > old:
-                ix = pd.read_csv(f'{d}/지수2년.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)['^GSPC'].dropna()
+                ix = PS.index(d)['^GSPC'].dropna()
                 ep = [float(ix.loc[:t].iloc[-1]) / float(p) for t, p in zip(s['날짜'], s['선행PE'])]   # 그날 S&P500 종가 ÷ 선행PE = 지수 선행 EPS
                 m['SPX_EPS'], m['SPX_EPS_DATE'] = round(ep[-1], 1), f"{s['날짜'].iloc[-1]:%Y-%m-%d}"
                 m['SPX_EPS_SRC'] = f"우리 수집 {s['방법'].iloc[-1]}({int(s['받은 종목수'].iloc[-1])}/{int(s['종목수'].iloc[-1])}종목)"
@@ -775,16 +745,17 @@ def market(d):
             except Exception:
                 pass
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
-        _fail('가격2년', e)
-    try:   # BLOCK20 아침보고 [국면] 줄
-        t = open(f'{d}/아침보고.txt', encoding='utf-8').read()
-        for k, c in (('미국', 'US_BEAR'), ('한국', 'KR_BEAR')):
-            g = re.search(k + r' B01 (상승|중립|하락) (\d+)%', t)
-            if g: m[c] = int(g.group(2)) / 100 if g.group(1) == '하락' else 0.0
-    except FileNotFoundError:
-        pass
+        _fail('가격 데이터베이스', e)
+    try:   # B01 하락 국면 확률(HMM, hist_market.hmm_bear): 10년치 데이터베이스 지수로 직접 계산(11/26 옛 외부 보고서 읽기 없앰)
+        import hist_market as HMK
+        for k, c in (('^GSPC', 'US_BEAR'), ('^KS11', 'KR_BEAR')):
+            x = HMK.hmm_bear(PS.index(d)[k].dropna()).dropna()
+            if len(x):
+                m[c] = float(x.iloc[-1])
+    except Exception as e:   # noqa: BLE001
+        _fail('하락 국면 확률', e)
     try:   # 코스피 50일 이격(의장 기준: 125 과열주의, 130 과열)
-        ix = pd.read_csv(f'{d}/지수2년.csv', index_col=0)['^KS11'].dropna()
+        ix = PS.index(d)['^KS11'].dropna()
         m['KS_GAP50'] = float(ix.iloc[-1] / ix.iloc[-50:].mean() * 100)
     except Exception:
         pass

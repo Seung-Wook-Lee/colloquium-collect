@@ -4,7 +4,7 @@
 3) 조합 시험(걸어가며 검증): 해마다 '그 전까지 결과를 알 수 있던 날'만으로 블록 조합을 고르고(앞으로 하나씩 더하기),
    그해 매주 종합점수 상위 5종목의 실제 성적을 잰다. 고를 때 본 기간과 성적을 잰 기간이 겹치지 않는다.
 가격으로 다시 계산할 수 없는 칸(실적·수급·13F·뉴스·공매도 등)은 비워 두므로, 그런 블록은 기록이 쌓일 때까지 빠진다.
-쓰는 법: python backtest.py <입력폴더>   (먼저 python fetch_long.py <입력폴더>)
+쓰는 법: python backtest.py <입력폴더>   (입력폴더에 10년치 데이터베이스 가격10년_*.csv.gz가 있어야 함, 따로 받지 않음)
 결과: <입력폴더>/../블록점수이력.csv(다음 실행 때 새 날짜만 계산), 블록성적.csv, 조합시험.csv, 조합후보_오늘.csv
 오늘 후보는 엔진 판정표(<입력폴더>/../out_판정표.csv)에서 '후보'(거르기·추천 자격 통과)인 종목만."""
 import ast
@@ -22,6 +22,8 @@ import yaml
 HERE = os.path.dirname(os.path.realpath(__file__))
 COLLECT = os.path.join(os.path.dirname(os.path.dirname(HERE)), 'collect')   # 11/21 두 폴더: 수집(collect)·스튜디오(app)
 sys.path.insert(0, COLLECT)   # nyx.py(닉스 지표), blocks/b09_exc.py(예외 검정)
+sys.path.insert(0, os.path.join(COLLECT, 'data'))
+import px_store as PS  # noqa: E402  10년치 데이터베이스 하나
 import features as F  # noqa: E402
 import hist_fund as HF  # 11/23 과거 재무 칸(SEC·DART 공시일 기준)
 import hist_sector as HS
@@ -35,7 +37,7 @@ import orders as O  # noqa: E402
 from engine import _ev  # noqa: E402
 import qc_config as QCC  # noqa: E402
 
-PX = {'가격2년': '종가', '시가2년': '시가', '고가2년': '고가', '저가2년': '저가', '거래량2년': '거래량'}
+PX = dict(PS.F)   # 데이터베이스 칸 → 닉스 지표 이름(시가·고가·저가·종가·거래량)
 KEEP = 520          # 엔진이 받는 것과 같은 2년치만 넘김
 TOPN = 5
 SCORED = ('점수', '핵심', '타이밍', '매도')
@@ -55,8 +57,8 @@ EXC_ROW = _exc_fn()
 
 
 def load_long(d):
-    L = {k: pd.read_csv(f'{d}/장기/{k}.csv', encoding='utf-8-sig', index_col=0, parse_dates=True) for k in list(PX) + ['지수2년']}
-    return L
+    """11/26 의장: 10년치 데이터베이스 하나에서 읽는다(따로 받던 10년 사본 없앰)."""
+    return {k: PS.frame(d, k) for k in PX}
 
 
 def asof_dir(d, L, t, out):
@@ -64,18 +66,18 @@ def asof_dir(d, L, t, out):
     os.makedirs(out, exist_ok=True)
     for x in os.listdir(d):
         p = os.path.join(d, x)
-        if os.path.isfile(p) and x[:-4] not in L and x not in ('닉스.csv', '예외검정.csv'):
+        if os.path.isfile(p) and x not in {PS.name(k) for k in L} and x not in ('닉스.csv', '예외검정.csv'):
             os.symlink(p, os.path.join(out, x))
     for k, v in L.items():
-        v.loc[:t].tail(KEEP).to_csv(f'{out}/{k}.csv', encoding='utf-8-sig')
+        v.loc[:t].tail(KEEP).to_csv(f'{out}/{PS.name(k)}', encoding='utf-8-sig', compression={'method': 'gzip', 'compresslevel': 1})
     N = pd.read_csv(f'{d}/닉스.csv', encoding='utf-8-sig')
-    I = L['지수2년'].loc[:t]
+    I = L['Close'].loc[:t]
     rows, ex = [], []
     for tk in N['yfinance 티커'].astype(str):
         o = pd.DataFrame({c: L[k][tk] for k, c in PX.items() if tk in L[k]}).loc[:t].dropna(subset=['종가']).tail(KEEP)
         a = nyx.analyze(o) if len(o) and '고가' in o else {}
         rows.append(a)
-        c = L['가격2년'][tk].loc[:t].dropna() if tk in L['가격2년'] else pd.Series(dtype=float)
+        c = L['Close'][tk].loc[:t].dropna() if tk in L['Close'] else pd.Series(dtype=float)
         mk = '^GSPC' if not tk.endswith(('.KS', '.KQ')) else '^KS11'
         try:
             w = c.resample('W-FRI').last().dropna(); m = I[mk].dropna().resample('W-FRI').last().dropna()
@@ -166,7 +168,7 @@ def _one(args):
     try:
         asof_dir(d, L, t, tmp)
         f = feats(tmp, B)
-        close = L['가격2년'].loc[:t].ffill().iloc[-1].to_dict()
+        close = L['Close'].loc[:t].ffill().iloc[-1].to_dict()
         f = HF.apply(f, t, close, d, (B.get('메모리반대') or {}).get('종목', []))
         f = HS.apply(f, t, d)   # B18 업종 ETF 60주선 이격(시타델 주봉 창고)
         f = HK.apply(f, t, d)   # B19·B14·B22 한국 수급(한투 일별 투자자)
@@ -184,7 +186,7 @@ def _one(args):
 
 
 def forward(L, H, ticker, t):
-    c = L['가격2년'][ticker].dropna() if ticker in L['가격2년'] else pd.Series(dtype=float)
+    c = L['Close'][ticker].dropna() if ticker in L['Close'] else pd.Series(dtype=float)
     i = c.index.searchsorted(t, side='right') - 1
     return {f'{w}주': (c.iloc[i + n] / c.iloc[i] - 1) * 100 if i >= 0 and i + n < len(c) else np.nan for w, n in H.items()}
 
@@ -269,7 +271,7 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     BT = B.get('성적표', {}); TOPN = int(BT.get('상위', 5))
     H = {str(k): v for k, v in BT.get('기간', {4: 20, 12: 60, 26: 130, 52: 260}).items()}
     L = load_long(d)
-    C = L['가격2년']
+    C = L['Close'][[c for c in L['Close'].columns if not str(c).startswith('^')]]
     start = C.index[0] + pd.Timedelta(days=int(BT.get('준비일', 400)))   # 252거래일 + 여유
     dates = [C.index[C.index.searchsorted(x, side='right') - 1] for x in pd.date_range(start, C.index[-1], freq=step)]
     dates = sorted(set(dates) | {C.index[-1]})
@@ -286,8 +288,8 @@ def main(d, cfg=None, step='W-FRI', workers=None):
         mask = mask - HSH.VARS; keep = keep | (HSH.VARS & formula_vars(B['종목']))   # B22 공매도는 FINRA 이력으로 그 주 값
     if os.path.exists(f'{d}/장기/ETF좌수_이력.csv.gz'):
         mask = mask - HE.VARS; keep = keep | (HE.VARS & formula_vars(B['종목']))   # B20 ETF 자금은 좌수 이력으로 그 주 값(이력 없는 ETF는 비움)
-    if os.path.exists(f'{d}/장기/PER_EPS_주별.csv.gz'):
-        mask = mask - EP.VARS; keep = keep | (EP.VARS & formula_vars(B['종목']))   # B24 실제 이익 공식은 EPS TTM 이력으로 그 주 값
+    if os.path.exists(f'{d}/{PS.name("EPS")}'):
+        mask = mask - EP.VARS; keep = keep | (EP.VARS & formula_vars(B['종목']))   # B24 실제 이익 공식은 데이터베이스 EPS 칸으로 그 주 값
     print('비운 칸(과거 값 없음):', ', '.join(sorted(mask)))
     cache = os.path.join(d, '..', '블록점수이력.csv')
     old = pd.read_csv(cache, encoding='utf-8-sig') if os.path.exists(cache) else pd.DataFrame()

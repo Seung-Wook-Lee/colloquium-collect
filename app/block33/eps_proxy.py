@@ -1,6 +1,6 @@
 """B24 '이익 전망이 오르나?'에 더하는 실제 이익 공식 3개 (11/24 의장 "없으면 블록을 바꾸던지, 지우는 것은 허락받고").
 애널리스트 추정치(est30·est90·up30·dn30)는 과거 기록이 없어 B24가 과거 점수를 못 냈다. 원래 공식 3개는 그대로 두고(지우지 않음),
-과거부터 있는 우리 자료 1_data/PER_EPS_주별(SEC·DART 공시일 기준 EPS TTM)로 같은 질문을 묻는 공식 3개를 더한다.
+10년치 데이터베이스 EPS 칸(SEC·DART 공시일 기준 EPS TTM)로 같은 질문을 묻는 공식 3개를 더한다.
   eps_chg90  = EPS TTM 13주 전 대비 변화(%)             ↔ est90(내년 EPS 추정 90일 변화)
   eps_up2    = EPS TTM 26주 전 < 13주 전 < 지금(두 번 연속 증가)  ↔ up30 ≥ dn30(상향 건수 ≥ 하향)
   peer_eps90 = 같은 층 개별주 안 eps_chg90 순위(0~1)      ↔ peer_est30(동료 중 추정치 상향 큰 쪽)
@@ -13,19 +13,16 @@ import os
 import numpy as np
 import pandas as pd
 
+import sys as _sys
+_sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'collect', 'data'))
+import px_store as PS  # noqa: E402  10년치 데이터베이스
+
 VARS = {'eps_chg90', 'eps_up2', 'peer_eps90', 'per_dn52', 'peer_ev'}
-_P = {}
 
 
 def load(d):
-    p = f'{d}/장기/PER_EPS_주별.csv.gz'
-    if p in _P:
-        return _P[p]
-    P = None
-    if os.path.exists(p):
-        P = pd.read_csv(p, usecols=['날짜', 'ticker', 'EPS_TTM', 'PER'], parse_dates=['날짜']).dropna(subset=['EPS_TTM']).sort_values('날짜')
-    _P[p] = P
-    return P
+    P = PS.per_weekly(d)   # 11/26 10년치 데이터베이스(EPS 칸, PER = 종가 ÷ EPS)
+    return None if P is None else P.dropna(subset=['EPS_TTM'])
 
 
 def _at(P, t, back, win=10, col='EPS_TTM'):

@@ -7,7 +7,7 @@ import yaml
 
 M = Path(__file__).resolve().parents[1] / 'app' / 'market'
 EXT = re.compile(r'import yfinance|yf\.download|yf\.Ticker|urllib\.request|requests\.get')
-SKIP = {'ourdata.py', 'run.py', 'canary.py', 'stored.py'}   # stored.py = 저장본에 칸이 없을 때만 받는 단일 입구(11/25)
+SKIP = {'ourdata.py', 'run.py', 'stored.py'}   # stored.py = 저장본에 칸이 없을 때만 받는 단일 입구(11/25)
 
 
 def test_external_download_needs_permission():

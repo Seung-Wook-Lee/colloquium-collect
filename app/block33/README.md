@@ -6,7 +6,7 @@
 - `engine.py <자료 폴더>`: 시장 블록 B01~B08, 종목 블록 B09~B25, 엔진 계산 B26 분할·B27 비중 상한·B28 매도 신호 → `out_판정표.csv`·`out_공식별결과.csv`·`out_시장블록.csv`.
 - 추천: 거르기(B09~B12) 통과 후 점수·타이밍·핵심 블록마다 공식 과반 = 예, 예 2/3 이상 추천·1/2 이상 관찰(개별주 최소 8블록, ETF 6블록).
 - ETF는 보유 상위 10종목(`ETF보유.csv`, `ETF멤버.csv`)의 이익·전망·재무·밸류를 보유 비중 가중 평균.
-- `fetch_*.py`: 야후·DART 보조 자료 수집. `fetch_per3.py`: 자기 3년 PER 밴드.
+- 가격·PER은 10년치 데이터베이스 하나(`collect/data/px_store.py`: `frame`·`stocks`·`index`·`per_band`·`per_weekly`). 보조 자료는 아침 8시 수집(`collect/data/supplement.py`)이 받는다. 엔진은 아무것도 받지 않는다(11/26).
 - `gen7.py`·`gen_blocks.py` + `topdf.js`(Node Playwright): 추천 보고서·블록 구성 PDF.
 
 ## 11/19 추가: 순서·합산·메타·완성도
@@ -21,5 +21,5 @@
 - B10: 07시 수집 `blocks/b09_gpr.py` → `지정학위험.csv`(GPR 7일 평균 10년 백분위).
 
 ## 매일 실행
-1. 07시 수집 파일(드라이브 '콜로키움 수집데이터' 오늘 폴더)을 입력 폴더(/mnt/project-files/퀀트센터/입력/)에 같은 이름(시세.csv, 닉스.csv, 국내수급.csv …)으로 받는다. 보조 자료(가격2년·지수2년·재무·ETF보유·PER3년)는 fetch_*.py로 갱신.
+1. 수집 파일(드라이브 '콜로키움 수집데이터' 오늘 폴더)·10년치 데이터베이스(1_data/가격10년_*, EPS 칸 포함)·보조 저장본(00_퀀트입력)을 입력 폴더에 받는다(daily.pull_day·pull_db·pull_carry).
 2. `python engine.py <입력 폴더>` → 판정표. `python gen7.py` → 오늘의 추천 종목 HTML, `node topdf.js` → PDF.
