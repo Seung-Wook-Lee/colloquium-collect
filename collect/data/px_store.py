@@ -126,7 +126,7 @@ def per_weekly(d):
 
 
 def long(d, tickers=None, days=None):
-    """수집 블록(닉스·섹터·데스크·히트맵)용 긴 표: 날짜·티커·시가·고가·저가·종가·수정종가·거래량. 파일로 남기지 않음(사본 금지)."""
+    """수집 블록(닉스·섹터·데스크)용 긴 표: 날짜·티커·시가·고가·저가·종가·수정종가·거래량. 파일로 남기지 않음(사본 금지)."""
     parts = []
     for k in ('Open', 'High', 'Low', 'Close', 'Volume'):
         x = frame(d, k, days)

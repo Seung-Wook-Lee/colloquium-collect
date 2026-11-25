@@ -42,7 +42,7 @@ def test_no_price_copies():
 
 
 def test_removed_fetchers_stay_removed():
-    for f in ('collect/data/fetch_px.py', 'collect/data/fetch_long.py', 'collect/data/fetch_per3.py', 'collect/blocks/b09_kisstore.py', 'app/meeting/store_first.py'):
+    for f in ('collect/data/fetch_px.py', 'collect/data/fetch_long.py', 'collect/data/fetch_per3.py', 'collect/blocks/b09_kisstore.py', 'collect/blocks/b09_heatmap.py', 'collect/heatmap.py', 'app/meeting/store_first.py'):
         assert not (R / f).exists(), f
     d = (R / 'app' / 'meeting' / 'daily.py').read_text(encoding='utf-8')
     assert 'FETCH = [' not in d and 'def fetch(' not in d and 'TEAMQ_DIR' not in d
