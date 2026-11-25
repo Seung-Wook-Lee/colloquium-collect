@@ -48,10 +48,10 @@ def test_long_downloads_only_when_missing():
 
 
 def _mk_in(tmp, today, filing=None, extra_uni=()):
-    pd.DataFrame({'번호': ['G01', 'K01', *extra_uni], '구분': '개별주', '시장': '미국', 'yfinance 티커': ['NVDA', '005930.KS', *extra_uni]}).to_csv(tmp / '닉스.csv', index=False, encoding='utf-8-sig')
-    pd.DataFrame({'번호': ['G01', 'K01'], '매출': [1, 2]}).to_csv(tmp / '분기원자료.csv', index=False, encoding='utf-8-sig')
+    pd.DataFrame({'번호': ['U1-4', 'K1-9', *extra_uni], '구분': '개별주', '시장': '미국', 'yfinance 티커': ['NVDA', '005930.KS', *extra_uni]}).to_csv(tmp / '닉스.csv', index=False, encoding='utf-8-sig')
+    pd.DataFrame({'번호': ['U1-4', 'K1-9'], '매출': [1, 2]}).to_csv(tmp / '분기원자료.csv', index=False, encoding='utf-8-sig')
     if filing:
-        pd.DataFrame({'번호': ['K01'], '잠정 공시일': [filing]}).to_csv(tmp / 'DART.csv', index=False, encoding='utf-8-sig')
+        pd.DataFrame({'번호': ['K1-9'], '잠정 공시일': [filing]}).to_csv(tmp / 'DART.csv', index=False, encoding='utf-8-sig')
     mk = {'분기원자료.csv': today.isoformat()}
     (tmp / SF.MARK).write_text(json.dumps(mk), encoding='utf-8')
     return mk
@@ -62,7 +62,7 @@ def test_why_fetch(tmp_path):
     mk = _mk_in(tmp_path, today)
     assert SF.why_fetch('분기원자료.csv', tmp_path, mk, today) is None                     # 다 있음 → 저장본 그대로
     assert SF.why_fetch('연매출.csv', tmp_path, mk, today) == '저장본 없음'
-    mk = _mk_in(tmp_path, today, extra_uni=('G99',))
+    mk = _mk_in(tmp_path, today, extra_uni=('U9-9',))
     assert SF.why_fetch('분기원자료.csv', tmp_path, mk, today).startswith('새 종목')
     mk = _mk_in(tmp_path, today - dt.timedelta(days=3), filing='2026-11-24')
     assert SF.why_fetch('분기원자료.csv', tmp_path, mk, today).startswith('새 실적 공시')

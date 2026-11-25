@@ -46,7 +46,9 @@ def universe(ctx):
         names = sorted(f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))
         if names:
             open(p, 'wb').write(drive.get(f'콜로키움/포트폴리오/{names[-1]}'))
-    return pd.read_csv(p, encoding='utf-8-sig', dtype=str)
+    sys.path.insert(0, os.path.dirname(REPO) if os.path.basename(REPO) != 'collect' else REPO)
+    import layers   # 11/25 새 층 → 분석 묶음(collect/layers.py)
+    return layers.apply(pd.read_csv(p, encoding='utf-8-sig', dtype=str))
 
 
 def need(ctx, key, name, **kw):

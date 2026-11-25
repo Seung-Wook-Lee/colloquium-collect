@@ -67,9 +67,9 @@ SB = [f'B{i}' for i in range(11, 35)]
 SHOW_ONLY = ['B18', 'B20', 'B21', 'B25', 'B26']   # 11/25 의장 "빼..대신 결과는 매번 알려줘": 판정·조합에서 빼고 표시만
 SBJ = [b for b in SB if b not in SHOW_ONLY]
 REV = {'B28'}                                  # 높을수록 나쁜 블록(과열) → 1−값
-MEM = {'G09', 'K01', 'K11', 'G13', 'G56'}      # blocks.yaml 메모리반대: B15는 엔진이 이미 뒤집음, B23은 여기서
+MEM = {'U1-10', 'K1-9', 'K1-10', 'U1-11'}   # MU·삼성전자·SK하이닉스·SNDK      # blocks.yaml 메모리반대: B15는 엔진이 이미 뒤집음, B23은 여기서
 W = {'L1': (.7, .1, .2), 'L2': (.6, .2, .2), 'L3': (.5, .3, .2), 'L4': (.4, .4, .2), 'L5': (.3, .5, .2)}
-DROP = {'G179'}
+DROP = set()
 
 def num(x):
     if isinstance(x, str):
