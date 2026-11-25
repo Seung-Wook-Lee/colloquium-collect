@@ -202,7 +202,7 @@ def _save(b, p):
 
 
 def backtest(W, IN, use_drive, tday, B, S):
-    """11/19 의장: 블록 성적표·조합 시험(block33/backtest.py). 금요일(성적표.요일)만. 지난 계산(블록점수이력.csv)은 드라이브에 이어 써서 새 날짜만 계산."""
+    """11/19 의장: 블록 성적표·조합 시험(block33/backtest.py). 매 회의(11/26 의장: 지난주들은 금요일 그대로, 이번 주는 그날 가격으로 그날까지). 지난 계산(블록점수이력.csv)은 드라이브에 이어 써서 새 날짜만 계산."""
     cache = f'{W}/블록점수이력.csv'
     S.to_csv(f'{W}/out_판정표.csv', index=False, encoding='utf-8-sig')   # 오늘 후보는 엔진 '후보'만
     try:
@@ -366,7 +366,9 @@ def main():
     except Exception as e:   # noqa: BLE001
         log(f'[가격대] 실패: {e}')
     log(f"[엔진] {S['추천'].value_counts().to_dict()}")
-    BTO = backtest(W, IN, use_drive, tday, B, S) if '5-1' not in B.get('_꺼짐', []) and ((a.session == '국장전' and tday.weekday() == B.get('성적표', {}).get('요일', 4)) or os.environ.get('BACKTEST')) else {}   # 11/24: 손으로 backtest=yes면 미장전에도 돎
+    # 11/26 의장 "뭘 금요일만 하냐. 그날 가격 가지고 그 주를 평가하면 되잖아": 성적표(하위 블록 5-1)는 매 회의 돈다.
+    # 지난 주들은 블록점수이력.csv에 이어 두고, 이번 주는 오늘 가격으로 다시 매긴다(backtest.py).
+    BTO = backtest(W, IN, use_drive, tday, B, S) if '5-1' not in B.get('_꺼짐', []) else {}
     BTO.update(bottom(W, use_drive, B, S))
 
     # 4) 위원 원고

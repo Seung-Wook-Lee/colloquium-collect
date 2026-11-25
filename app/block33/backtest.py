@@ -310,6 +310,9 @@ def main(d, cfg=None, step='W-FRI', workers=None):
             if miss:
                 print(f'이력에 없는 종목 {len(miss)}개({", ".join(map(str, miss[:10]))}) → 처음부터 다시 계산')
                 old = pd.DataFrame()
+    if len(old):   # 11/26 의장 "뭘 금요일만 하냐. 그날 가격 가지고 그 주를 평가하면 되잖아" → 매일 돈다. 어제 넣은 '이번 주 중간' 줄은 지우고 오늘 가격으로 다시
+        keepd = {t.date() for t in dates}
+        old = old[pd.to_datetime(old['날짜']).dt.date.isin(keepd)]
     have = set(pd.to_datetime(old['날짜']).dt.date) if len(old) else set()
     todo = [t for t in dates if t.date() not in have or t == dates[-1]]
     with Pool(workers or os.cpu_count()) as pool:
