@@ -45,6 +45,8 @@ FETCH = [('fetch_px.py', '가격2년.csv'), (None, '지수2년.csv'), ('fetch_q.
 # 전날 것을 이어 쓰는 자료(드라이브 00_퀀트입력 → 없으면 저장소 meeting/seed/)
 # 11/25 의장 "구글 드라이브에 있는 것으로 계산한다, 거기 없을 때에만 받으라고" → 규칙은 store_first.py(테스트 tests/test_store_first.py)
 from store_first import SLOW, MARK, why_fetch, per_today   # noqa: E402
+sys.path.insert(0, DATA)
+import px_store as PS   # noqa: E402  가격 저장본(1_data/가격10년_*) 규칙
 CARRY_FILES = [MARK, '유니버스.csv', 'ETF보유.csv', 'ETF멤버.csv', '1달조합.csv', '블룸버그EPS.csv', '지수밸류.csv',
                '퀀트자료.csv', 'forward_log.csv', '아침보고.txt', '고가2년.csv', '저가2년.csv', '거래량2년.csv'] + [x for _, x in FETCH]
 LOG = []
@@ -227,6 +229,8 @@ def fetch(W, IN, tday=None):
                     if '한투' in ln or 'DART' in ln:   # 11/23: 한투가 안 될 때 DART로 채운 수도 기록에
                         log(f'[보조 자료] {out}: {ln[:300]}')
             done.append(out)
+            if out == '가격2년.csv':   # 고가·저가·거래량 2년도 함께 저장(11/25 빠뜨려 거래량 공식이 비었던 것 고침)
+                done += [f for f in ('고가2년.csv', '저가2년.csv', '거래량2년.csv') if os.path.exists(f'{IN}/{f}')]
             if out in SLOW:
                 mk[out] = tday.isoformat()
         except Exception as e:
@@ -441,8 +445,33 @@ def main():
         EV, CAL = pd.DataFrame(columns=['업종', '사건', '상태', '날짜', '출처']), pd.DataFrame()
 
     # 2) 보조 자료
+    # 11/25 의장 "매일매일 그날 자료만 받아오고, 구글 드라이브에 쌓고": 가격 저장본은 1_data/가격10년_* 하나.
+    #   회의 직전에 받아서(fetch_px.py가 새 날짜만 덧붙임) 같은 자리에 다시 올린다.
+    PX10 = [PS.name(k) for k in PS.F]
+    if use_drive and not a.skip_fetch:
+        import drive
+        got10 = []
+        for nm in PX10:
+            try:
+                b = drive.get(f'{D_DATA}/1_data/{nm}')
+                if b:
+                    open(f'{IN}/{nm}', 'wb').write(b); got10.append(nm)
+            except Exception as e:   # noqa: BLE001
+                log(f'[받기] 1_data/{nm} 실패: {e}')
+        log(f'[받기] 가격 저장본 1_data/가격10년 {len(got10)}/{len(PX10)}개')
     if not a.skip_fetch:
-        carry_up += fetch(W, IN, tday)
+        done = fetch(W, IN, tday)
+        carry_up += done
+        if use_drive and '가격2년.csv' in done:
+            import drive
+            up10 = []
+            for nm in PX10:
+                if os.path.exists(f'{IN}/{nm}'):
+                    try:
+                        drive.put(f'{D_DATA}/1_data/{nm}', open(f'{IN}/{nm}', 'rb').read()); up10.append(nm)
+                    except Exception as e:   # noqa: BLE001
+                        log(f'[올리기] 1_data/{nm} 실패: {e}')
+            log(f'[올리기] 가격 저장본 1_data/가격10년 {len(up10)}/{len(PX10)}개(새 날짜 덧붙임)')
 
     # 3) 엔진
     import engine as ENG
