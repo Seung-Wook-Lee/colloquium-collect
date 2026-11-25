@@ -61,7 +61,8 @@ def _add_new(D, yt):
                 if v is not None:
                     rows.append({'ticker': t, '항목': item, '분기말': q, '공시일': filed.isoformat(), '값': v})
     ctx_n = len({(r['ticker'], r['분기말']) for r in rows})
-    print(f'[1-3] DART 새 분기 {ctx_n}개(종목·분기) 덧붙임')
+    print(f'[1-3] DART 새 분기 {ctx_n}개(종목·분기) 덧붙임 | 회사번호 찾음 {sum(1 for c in yt if dart_q.corp(str(c).zfill(6)))}/{len(yt)} | '
+          f'에이피알 마지막 분기 {last.get("278470.KS")} | DART 오류 {dart_q.ERR[:3]}')
     return pd.concat([D, pd.DataFrame(rows)], ignore_index=True) if rows else D
 
 
