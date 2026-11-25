@@ -19,7 +19,7 @@ def _get(api, p):
     for n in range(3):
         try:
             time.sleep(0.25)
-            j = requests.get(f'{DART}/{api}', params={'crtfc_key': os.environ['DART_KEY'], **p}, timeout=20).json()
+            j = requests.get(f'{DART}/{api}', params={'crtfc_key': os.environ['DART_KEY'].strip(), **p}, timeout=20).json()
             if j.get('status') == '000':
                 return j.get('list') or []
             if j.get('status') == '013':
@@ -33,7 +33,7 @@ def _get(api, p):
 
 def corp(code):
     if not _CC:
-        r = requests.get(f'{DART}/corpCode.xml', params={'crtfc_key': os.environ['DART_KEY']}, timeout=60)
+        r = requests.get(f'{DART}/corpCode.xml', params={'crtfc_key': os.environ['DART_KEY'].strip()}, timeout=60)
         root = ET.fromstring(zipfile.ZipFile(io.BytesIO(r.content)).read('CORPCODE.xml'))
         for e in root.iter('list'):
             s = (e.findtext('stock_code') or '').strip()
