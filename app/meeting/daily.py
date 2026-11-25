@@ -207,24 +207,11 @@ def backtest(W, IN, use_drive, tday, B, S):
     cache = f'{IN}/{PS.name("블록점수")}'
     S.to_csv(f'{W}/out_판정표.csv', index=False, encoding='utf-8-sig')   # 오늘 후보는 엔진 '후보'만
     try:
-        if use_drive:
-            import drive
-            raw = drive.get(f'{D_DATA}/1_data/{PS.name("블록점수")}')
-            if raw:
-                open(cache, 'wb').write(raw)
-            else:   # 처음 한 번: 옛 자리(00_퀀트입력/블록점수이력.csv)에서 옮겨 옴
-                raw = drive.get(f'{CARRY}/블록점수이력.csv')
-                if raw:
-                    import gzip
-                    open(cache, 'wb').write(gzip.compress(raw))
-                    log('[성적표] 옛 블록점수이력.csv → 10년치 데이터베이스 칸으로 옮김')
         os.makedirs(f'{IN}/장기', exist_ok=True)   # 가격은 10년치 데이터베이스(IN/가격10년_*)를 그대로 씀
-        if use_drive:   # 11/23 의장 '24개 블록 과거 값 채워': 재무 칸 과거 값(공시일 기준)
-            import drive
-            for nm in ('SEC재무_분기.csv.gz', 'DART재무_분기.csv.gz', '장기/국내수급_일별.csv.gz', '장기/장기펀드13F_이력.csv', '장기/공매도_미국_이력.csv.gz', '장기/ETF좌수_이력.csv.gz'):
-                b = drive.get(f'{D_DATA}/1_data/{nm}')
-                if b: open(f'{IN}/장기/{os.path.basename(nm)}', 'wb').write(b)
-                log(f'[성적표] 1_data/{nm} ' + ('받음' if b else '없음'))
+        if use_drive:   # 11/26 의장 "10년치 저장본 밖에 따로 있는 과거 자료들을 저장본에 합치시오": 블록 점수·재무·수급·13F·공매도·ETF 좌수는 저장본 칸
+            import drive   # 칸이 아직 없으면 PS.fetch가 옛 파일을 칸으로 옮기고 옛 파일은 휴지통(11/26 의장 "옛 파일을 지우고")
+            for k in ('블록점수', 'SEC재무', 'DART재무', '국내수급', '13F', '공매도', 'ETF좌수'):
+                log(f'[성적표] 저장본 {PS.name(k)} ' + ('받음' if PS.fetch(drive, k, IN, log) else '없음'))
             b = drive.get(f'{D_DATA}/00_누적/00_시타델_주봉.csv')   # 11/24 B18 업종 ETF 60주선 과거 값
             if b: open(f'{IN}/장기/시타델_주봉.csv', 'wb').write(b)
             log('[성적표] 00_누적/00_시타델_주봉.csv ' + ('받음' if b else '없음'))
@@ -238,10 +225,6 @@ def backtest(W, IN, use_drive, tday, B, S):
         if use_drive and os.path.exists(cache):
             import drive
             drive.put(f'{D_DATA}/1_data/{PS.name("블록점수")}', open(cache, 'rb').read())
-            # 11/26 01:49 의장 "옛 파일을 지우고": 10년치 데이터베이스 칸에 올라간 뒤 옛 00_퀀트입력/블록점수이력.csv를 휴지통으로(있을 때만)
-            if drive.get(f'{D_DATA}/1_data/{PS.name("블록점수")}') and drive.get(f'{CARRY}/블록점수이력.csv'):
-                drive.trash(f'{CARRY}/블록점수이력.csv')
-                log('[성적표] 옛 00_퀀트입력/블록점수이력.csv 휴지통으로(10년치 데이터베이스 칸으로 옮김)')
         return out
     except Exception as e:
         log(f'[성적표] 실패 → 건너뜀: {str(e)[:160]}')

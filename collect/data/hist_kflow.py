@@ -1,6 +1,6 @@
 """한국 개별주 투자자별 일별 순매수 과거 기록 (11/24 의장 "외국인과 기관 수급은 한투에서 받을 수 없나?" → B19·B14·B22 과거 값).
 한투 종목별 투자자매매동향(일별) FHPTJ04160001을 기준일을 앞으로 옮겨 가며 2017-11까지 받는다(이미 받은 날 뒤만 새로 받음).
-드라이브 '콜로키움 수집데이터/1_data/장기/국내수급_일별.csv.gz' (날짜, 코드, 외국인·기관·개인 순매수 거래대금 백만원 + 종가).
+드라이브 10년치 저장본 칸 '콜로키움 수집데이터/1_data/가격10년_국내수급.csv.gz'(옛 1_data/장기/국내수급_일별) (날짜, 코드, 외국인·기관·개인 순매수 거래대금 백만원 + 종가).
 실행: python collect/data/hist_kflow.py [시작 YYYYMMDD]"""
 import datetime as dt
 import gzip
@@ -14,13 +14,17 @@ sys.path[:0] = [os.path.dirname(os.path.dirname(os.path.abspath(__file__))), os.
 import drive  # noqa: E402
 import kis  # noqa: E402
 
-PATH = '콜로키움 수집데이터/1_data/장기/국내수급_일별.csv.gz'
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import px_store as PS  # noqa: E402  11/26 의장: 과거 자료는 10년치 저장본 칸으로
+PATH = f'{PS.BASE}/1_data/{PS.name("국내수급")}'   # 옛 자리 1_data/장기/국내수급_일별.csv.gz
 START = sys.argv[1] if len(sys.argv) > 1 else '20171101'
 COLS = {'frgn_ntby_tr_pbmn': '외국인', 'orgn_ntby_tr_pbmn': '기관', 'prsn_ntby_tr_pbmn': '개인', 'stck_clpr': '종가'}
 names = sorted(f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))
 U = pd.read_csv(io.BytesIO(drive.get(f'콜로키움/포트폴리오/{names[-1]}')), dtype=str, encoding='utf-8-sig')
 codes = sorted(U[(U['시장'] == '한국') & (U['구분'] == '개별주')]['코드'].dropna().str.zfill(6).unique())
 old = None
+import tempfile  # noqa: E402
+PS.fetch(drive, '국내수급', tempfile.mkdtemp())   # 칸이 아직 없으면 옛 파일을 칸으로 옮김
 b = drive.get(PATH)
 if b:
     old = pd.read_csv(io.BytesIO(b), dtype={'코드': str}, compression='gzip')

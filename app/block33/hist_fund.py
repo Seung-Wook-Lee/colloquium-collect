@@ -1,6 +1,6 @@
 """블록점수이력용 과거 재무 칸 (11/23 의장: "24개 블록의 과거 값부터 채워. 안 되는 블록은 버려").
 backtest.py는 그 주까지의 가격만 다시 계산하고, 재무 칸(B15·B23·B25·B26)은 오늘 값으로 고정돼 비워 왔다.
-여기서는 우리 1_data의 SEC재무_분기·DART재무_분기(공시일 기준)와 10년치 데이터베이스 EPS 칸(공시일 기준, PER = 종가 ÷ EPS)로
+여기서는 10년치 저장본 SEC재무·DART재무 칸(공시일 기준)와 10년치 데이터베이스 EPS 칸(공시일 기준, PER = 종가 ÷ EPS)로
 '그 주에 공시돼 있던 분기'만 써서 엔진과 같은 칸을 다시 만든다.
   B23: op_yoy·rev_yoy·opm_yoy·opm2·earn_ok (분기 전년 같은 분기 대비, 영업이익 없으면 순이익)
   B25: fscore(피오트로스키 9항목, 4분기 합 기준)·fcf(영업현금흐름−설비투자, 4분기 합)·roe(순이익 4분기 합÷자본)
@@ -22,10 +22,10 @@ _EV = None
 
 
 def _load(d):
-    src = [p for p in (f'{d}/장기/SEC재무_분기.csv.gz', f'{d}/장기/DART재무_분기.csv.gz') if os.path.exists(p)]
+    src = [x for x in (PS.table(d, 'SEC재무'), PS.table(d, 'DART재무')) if len(x)]   # 저장본 칸(옛 1_data/SEC재무_분기·DART재무_분기)
     if not src:
         return None, None
-    D = pd.concat([pd.read_csv(p) for p in src], ignore_index=True)
+    D = pd.concat(src, ignore_index=True)
     D['분기말'] = pd.to_datetime(D['분기말'], errors='coerce'); D['공시일'] = pd.to_datetime(D['공시일'], errors='coerce')
     D['값'] = pd.to_numeric(D['값'], errors='coerce')
     D = D.dropna(subset=['분기말', '공시일', '값']).sort_values('공시일').drop_duplicates(['ticker', '항목', '분기말'], keep='first')

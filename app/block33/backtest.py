@@ -289,17 +289,17 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     dates = [C.index[C.index.searchsorted(x, side='right') - 1] for x in pd.date_range(start, C.index[-1], freq=step)]
     dates = sorted(set(dates) | {C.index[-1]})
     keep, mask = price_vars(d, L, B, [dates[-1], dates[-13], dates[-53]])
-    if os.path.exists(f'{d}/장기/SEC재무_분기.csv.gz') or os.path.exists(f'{d}/장기/DART재무_분기.csv.gz'):
+    if os.path.exists(f'{d}/{PS.name("SEC재무")}') or os.path.exists(f'{d}/{PS.name("DART재무")}'):
         mask = mask - HF.VARS; keep = keep | (HF.VARS & formula_vars(B['종목']))   # 재무 칸은 공시일 기준 과거 값으로 채움
     if os.path.exists(f'{d}/장기/시타델_주봉.csv'):
         mask = mask - HS.VARS; keep = keep | (HS.VARS & formula_vars(B['종목']))   # B18 60주선 이격은 주봉 창고로 그 주 값
-    if os.path.exists(f'{d}/장기/국내수급_일별.csv.gz'):
+    if os.path.exists(f'{d}/{PS.name("국내수급")}'):
         mask = mask - HK.VARS; keep = keep | (HK.VARS & formula_vars(B['종목']))   # 한국 수급은 일별 기록으로 그 주 값
-    if os.path.exists(f'{d}/장기/장기펀드13F_이력.csv'):
+    if os.path.exists(f'{d}/{PS.name("13F")}'):
         mask = mask - H13.VARS; keep = keep | (H13.VARS & formula_vars(B['종목']))   # B21 13F는 공시일 기준 그 주 값
-    if os.path.exists(f'{d}/장기/공매도_미국_이력.csv.gz'):
+    if os.path.exists(f'{d}/{PS.name("공매도")}'):
         mask = mask - HSH.VARS; keep = keep | (HSH.VARS & formula_vars(B['종목']))   # B22 공매도는 FINRA 이력으로 그 주 값
-    if os.path.exists(f'{d}/장기/ETF좌수_이력.csv.gz'):
+    if os.path.exists(f'{d}/{PS.name("ETF좌수")}'):
         mask = mask - HE.VARS; keep = keep | (HE.VARS & formula_vars(B['종목']))   # B20 ETF 자금은 좌수 이력으로 그 주 값(이력 없는 ETF는 비움)
     if os.path.exists(f'{d}/{PS.name("EPS")}'):
         mask = mask - EP.VARS; keep = keep | (EP.VARS & formula_vars(B['종목']))   # B24 실제 이익 공식은 데이터베이스 EPS 칸으로 그 주 값
