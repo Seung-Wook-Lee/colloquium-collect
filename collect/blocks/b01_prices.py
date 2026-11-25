@@ -30,6 +30,9 @@ try:
     B0 = PS.load(PXD)
     _msg = []
     B = PS.update(B0, u, NOW.replace(tzinfo=None), log=_msg.append)
+    B, _drop = PS.keep(B, u['yfinance 티커'].dropna())   # 11/25 의장: 유니버스에 없는 종목 기록은 지움
+    if _drop:
+        _msg.append(f'유니버스에 없는 종목 {len(_drop)}개 지움')
     if not IN_COLAB and B is not B0:
         for nm in PS.save(B, PXD):
             gdrive.put(f'{D_DATA}/1_data/{nm}', open(f'{PXD}/{nm}', 'rb').read())

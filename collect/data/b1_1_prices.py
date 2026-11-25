@@ -59,6 +59,7 @@ def run(ctx, c):
             if k in D.columns.get_level_values(0):
                 N[k] = D[k].dropna(how='all')
     B = PS.merge(B, N)
+    B, _ = PS.keep(B, t)   # 11/25 의장: 유니버스에 없는 종목 기록은 지움
     for k, d in B.items():
         write(ctx, PS.name(k), d, index=True)
     _long(ctx, yf)

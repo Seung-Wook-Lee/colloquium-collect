@@ -99,6 +99,16 @@ def merge(B, N, log=print):
     return {k: v for k, v in out.items() if v is not None}
 
 
+def keep(B, tickers):
+    """11/25 의장 "10년치 자료에서 유니버스에 없는 종목의 기록들은 모두 삭제": 유니버스 티커와 지수(^로 시작)만 남김.
+    돌려주는 것: (새 B, 지운 티커 목록). 지울 것이 없으면 같은 B."""
+    want = set(map(str, tickers))
+    drop = sorted({c for d in B.values() for c in d.columns if c not in want and not str(c).startswith('^')})
+    if not drop:
+        return B, []
+    return {k: d[[c for c in d.columns if c not in drop]] for k, d in B.items()}, drop
+
+
 def save(B, folder):
     for k, d in B.items():
         d.to_csv(f'{folder}/{name(k)}', encoding='utf-8-sig', compression='gzip')

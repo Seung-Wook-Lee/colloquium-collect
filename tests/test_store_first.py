@@ -124,3 +124,16 @@ def test_price_block_reads_store():
     """07시 수집 블록 1도 저장본(px_store)만: 5년치·1달치를 따로 받지 않는다."""
     src = (R / 'collect' / 'blocks' / 'b01_prices.py').read_text(encoding='utf-8')
     assert 'PS.update(' in src and 'yf.download' not in src and "'5y'" not in src
+
+
+def test_keep_drops_tickers_not_in_universe():
+    """11/25 의장: 10년치 자료에서 유니버스에 없는 종목 기록은 지움(지수 ^는 남김)."""
+    import pandas as pd
+    import px_store as PS
+    i = pd.date_range('2026-11-02', periods=3)
+    B = {k: pd.DataFrame({'AAPL': [1., 2, 3], 'OLD': [1., 1, 1], '^GSPC': [5., 5, 5]}, index=i) for k in PS.F}
+    B2, drop = PS.keep(B, ['AAPL'])
+    assert drop == ['OLD']
+    assert all(list(d.columns) == ['AAPL', '^GSPC'] for d in B2.values())
+    B3, drop3 = PS.keep(B2, ['AAPL'])
+    assert drop3 == [] and B3 is B2
