@@ -291,7 +291,7 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     keep, mask = price_vars(d, L, B, [dates[-1], dates[-13], dates[-53]])
     if os.path.exists(f'{d}/{PS.name("SEC재무")}') or os.path.exists(f'{d}/{PS.name("DART재무")}'):
         mask = mask - HF.VARS; keep = keep | (HF.VARS & formula_vars(B['종목']))   # 재무 칸은 공시일 기준 과거 값으로 채움
-    if os.path.exists(f'{d}/장기/시타델_주봉.csv'):
+    if os.path.exists(f'{d}/{PS.name("섹터주봉")}'):
         mask = mask - HS.VARS; keep = keep | (HS.VARS & formula_vars(B['종목']))   # B18 60주선 이격은 주봉 창고로 그 주 값
     if os.path.exists(f'{d}/{PS.name("국내수급")}'):
         mask = mask - HK.VARS; keep = keep | (HK.VARS & formula_vars(B['종목']))   # 한국 수급은 일별 기록으로 그 주 값

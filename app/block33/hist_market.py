@@ -3,8 +3,8 @@
   같은 코드를 그대로 씀: risk_signals.signals(CTM·MA 클러스터·코폭·QQQ:RSP 앵커드 VWAP·CPCE·109주선), flowpos.compute(CTA·변동성 목표·시스템 매수 전환),
   B01 HMM은 team_q b01_hmm과 같은 방식(분기마다 그 앞 주만으로 다시 맞춤, 앞으로만 거름).
   값이 없는 변수는 비워 둔다(대신 값 쓰지 않음). 어느 변수가 언제부터 있는지는 실행 끝에 찍는다.
-입력 폴더 d: 시장위험_장기.csv, 가격10년_지수장기.csv.gz, (있으면) CPCE.csv·신용스프레드_이력.csv·공포탐욕_이력.csv·지정학위험_이력.csv·가격10년_종가.csv.gz·유니버스.csv
-출력: d/시장블록이력.csv (날짜, 변수 값, 공식별 결과 1/0/빈칸, 블록별 부담·기회 신호 수, 시장부담·시장기회, S&P·나스닥100 4·12·26·52주 뒤 수익)
+입력 폴더 d: 가격10년_시장지표.csv.gz(저장본 칸: 시장위험 장기 일봉·CPCE·하이일드·공포탐욕·지정학위험), 가격10년_지수장기.csv.gz, (있으면) 가격10년_종가.csv.gz·유니버스.csv
+출력: d/가격10년_시장블록.csv.gz 저장본 칸 (날짜, 변수 값, 공식별 결과 1/0/빈칸, 블록별 부담·기회 신호 수, 시장부담·시장기회, S&P·나스닥100 4·12·26·52주 뒤 수익)
 실행: python hist_market.py <입력 폴더> <blocks.yaml> [시작 YYYY-MM-DD]"""
 import os
 import sys
@@ -16,6 +16,8 @@ import yaml
 H = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [H, os.path.join(os.path.dirname(os.path.dirname(H)), 'collect')]
 import risk_signals as RSG  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(H)), 'collect', 'data'))
+import px_store as PS  # noqa: E402  11/26 의장: 과거 자료는 10년치 저장본 칸으로
 import flowpos as FP  # noqa: E402
 
 
@@ -72,11 +74,8 @@ def hmm_bear(c, min_weeks=156, n_states=3, iters=100, seed=2611, volwin=21):
 def main(d, ypath, start='2000-01-07'):
     B = yaml.safe_load(open(ypath, encoding='utf-8'))
     F = [(bid, k, n, e, side) for bid, b in B['시장'].items() for k, (n, e, side) in enumerate(b['공식'])]
-    R = pd.read_csv(f'{d}/시장위험_장기.csv', index_col=0, parse_dates=True)
+    R = PS.frame(d, '시장지표')   # 저장본 칸 하나(CPCE·하이일드·공포탐욕·지정학위험 칸 포함)
     R = R[~R.index.duplicated()].sort_index()
-    cp = _csv(d, 'CPCE.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-    if cp is not None and 'CPCE' not in R:
-        R = R.join(cp[['CPCE']], how='outer')
     I = pd.read_csv(f'{d}/가격10년_지수장기.csv.gz'); I['날짜'] = pd.to_datetime(I['날짜'])
     IX = I.pivot_table(index='날짜', columns='지수', values='종가').sort_index()
     spx = R['SPX'].dropna() if 'SPX' in R else IX['^GSPC'].dropna()
@@ -95,17 +94,15 @@ def main(d, ypath, start='2000-01-07'):
     for k, c in (('VIX', 'VIX'), ('MOVE', 'MOVE'), ('STLFSI', 'STLFSI4'), ('US10Y', 'DGS10'), ('T10Y2Y', 'T10Y2Y')):
         V[k] = asof(R[c]).values if c in R else np.nan
     hy = R['BAMLH0A0HYM2'] if 'BAMLH0A0HYM2' in R else pd.Series(dtype=float)
-    cs = _csv(d, '신용스프레드_이력.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-    if cs is not None and '하이일드' in cs:
-        hy = hy.combine_first(cs['하이일드'])
+    if '하이일드' in R:
+        hy = hy.combine_first(R['하이일드'])
     V['HY'] = asof(hy).values if len(hy) else np.nan
     if 'SOFR' in R:
         iorb = R['IORB'].combine_first(R['IOER']) if 'IORB' in R and 'IOER' in R else R.get('IORB', R.get('IOER'))
         V['SOFR_IORB'] = asof(R['SOFR'] - iorb.reindex(R.index).ffill()).values if iorb is not None else np.nan
     else:
         V['SOFR_IORB'] = np.nan
-    fg = _csv(d, '공포탐욕_이력.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-    V['FG'] = asof(fg.iloc[:, 0]).values if fg is not None else np.nan
+    V['FG'] = asof(R['공포탐욕']).values if '공포탐욕' in R else np.nan
     # 수급포지셔닝(flowpos.compute) — RUT 없으면 비움
     if 'RUT' in R:
         P = FP.compute({'GSPC': spx, 'NDX': ndx, 'RUT': R['RUT'].dropna()})
@@ -118,9 +115,8 @@ def main(d, ypath, start='2000-01-07'):
     # 코스피 50일 이격
     V['KS_GAP50'] = asof(ks / ks.rolling(50).mean() * 100).values if len(ks) else np.nan
     # 지정학 위험: 7일 평균의 10년 백분위(b09_gpr과 같은 식)
-    gp = _csv(d, '지정학위험_이력.csv', encoding='utf-8-sig', index_col=0, parse_dates=True)
-    if gp is not None:
-        ma = gp['GPRD'].rolling(7, min_periods=5).mean().dropna()
+    if '지정학위험' in R:
+        ma = R['지정학위험'].dropna().rolling(7, min_periods=5).mean().dropna()
         pc = pd.Series([float((ma.loc[t - pd.Timedelta(days=3653):t] <= ma.loc[t]).mean() * 100) for t in ma.index], index=ma.index)
         V['GPR_PCT'] = asof(pc).values
     else:
@@ -175,9 +171,9 @@ def main(d, ypath, start='2000-01-07'):
         for h in (4, 12, 26, 52):
             out[f'{nm}_{h}주'] = (w.shift(-h) / w - 1) * 100
     out.index.name = '날짜'
-    out.to_csv(f'{d}/시장블록이력.csv', encoding='utf-8-sig')
+    out.to_csv(f'{d}/{PS.name("시장블록")}', encoding='utf-8-sig', compression='gzip')   # 저장본 칸(옛 시장블록이력.csv)
     have = {c: (str(out[c].first_valid_index().date()) if out[c].notna().any() else '없음') for c in V.columns}
-    print(f'시장블록이력 {len(out)}주 ({out.index.min().date()}~{out.index.max().date()}), 공식 {len(F)}개')
+    print(f'시장블록 칸 {len(out)}주 ({out.index.min().date()}~{out.index.max().date()}), 공식 {len(F)}개')
     print('변수 시작: ' + ' · '.join(f'{k} {v}' for k, v in have.items()))
     return out
 

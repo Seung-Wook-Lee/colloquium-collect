@@ -41,7 +41,13 @@ TABLES = {   # 칸 이름: 옛 자리(BASE 아래)
     '공매도': '1_data/장기/공매도_미국_이력.csv.gz',        # 미국 공매도 잔고(FINRA 결제일)
     'ETF좌수': '1_data/장기/ETF좌수_이력.csv.gz',          # ETF 상장좌수·NAV(일별)
     '지수장기': '1_data/지수_장기.csv.gz',                  # 지수 가능한 가장 긴 일봉(^GSPC·^NDX·^KS11)
+    '섹터주봉': '00_누적/00_시타델_주봉.csv',               # 섹터 ETF·상위 10종목 한투 주봉(미스 시타델, B18)
+    '추가종가': '1_data/추가자료_종가.csv',                 # 한투 추가 자료(우리 가격 칸에 없는 것, 저가는 '_LOW')
 }
+# 시장 지표 과거 자료 5개(옛 1_data/장기/)는 날짜 × 지표 칸 하나(가격10년_시장지표)로 합침. {옛 파일: 칸 이름 바꾸기}
+# 순서: 뒤의 것이 앞의 것보다 우선(시장위험_장기에 CPCE가 있으면 그 값을 씀 — hist_market 옛 규칙과 같음).
+MARKET = {'CPCE.csv': {}, '신용스프레드_이력.csv': {}, '공포탐욕_이력.csv': {'Fear Greed': '공포탐욕'},
+          '지정학위험_이력.csv': {'GPRD': '지정학위험'}, '시장위험_장기.csv': {}}
 
 
 def table(d, k, **kw):
@@ -77,6 +83,42 @@ def fetch(drive, k, folder, log=print):
     if b:
         open(f'{folder}/{name(k)}', 'wb').write(b)
     return bool(b)
+
+
+def market(drive, hist, folder, log=print):
+    """시장 지표 칸(1_data/가격10년_시장지표.csv.gz) 만들기: 이번에 새로 받은 것(hist 폴더) > 저장본 칸 > 옛 파일(1_data/장기/).
+    칸을 올리고 확인한 뒤 옛 파일 5개는 휴지통. 돌려주는 값: 날짜 × 지표 표."""
+    import gzip
+    import io
+    new = f'{BASE}/1_data/{name("시장지표")}'
+    b = drive.get(new)
+    M = pd.read_csv(io.BytesIO(gzip.decompress(b)), index_col=0, parse_dates=True, encoding='utf-8-sig') if b else pd.DataFrame()
+    for fn, ren in MARKET.items():
+        p = os.path.join(hist, fn) if hist else ''
+        fresh = bool(p) and os.path.exists(p)
+        if fresh:
+            x = pd.read_csv(p, index_col=0, parse_dates=True, encoding='utf-8-sig')
+        elif not b:   # 칸이 아직 없을 때만 옛 자리에서
+            ob = drive.get(f'{BASE}/1_data/장기/{fn}')
+            if not ob:
+                continue
+            x = pd.read_csv(io.BytesIO(ob), index_col=0, parse_dates=True, encoding='utf-8-sig')
+        else:
+            continue
+        x = x.rename(columns=ren); x.index = pd.to_datetime(x.index); x = x[~x.index.duplicated(keep='last')]
+        M = x.combine_first(M) if fresh or fn == '시장위험_장기.csv' else M.combine_first(x)
+        log(f'[시장지표] {fn} {"새로 받은 것" if fresh else "옛 파일"} {x.shape}')
+    if M.empty:
+        return M
+    M = M.sort_index(); M.index.name = '날짜'
+    gz = gzip.compress(M.to_csv(encoding='utf-8-sig').encode('utf-8-sig'))
+    open(f'{folder}/{name("시장지표")}', 'wb').write(gz)
+    drive.put(new, gz)
+    if drive.get(new):
+        n = sum(drive.trash(f'{BASE}/1_data/장기/{fn}') or 0 for fn in MARKET)
+        if n:
+            log(f'[저장본] 옛 1_data/장기 시장 지표 파일 {n}개 → {name("시장지표")} 옮기고 휴지통')
+    return M
 
 
 def load(folder):
