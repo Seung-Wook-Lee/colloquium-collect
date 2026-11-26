@@ -40,6 +40,7 @@ jobs:
           TZ: Asia/Seoul
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}   # 11/26 1-10 관세청 화장품 수출
           DART_KEY: ${{ secrets.DART_KEY }}   # 11/26 1-3: 팀Q 표준 재무에 없는 새 분기는 DART에서 바로
           TEAMQ_DRIVE_URL: ${{ secrets.TEAMQ_DRIVE_URL }}
           TEAMQ_DRIVE_TOKEN: ${{ secrets.TEAMQ_DRIVE_TOKEN }}

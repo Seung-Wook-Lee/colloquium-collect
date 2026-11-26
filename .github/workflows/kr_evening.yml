@@ -44,6 +44,11 @@ jobs:
       - name: 투자자별 일별 순매수(B19·B14·B22)
         if: always()
         run: python collect/data/hist_kflow.py
+      - name: 관세청 화장품 수출(새 달만, 한투 접속 없음 — 11/26 의장 허락)
+        if: always()
+        env:
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+        run: python collect/data/customs.py
       - name: 보조 자료(시장위험·사건 RSS·미장전 시세 — 회의는 받지 않고 이것만 읽음)
         if: always()
         run: pip install pyyaml && python collect/data/supplement.py 저녁
