@@ -270,7 +270,8 @@ def backtest(W, IN, use_drive, tday, B, S):
                 log(f'[성적표] 저장본 {PS.name(k)} ' + ('받음' if PS.fetch(drive, k, IN, log) else '없음'))
         r = subprocess.run([sys.executable, '-W', 'ignore', f'{QC}/backtest.py', IN], cwd=W, capture_output=True, text=True, timeout=5400, env={**os.environ, 'PYTHONPATH': PYPATH})
         if r.returncode != 0:
-            raise RuntimeError((r.stderr.strip().splitlines() or ['?'])[-1])
+            tb = [l.strip() for l in r.stderr.strip().splitlines() if l.strip().startswith('File ') or 'Error' in l][-4:]
+            raise RuntimeError(' | '.join(tb) or '?')   # 어느 파일 몇째 줄에서 났는지 남김(11/26 성적표 실패 원인 찾기)
         log('[성적표] ' + ' | '.join(l for l in r.stdout.strip().splitlines() if l.startswith(('날짜 ', 'N주', '이력에', '블록·칸')))[:400])
         out = {k: open(f'{W}/{k}', 'rb').read() for k in ('블록성적.csv', '조합시험.csv', '조합후보_오늘.csv') if os.path.exists(f'{W}/{k}')}
         if os.path.exists(f'{W}/블록성적.csv'):   # 뚜지(블록 정확도)가 읽음 — 매 회의 새로 계산하므로 따로 저장하지 않음
