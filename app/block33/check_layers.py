@@ -30,11 +30,13 @@ pd.set_option('display.width', 250); pd.set_option('display.max_rows', 400); pd.
 def pull(d):
     import drive
     D = '콜로키움 수집데이터'
-    for k in ('시장지표', '지수장기', '종가'):
-        b = drive.get(f'{D}/1_data/{PS.name(k)}')
-        if b:
-            open(f'{d}/{PS.name(k)}', 'wb').write(b)
-        print(PS.name(k), '받음' if b else '없음')
+    M = PS.market(drive, None, d)   # 시장 지표 칸(칸이 아직 없으면 옛 1_data/장기 파일로 만듦 — 11/26 의장 '저장본의 칸으로 합침')
+    print(PS.name('시장지표'), M.shape)
+    print(PS.name('지수장기'), '받음' if PS.fetch(drive, '지수장기', d) else '없음')
+    b = drive.get(f'{D}/1_data/{PS.name("종가")}')
+    if b:
+        open(f'{d}/{PS.name("종가")}', 'wb').write(b)
+    print(PS.name('종가'), '받음' if b else '없음')
     U = PS.universe(drive)
     if len(U):
         U.to_csv(f'{d}/유니버스.csv', index=False, encoding='utf-8-sig')
