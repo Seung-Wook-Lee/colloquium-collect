@@ -20,3 +20,12 @@ def test_region_in_runner_and_evening():
     R = pathlib.Path(__file__).resolve().parents[1]
     assert "'1-11': 'dart_q'" in (R / 'collect' / 'data' / 'run.py').read_text(encoding='utf-8')
     assert '--only 1-11' in (R / '.github' / 'workflows' / 'kr_evening.yml').read_text(encoding='utf-8')
+
+
+def test_universe_out_list():
+    """11/26 의장 "sol 조선 .. 유니버스에서 지워", "새 파일 만들지 말라니까": 편출은 layers.OUT 한 곳."""
+    import pandas as pd
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'collect'))
+    import layers
+    u = pd.DataFrame({'번호': ['K2-1', 'K2-2'], 'yfinance 티커': ['466920.KS', '463250.KS']})
+    assert list(layers.apply(u)['yfinance 티커']) == ['463250.KS']
