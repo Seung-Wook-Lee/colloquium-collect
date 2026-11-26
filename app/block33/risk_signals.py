@@ -151,6 +151,7 @@ def _ctm_out(D):
         if len(C) >= 80:
             M = pd.concat([C.rolling(n).mean() for n in (50, 55, 60, 65, 70, 75)], axis=1); bot, mid = M.min(axis=1), M.mean(axis=1)
             out['MA_CLUSTER_RED'] = float(C.iloc[-1] < bot.iloc[-1] and mid.iloc[-1] < mid.iloc[-5])
+            out['MA_CLUSTER_UP'] = float(C.iloc[-1] > M.max(axis=1).iloc[-1] and mid.iloc[-1] > mid.iloc[-5])   # 11/26 의장 "위·아래 둘 다"(L02, 표시)
             out['MA_CLUSTER_BOT'] = round(float(bot.iloc[-1]), 1); out['MA_CLUSTER_TOP'] = round(float(M.max(axis=1).iloc[-1]), 1)
             out['MA_CLUSTER_SLOPE'] = round(float(mid.iloc[-1] / mid.iloc[-5] - 1) * 100, 2)
     out['CASH_SWITCH'] = float(out.get('CTM_RED') == 1 or out.get('MA_CLUSTER_RED') == 1)

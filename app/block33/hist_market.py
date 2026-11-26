@@ -71,7 +71,60 @@ def hmm_bear(c, min_weeks=156, n_states=3, iters=100, seed=2611, volwin=21):
     return out
 
 
-def main(d, ypath, start='2000-01-07'):
+def hmm_vol(c, freq='D', min_obs=None, iters=100, seed=2611):
+    """L01 Hidden Markov Model 두 국면(11/26 의장 "논문 표준으로"): 평온한 국면 vs 변동성 국면.
+    논문 표준(Bulla 외 2011, Nystrup 외 2015·2016): 입력은 로그 수익률 하나, 가우시안 두 상태, 분산이 큰 상태 = 변동성 국면.
+    날마다(freq='D') 또는 주마다(freq='W', 금요일 종가) 따로 계산. 모형은 달(주별은 분기)이 바뀔 때 그 앞 자료만으로 다시 맞추고,
+    그날까지의 자료만 쓴 걸러진 확률(filtered probability)로 판정 — 앞으로 올 자료를 쓰지 않음.
+    판정: 변동성 국면일 확률 > 0.5 = 1(붉은색), 아니면 0(초록). 돌려주는 표: 확률(VOL_P)·판정(VOL)."""
+    try:
+        from hmmlearn.hmm import GaussianHMM
+        from scipy.special import logsumexp
+    except ImportError:
+        return pd.DataFrame(columns=['VOL_P', 'VOL'])
+    c = c.dropna()
+    c.index = pd.to_datetime(c.index)
+    ck = (freq, len(c), str(c.index[-1]) if len(c) else '', float(c.iloc[-1]) if len(c) else 0.0)
+    if ck in _VOL_CACHE:
+        return _VOL_CACHE[ck]
+    if freq == 'W':
+        c = c.resample('W-FRI').last().dropna()
+    x = np.log(c / c.shift(1)).dropna()
+    min_obs = min_obs or (156 if freq == 'W' else 750)
+    per = (lambda t: t.to_period('Q')) if freq == 'W' else (lambda t: t.to_period('M'))
+    P = pd.Series(np.nan, index=x.index)
+    fitted = key = alpha = None; v = x.to_numpy()[:, None]
+    for i in range(min_obs, len(x)):
+        k = per(x.index[i])
+        if fitted is None or k != key:
+            tr = v[:i]; mu, sd = tr.mean(), tr.std()
+            if sd == 0:
+                continue
+            m = GaussianHMM(2, covariance_type='diag', n_iter=iters, random_state=seed, min_covar=1e-6)
+            if fitted is not None:   # 앞 달 모형에서 이어서 맞춤(결과는 같고 빠름)
+                m.init_params = ''
+                m.startprob_, m.transmat_, m.means_ = fitted.startprob_, fitted.transmat_, fitted.means_
+                m.covars_ = fitted.covars_.reshape(2, -1)
+            try:
+                m.fit((tr - mu) / sd)
+            except (ValueError, np.linalg.LinAlgError):
+                continue
+            fitted, key = m, k
+            hi = int(np.argmax(m.covars_.reshape(2, -1)[:, 0]))
+            lt = np.log(np.maximum(m.transmat_, 1e-300))
+            alpha = np.log(np.maximum(m.predict_proba((tr - mu) / sd)[-1], 1e-300))   # 마지막 날의 평활 확률 = 그날까지의 걸러진 확률
+        em = fitted._compute_log_likelihood(((v[i] - mu) / sd)[None, :])[0]
+        alpha = em + logsumexp(alpha[:, None] + lt, axis=0); alpha -= logsumexp(alpha)
+        P.iloc[i] = float(np.exp(alpha[hi]))
+    _VOL_CACHE[ck] = pd.DataFrame({'VOL_P': P, 'VOL': (P > 0.5).astype(float).where(P.notna())})
+    return _VOL_CACHE[ck]
+
+
+_VOL_CACHE = {}
+
+
+def main(d, ypath, start='2000-01-07', dates=None, save=True):
+    """dates를 주면(예: 영업일 목록) 그 날짜들로 계산하고 저장하지 않고 돌려줌(검증 코드 check_layers.py)."""
     B = yaml.safe_load(open(ypath, encoding='utf-8'))
     F = [(bid, k, n, e, side) for bid, b in B['시장'].items() for k, (n, e, side) in enumerate(b['공식'])]
     R = PS.frame(d, '시장지표')   # 저장본 칸 하나(CPCE·하이일드·공포탐욕·지정학위험 칸 포함)
@@ -81,7 +134,7 @@ def main(d, ypath, start='2000-01-07'):
     spx = R['SPX'].dropna() if 'SPX' in R else IX['^GSPC'].dropna()
     ndx = R['NDX'].dropna() if 'NDX' in R else IX['^NDX'].dropna()
     ks = IX['^KS11'].dropna() if '^KS11' in IX else pd.Series(dtype=float)
-    fri = pd.date_range(start, spx.index.max(), freq='W-FRI')
+    fri = pd.date_range(start, spx.index.max(), freq='W-FRI') if dates is None else pd.DatetimeIndex(dates)
     fri = [t for t in fri if t >= spx.index.min()]
     def asof(s, lim=10):
         s = s.dropna()
@@ -122,8 +175,10 @@ def main(d, ypath, start='2000-01-07'):
     else:
         V['GPR_PCT'] = np.nan
     # B01 HMM
-    V['US_BEAR'] = asof(hmm_bear(spx), 7).values
-    V['KR_BEAR'] = asof(hmm_bear(ks), 7).values if len(ks) else np.nan
+    # L01 Hidden Markov Model 두 국면(11/26 의장): 매일 판정은 그 금요일 값, 매주 판정은 주봉으로
+    for mk, s in (('US', spx), ('KR', ks)):
+        for fq in ('D', 'W'):
+            V[f'{mk}_VOL_{fq}'] = asof(hmm_vol(s, fq)['VOL'], 7).values if len(s) else np.nan
     # 분산 깨짐·순환 국면(가격10년 + 유니버스 층)
     px = _csv(d, '가격10년_종가.csv.gz', index_col=0, parse_dates=True)
     U = _csv(d, '유니버스.csv', encoding='utf-8-sig')
@@ -146,7 +201,7 @@ def main(d, ypath, start='2000-01-07'):
                 q = Rt.loc[:t]
                 V.at[t, 'ROT_DEF'] = int(q.iloc[-1] / q.tail(50).mean() < 1 and q.iloc[-1] / q.iloc[-21] < 1)
     # risk_signals.signals: 그 주까지의 표로 매주 다시 계산(엔진과 같은 코드)
-    keep = ('CTM_RED', 'CTM_GREEN', 'MA_CLUSTER_RED', 'COP_REV', 'COP_UP0', 'QQRSP_AVWAP', 'CPCE_UP20', 'SPX_W109_SUP', 'SPX_W109_UPX')
+    keep = ('CTM_RED', 'CTM_GREEN', 'MA_CLUSTER_RED', 'MA_CLUSTER_UP', 'COP_REV', 'COP_UP0', 'QQRSP_AVWAP', 'CPCE_UP20', 'SPX_W109_SUP', 'SPX_W109_UPX')
     D = R.loc['1985':]
     rows = []
     for t in V.index:
@@ -166,11 +221,13 @@ def main(d, ypath, start='2000-01-07'):
                 out[f'{bid}_{side}'] = out[cols].sum(axis=1, min_count=1)
     out['시장부담'] = out[[c for c in out if c.endswith('_부담')]].sum(axis=1, min_count=1)
     out['시장기회'] = out[[c for c in out if c.endswith('_기회')]].sum(axis=1, min_count=1)
-    for nm, s in (('SPX', spx), ('NDX', ndx)):
+    for nm, s in (('SPX', spx), ('NDX', ndx), ('KS11', ks)):
         w = s.reindex(V.index, method='ffill')
         for h in (4, 12, 26, 52):
             out[f'{nm}_{h}주'] = (w.shift(-h) / w - 1) * 100
     out.index.name = '날짜'
+    if not save:
+        return out
     out.to_csv(f'{d}/{PS.name("시장블록")}', encoding='utf-8-sig', compression='gzip')   # 저장본 칸(옛 시장블록이력.csv)
     have = {c: (str(out[c].first_valid_index().date()) if out[c].notna().any() else '없음') for c in V.columns}
     print(f'시장블록 칸 {len(out)}주 ({out.index.min().date()}~{out.index.max().date()}), 공식 {len(F)}개')
