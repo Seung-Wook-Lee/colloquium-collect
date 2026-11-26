@@ -1,0 +1,30 @@
+name: 유니버스 관리(넣기·빼기)
+
+# 11/26 의장 "유니버스 관리하는 코드 만들어. 그걸 돌리면 자동으로 CSV에서 지워지도록 하고, 추가할 때는 추가되도록 하고."
+# 목록 = collect/layers.py OUT·ADD. 목록을 바꿔 main에 머지하면 자동 실행(수동 실행도 됨). 한투 접속 없음.
+on:
+  workflow_dispatch:
+    inputs:
+      dry: {description: '1이면 바뀔 것만 보여 줌', required: false, default: ''}
+  push:
+    branches: [main]
+    paths: ['collect/layers.py']
+
+concurrency: collect
+
+jobs:
+  universe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt pyyaml
+      - name: 유니버스 CSV·10년치 데이터베이스 반영
+        env:
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+        run: python collect/universe_manage.py ${{ github.event.inputs.dry == '1' && '--dry' || '' }}
