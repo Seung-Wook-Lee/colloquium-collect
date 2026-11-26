@@ -287,7 +287,7 @@ def backtest(W, IN, use_drive, tday, B, S):
                 drive.put(f'{D_DATA}/1_data/{PS.name("조합시험")}', open(wc, 'rb').read())
         return out
     except Exception as e:
-        log(f'[성적표] 실패 → 건너뜀: {str(e)[:160]}')
+        log(f'[성적표] 실패 → 건너뜀: {str(e)[:600]}')
         return {}
 
 
