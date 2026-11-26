@@ -51,3 +51,16 @@ def test_universe_one_place():
         if "ls('콜로키움/포트폴리오')" in t or "/포트폴리오')" in t and '콜로키움100_유니버스_' in t and 'ls(' in t:
             bad.append(str(p.relative_to(R)))
     assert not bad, bad
+
+
+def test_meeting_drops_out_rows(tmp_path):
+    """11/26 의장 "아직도 조선이 나오잖아": 회의가 받은 표에서 편출 종목 줄(티커·코드·이름)을 지움."""
+    import pandas as pd
+    R = pathlib.Path(__file__).resolve().parents[1]
+    sys.path[:0] = [str(R / "app" / "meeting"), str(R / "collect")]
+    import daily
+    pd.DataFrame({'ETF': ['SOL 조선TOP3플러스', 'TIGER 200'], 'v': [1, 2]}).to_csv(tmp_path / 'ETF자금.csv', index=False, encoding='utf-8-sig')
+    pd.DataFrame({'yfinance 티커': ['466920.KS', '005930.KS']}).to_csv(tmp_path / '닉스.csv', index=False, encoding='utf-8-sig')
+    daily.drop_out_rows(str(tmp_path))
+    assert list(pd.read_csv(tmp_path / 'ETF자금.csv', encoding='utf-8-sig')['ETF']) == ['TIGER 200']
+    assert list(pd.read_csv(tmp_path / '닉스.csv', encoding='utf-8-sig')['yfinance 티커']) == ['005930.KS']

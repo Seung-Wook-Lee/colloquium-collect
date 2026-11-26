@@ -206,6 +206,30 @@ def pull_univ(IN):
         log(f'[받기] 유니버스 드라이브 실패: {e}')
 
 
+def drop_out_rows(IN):
+    """11/26 의장 "아직도 조선이 나오잖아": 편출(layers.OUT) 종목은 아침 수집 파일(닉스·ETF자금 등)에 남아 있어도 원고에 안 나오게
+    받은 표 전부에서 그 줄을 지움(티커·코드·이름 칸)."""
+    import glob
+    import layers
+    tick = set(layers.OUT); code = {t.split('.')[0] for t in tick}; names = set(getattr(layers, 'OUT_NAME', {}).values())
+    n = 0
+    for p in glob.glob(f'{IN}/*.csv'):
+        try:
+            T = pd.read_csv(p, encoding='utf-8-sig', dtype=str, low_memory=False)
+        except Exception:   # noqa: BLE001
+            continue
+        m = pd.Series(False, index=T.index)
+        for c in ('yfinance 티커', 'ticker', '티커'):
+            if c in T: m |= T[c].isin(tick)
+        for c in ('코드', '종목코드'):
+            if c in T: m |= T[c].str.zfill(6).isin(code)
+        for c in ('정식 종목명', '종목', '종목명', 'ETF', '이름'):
+            if c in T: m |= T[c].isin(names)
+        if m.any():
+            T[~m].to_csv(p, index=False, encoding='utf-8-sig'); n += int(m.sum())
+    log(f'[편출] 받은 표에서 {sorted(names) or sorted(tick)} {n}줄 지움')
+
+
 def pull_db(IN):
     """10년치 데이터베이스(1_data/가격10년_시가·고가·저가·종가·거래량) → IN. 블록33·위원 원고는 PS.frame으로 여기서만 가격을 읽는다."""
     import drive
@@ -341,6 +365,7 @@ def main():
             sys.exit(f'{today} 07시 파일이 드라이브에 없습니다.')
         pull_univ(IN)
         pull_db(IN)
+        drop_out_rows(IN)
     pull_carry(IN, use_drive)
     if use_drive:   # 11/23 의장 "PER 찾아봐" → 우리 수집(b09_valuation)이 매주 토요일 S&P500 구성종목 503개 선행 EPS를 합산한 00_지수선행PE.csv를 먼저 쓴다
         try:
