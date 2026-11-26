@@ -27,9 +27,17 @@ MA19 = [(425, '#c0392b'), (235, '#8e1b3a'), (410, '#1e6b2e'), (225, '#7d7d7d'), 
 THICK = {230: 1.6, 410: 1.4, 425: 1.4}
 
 
+def _real(r, s):
+    """주봉·월봉의 마지막 칸 이름을 실제 마지막 거래일로(11/26 의장 "27일이 오지 않았는데 27일 기준?").
+    W-FRI·ME로 묶으면 진행 중인 주(월)가 아직 오지 않은 금요일(말일) 날짜로 찍힘."""
+    if len(r) and len(s) and r.index[-1] > s.index[-1]:
+        r = r.rename(index={r.index[-1]: s.index[-1]})
+    return r
+
+
 def _wk(s, how='last'):
     s = s.dropna()
-    return getattr(s.resample('W-FRI'), how)().dropna()
+    return _real(getattr(s.resample('W-FRI'), how)().dropna(), s)
 
 
 def _raw(D, k):   # StockCharts 비율은 배당 고친 값(IWF:IWD 0.41·일목 값이 원본과 같음 확인) → 고친 값 그대로
@@ -241,7 +249,7 @@ def fig7(D, out):
 
 def fig8(D, out):
     R = (_raw(D, 'IWF') / _raw(D, 'IWD')).dropna()
-    C, H, L = R.resample('ME').last(), R.resample('ME').max(), R.resample('ME').min()
+    C, H, L = (_real(getattr(R.resample('ME'), f)(), R.dropna()) for f in ('last', 'max', 'min'))
     a, e = '2014-01-01', '2029-06-30'
     fig, ax = plt.subplots(figsize=(11, 5.4)); ten, kij, A2, B2 = _cloud(ax, C, H, L, a, e, 'ME')
     z = slice(a, None); up = C >= C.shift(1)
