@@ -372,6 +372,13 @@ def update(B, U, now_kst, log=print):
         D = yf.download(us, start=str(s_us), auto_adjust=True, progress=False, threads=True)
     if NEW:
         D2 = yf.download(NEW, period='10y', auto_adjust=True, progress=False, threads=True)
+        try:   # 11/26 의장: 새로 상장해 아직 자료가 없으면 비워 두고 넘어감 — 저장본에 없으니 내일 수집이 다시 받음(missing)
+            got = D2['Close'].dropna(how='all', axis=1).columns if 'Close' in D2 else []
+            miss = [x for x in NEW if x not in got and mk.get(x) != '한국']
+            if miss:
+                log(f'가격: 새 종목 {miss} 아직 못 받음 → 비워 두고 내일 다시 받음')
+        except Exception:   # noqa: BLE001
+            pass
         D = D2 if D is None else pd.concat([D, D2], axis=1, sort=True)
     kr = [x for m, tt, _ in frames if m == '한국' for x in tt if x not in IDX] + [x for x in NEW if mk[x] == '한국' and x not in IDX]
     kri = [x for m, tt, _ in frames if m == '한국' for x in tt if x in IDX]   # 한국 지수는 한투 일봉이 아니라 야후
