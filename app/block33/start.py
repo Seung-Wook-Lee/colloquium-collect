@@ -53,9 +53,9 @@ if _IN:
                                      (f"MA 클러스터 빨간불(S&P 주봉 < 50~75주선 맨 아래 {_m.get('MA_CLUSTER_BOT')}, 기울기 {_m.get('MA_CLUSTER_SLOPE')}%)" if _m.get('MA_CLUSTER_RED') == 1 else '')) if x)
         msg = f"🔴 {why} → 모든 분석 멈춤, 결론 = 현금 전환"
         print(msg); pd.DataFrame([dict(결론='현금 전환', 이유=msg, 시각=PDATE)]).to_csv(f'{OD}/{TAG}_결과.csv', index=False, encoding='utf-8-sig')
-        L0 = pd.concat([L0, pd.DataFrame([dict(번호=NO, 시각=PDATE, 질문=Q, 대상=TGT, 구분=KIND, 판정표날짜=PDATE, 이긴조합='현금 전환(B01 스위치)')])])
+        L0 = pd.concat([L0, pd.DataFrame([dict(번호=NO, 시각=PDATE, 질문=Q, 대상=TGT, 구분=KIND, 판정표날짜=PDATE, 이긴조합='현금 전환(L02)')])])
         L0.to_csv(LOG, index=False, encoding='utf-8-sig'); sys.exit(0)
-    print(f"B01 스위치: CTM S&P {_m.get('CTM_SPX')} · QQQ {_m.get('CTM_QQQ')} | 빨간불(30 아래 4주) 계산 중·신호 안 나옴 | MA 클러스터 빨간불 {'신호 나옴' if _m.get('MA_CLUSTER_RED') == 1 else '계산 중·신호 안 나옴'} (맨 아래 {_m.get('MA_CLUSTER_BOT')}, 기울기 {_m.get('MA_CLUSTER_SLOPE')}%)"
+    print(f"L02: CTM S&P {_m.get('CTM_SPX')} · QQQ {_m.get('CTM_QQQ')} | 빨간불(30 아래 4주) 계산 중·신호 안 나옴 | MA 클러스터 빨간불 {'신호 나옴' if _m.get('MA_CLUSTER_RED') == 1 else '계산 중·신호 안 나옴'} (맨 아래 {_m.get('MA_CLUSTER_BOT')}, 기울기 {_m.get('MA_CLUSTER_SLOPE')}%)"
           f" | 초록불(반등 시작) {str(_m.get('CTM_GREEN_STAGE')) + '단계/3 신호 나옴' if _m.get('CTM_GREEN') == 1 else '계산 중·신호 안 나옴'}" + (f" (다음 주 CTM {_m.get('CTM_GREEN_AT')}보다 오르면 1단계)" if _m.get('CTM_GREEN_AT') else ''))
 else:   # 손 시험용(드라이브 없는 곳): 미리 만든 판정표. 답에는 쓰지 않는다.
     P = pd.read_csv(f'{H}/pan.csv'); PDATE = '미리 만든 판정표 ' + dt.datetime.fromtimestamp(os.path.getmtime(f'{H}/pan.csv')).strftime('%Y-%m-%d %H:%M')
@@ -281,7 +281,7 @@ try:
 except Exception:
     QN = {}
 QN['B28'] = '과열 아님(B28 거꾸로)'
-NMK = len([k for k in QN if k <= 'B10'])
+NMK = len([k for k in QN if str(k).startswith('L')])   # 11/26 의장: 시장 블록 L01~L20
 if len(SEL):
     rows = []
     for _, r in X[X['번호'].isin(sel)].iterrows():

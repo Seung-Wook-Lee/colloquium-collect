@@ -830,14 +830,15 @@ def market(d):
                 pass
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('가격 데이터베이스', e)
-    try:   # B01 하락 국면 확률(HMM, hist_market.hmm_bear): 10년치 데이터베이스 지수로 직접 계산(11/26 옛 외부 보고서 읽기 없앰)
+    try:   # L01 Hidden Markov Model 두 국면(11/26 의장 "논문 표준으로", hist_market.hmm_vol): 매일·매주 따로, 10년치 데이터베이스 지수로 직접 계산
         import hist_market as HMK
-        for k, c in (('^GSPC', 'US_BEAR'), ('^KS11', 'KR_BEAR')):
-            x = HMK.hmm_bear(PS.index(d)[k].dropna()).dropna()
-            if len(x):
-                m[c] = float(x.iloc[-1])
+        for k, mk in (('^GSPC', 'US'), ('^KS11', 'KR')):
+            for fq in ('D', 'W'):
+                x = HMK.hmm_vol(PS.index(d)[k].dropna(), fq).dropna()
+                if len(x):
+                    m[f'{mk}_VOL_{fq}'] = float(x['VOL'].iloc[-1]); m[f'{mk}_VOL_{fq}_P'] = round(float(x['VOL_P'].iloc[-1]), 3)
     except Exception as e:   # noqa: BLE001
-        _fail('하락 국면 확률', e)
+        _fail('Hidden Markov Model 두 국면', e)
     try:   # 코스피 50일 이격(의장 기준: 125 과열주의, 130 과열)
         ix = PS.index(d)['^KS11'].dropna()
         m['KS_GAP50'] = float(ix.iloc[-1] / ix.iloc[-50:].mean() * 100)

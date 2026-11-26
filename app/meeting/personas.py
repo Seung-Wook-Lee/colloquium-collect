@@ -547,7 +547,7 @@ def conclusion(c):
             except Exception:   # noqa: BLE001
                 rec = ''
             st = f"{st} 국면 속 {'급반등' if up else '급락'}: " + ', '.join(f"{it} {p(d_, 2)}" for it, d_ in mv) + rec
-        if isinstance(c.m, dict) and mk == '미국':   # CTM 신호(블록33 B01)가 나온 날은 근거에 단계도
+        if isinstance(c.m, dict) and mk == '미국':   # CTM 신호(시장 L02)가 나온 날은 근거에 단계도
             if c.m.get('CTM_RED') == 1:
                 num_.insert(0, 'CTM 빨간불(현금 전환) 신호 나옴')
             elif c.m.get('CTM_GREEN') == 1:
@@ -755,7 +755,7 @@ def miss_citadel(c):
         vx = num(g.get('VIX'))   # 11/26 의장 "그냥 vix는 숫자로 보여주는 게 좋지 않나? 이게 뭔 소리인지 어떻게 아나?" → 백분위 대신 숫자
         if vx is not None:
             rows.append(['VIX · VXN', f"{n(vx, 1)} · {n(g.get('VXN'), 1)}", f"{n(w.get('VIX'), 1)} · {n(w.get('VXN'), 1)}", '',
-                         'S&P500 · 나스닥100 옵션에 들어 있는 앞으로 30일 변동성 예상(%). 블록33 B02: VIX 33.5 이상 = 기회, 15.5 이하 = 부담'])
+                         'S&P500 · 나스닥100 옵션에 들어 있는 앞으로 30일 변동성 예상(%). 시장 L12: CBOE Volatility Index 33.5 이상'])
         if rows:   # 11/21 의장 "4줄 표로, 나열식은 왠만하면 쓰지마": 줄 나열 없이 표만
             G.append({'type': 'grid', 'title': '미국 포지셔닝(S&P500·나스닥100 기준)', 'columns': ['지표', '오늘', '1주 전', '구간', '읽는 법'], 'rows': rows, 'source': '수급포지셔닝.csv'})
     MM = _read(c.d, 'MMF')
@@ -862,7 +862,7 @@ def macro_table(c):
 
 
 def cash_gate(c):
-    """현금 집행 여건(엔진 시장 블록 B01~B10의 기회·부담 개수 + 방어 국면). 11/26 의장: 미스 리스크에서 뚜지로 옮김."""
+    """현금 집행 여건(엔진 시장 블록 L01~L20의 기회·부담 개수 + 방어 국면). 11/26 의장: 미스 리스크에서 뚜지로 옮김."""
     out = []
     b, o = c.burden_opp()   # 11/20 의장: 시장 블록은 칸 맨 아래 표로 자세히(macro_table)
     dfn = any(c.m.get(f'DEF_{mk}') for mk in ('한국', '미국'))
@@ -889,7 +889,7 @@ def cash_gate(c):
 
 
 def market_block_md(c):
-    """엔진 시장 블록 B01~B10 표(블록·질문·지표·오늘·공식). 11/26 의장: 미스 리스크에서 뚜지로 옮김. 스트림릿은 '시장 블록' 제목을 보고 신호 칩으로 그림."""
+    """엔진 시장 블록 L01~L20 표(블록·질문·지표·오늘·공식). 11/26 의장: 미스 리스크에서 뚜지로 옮김. 스트림릿은 '시장 블록' 제목을 보고 신호 칩으로 그림."""
     out = []
     M = c.M
     if len(M):
@@ -902,7 +902,7 @@ def market_block_md(c):
         X = X.sort_values(['_on', '_s'], ascending=[False, False]).drop_duplicates('_k')
         X = X.sort_values(['블록', '_on'], ascending=[True, False]).reset_index(drop=True)
         # 11/21 의장 "좋다 나쁘다 판단하지 말고, 블록이 같으면 한 번만, 질문 | 지표 이름 | 숫자 | 공식"
-        EXPR = {'VIX_VIX3M': 'VIX − VIX3M', 'SOFR_IORB': 'SOFR − IORB', 'T10Y2Y': '10Y − 2Y', 'KR_BEAR': '한국 하락 국면 확률', 'US_BEAR': '미국 하락 국면 확률', 'HY': '하이일드 스프레드'}   # 11/24 의장 'HY라고 쓰지 말라'
+        EXPR = {'VIX_VIX3M': 'VIX − VIX3M', 'SOFR_IORB': 'SOFR − IORB', 'T10Y2Y': '10Y − 2Y', 'KR_VOL_D': '한국 변동성 국면(매일)', 'KR_VOL_W': '한국 변동성 국면(매주)', 'US_VOL_D': '미국 변동성 국면(매일)', 'US_VOL_W': '미국 변동성 국면(매주)', 'KR_BEAR': '한국 하락 국면 확률', 'US_BEAR': '미국 하락 국면 확률', 'HY': '하이일드 스프레드'}   # 11/24 의장 'HY라고 쓰지 말라'
         rows = ['| 블록 | 질문 | 지표 | 오늘 | 공식 |', '|---|---|---|---|---|']
         prev = None
         for i, r in X.iterrows():
@@ -984,7 +984,7 @@ def _top5(c):
 
 
 def _switch(c):
-    """① 시장 스위치(블록33 B01). 11/26 의장: "초록불이 나와도 시원치 않을 마당에 빨간불이 안 켜졌다가 뭔 소리냐",
+    """① 시장 스위치(시장 L02). 11/26 의장: "초록불이 나와도 시원치 않을 마당에 빨간불이 안 켜졌다가 뭔 소리냐",
     "CTM이 뭔지 MA가 뭔지 적으라고, 어떤 원리로 만들어져 나오는 건지. 초록불이라고 쓰지 말고. 칸을 나눠서 초록색 원이 나오도록".
     → 맨 앞 = 지수 매수 신호(값 칸 = 할 일, 신호 칸 = 초록 원, 근거 칸 = CTM 뜻과 계산 원리). 현금 전환 경고는 신호가 나온 날에만(계산은 그대로)."""
     m = c.m if isinstance(c.m, dict) else {}
@@ -1073,7 +1073,7 @@ def _accuracy(c):
 
 def ttuji(c):
     """4 엔진 블록 센터 · 뚜지(센터장). 11/26 의장 "엔진 앞부분 시장에 관한 내용도 보고해야 하지 않나? 뚜지가 발표할만한 것을 정리해서 코딩":
-    엔진 계산 순서대로 ① 시장 스위치(B01) ② 시장 블록 B01~B10·현금 집행 여건(미스 리스크에서 옮김) ③ 층 상대강도
+    엔진 계산 순서대로 ① 시장 스위치(L02) ② 시장 블록 L01~L20·현금 집행 여건(미스 리스크에서 옮김) ③ 층 상대강도
     ④ 판정 개수·비중 한도 ⑤ 순위점수 상위 5개 기업 ⑥ 블록 정확도(IC) ⑦ 하위 블록. 돌려주는 값 = (줄, 표, 원고 아래 표 md)."""
     out, G = _switch(c), []
     a, g = cash_gate(c); out += a; G += g
