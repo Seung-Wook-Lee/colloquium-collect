@@ -214,8 +214,12 @@ def backtest(W, IN, use_drive, tday, B, S):
                 log(f'[성적표] 저장본 {PS.name(k)} ' + ('받음' if PS.fetch(drive, k, IN, log) else '없음'))
         r = subprocess.run([sys.executable, '-W', 'ignore', f'{QC}/backtest.py', IN], cwd=W, capture_output=True, text=True, timeout=5400, env={**os.environ, 'PYTHONPATH': PYPATH})
         if r.returncode != 0:
+            log('[성적표] 오류 자리:\n' + '\n'.join(r.stderr.strip().splitlines()[-12:]))   # 다음에 바로 고칠 수 있게 마지막 12줄
             raise RuntimeError((r.stderr.strip().splitlines() or ['?'])[-1])
         log('[성적표] ' + ' | '.join(r.stdout.strip().splitlines()[:2]))
+        sk = [x for x in r.stderr.splitlines() if '주 건너뜀' in x]
+        if sk:   # 깨진 주는 건너뛰고 나머지로 성적표를 만듦 — 몇 주가 왜 깨졌는지 남김
+            log(f'[성적표] 건너뛴 주 {len(sk)}개, 첫 오류:\n' + '\n'.join(r.stderr.split(sk[0], 1)[1].splitlines()[:6]))
         out = {k: open(f'{W}/{k}', 'rb').read() for k in ('블록성적.csv', '조합시험.csv', '조합후보_오늘.csv') if os.path.exists(f'{W}/{k}')}
         if os.path.exists(f'{W}/블록성적.csv'):   # 뚜지(블록 정확도)가 읽음 — 매 회의 새로 계산하므로 따로 저장하지 않음
             shutil.copy(f'{W}/블록성적.csv', f'{IN}/블록성적.csv')

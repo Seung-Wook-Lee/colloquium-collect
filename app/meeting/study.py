@@ -102,8 +102,10 @@ def seen_links():
 def gather(day):
     R = rules()
     S = R['공부']
-    import events
-    news, fail = events.fetch_rss(R)
+    import events   # 11/26 의장 '회의는 받지 않음': 뉴스는 수집(supplement.py)이 쌓은 00_사건로그.csv를 읽음
+    d = _drive()
+    b = d.get('콜로키움 수집데이터/00_퀀트입력/00_사건로그.csv') if d else None
+    news = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', dtype=str).fillna('') if b else pd.DataFrame(columns=events.LOG_COLS)
     cut = (dt.datetime.strptime(day, '%Y%m%d') - dt.timedelta(days=S['지난일'])).strftime('%Y-%m-%d')
     news = news[news['날짜'].astype(str) >= cut] if len(news) else news
     seen = seen_links()
