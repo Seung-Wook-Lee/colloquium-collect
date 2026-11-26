@@ -49,6 +49,11 @@ jobs:
         env:
           DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
         run: python collect/data/customs.py
+      - name: DART 지역별 매출(새 보고서만, 한투 접속 없음 — 11/26 의장 에이피알)
+        if: always()
+        env:
+          DART_KEY: ${{ secrets.DART_KEY }}
+        run: cd collect && python -m data.run --only 1-11
       - name: 보조 자료(시장위험·사건 RSS·미장전 시세 — 회의는 받지 않고 이것만 읽음)
         if: always()
         run: pip install pyyaml && python collect/data/supplement.py 저녁
