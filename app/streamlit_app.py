@@ -1090,6 +1090,15 @@ try:   # 11/22 의장 1순위: B01 CTM 빨간불이면 맨 위에 현금 전환
         st.success(f"🟢 지수 매수 신호(CTM 반등 시작) — S&P CTM {_g['값'].iloc[0]}")
 except Exception:   # noqa: BLE001
     pass
+try:   # 11/26 의장 "위원 공부 후보·주요 뉴스는 회의 전에 준비됐다고 보고하면 보고 판단": 그날 준비된 후보 수와 판정 화면
+    sys.path.append(str(ROOT / 'collect' / 'data'))   # 뒤에 붙여 다른 모듈을 가리지 않게
+    import px_store as _PS
+    _rd = _PS.ready(drive, day, lambda *_: None)
+    _c1, _c2 = st.columns(2)
+    _c1.page_link('pages/5_공부자료_승인.py', label=f"위원 공부 후보 {_rd['공부후보']}건 준비됨 → 승인하기", icon='📚')
+    _c2.page_link('pages/4_주가뉴스_고르기.py', label=f"주가 뉴스 후보 {_rd['주가뉴스후보']}건 준비됨 → 고르기", icon='🗞️')
+except Exception:   # noqa: BLE001
+    pass
 turning_board(day)   # 11/22 의장: 변곡점 판(그림 9개)을 맨 위에
 block_bottom()   # 11/21 의장: 블록 바닥 찾기를 맨 위에
 
