@@ -49,3 +49,17 @@ def test_no_old_paths_in_pages():
     for f in ('app/pages/4_주가뉴스_고르기.py', 'app/pages/5_공부자료_승인.py'):
         s = (R / f).read_text(encoding='utf-8')
         assert 'drive.put(' not in s and '_공부후보.csv' not in s and '주가뉴스후보.csv' not in s, f
+
+
+def test_ready_counts_today():
+    T = pd.DataFrame({'후보날짜': ['20261126', '20261126', '20261125'], '링크': ['a', 'b', 'c']})
+    N = pd.DataFrame({'날짜': ['2026-11-26', '2026-11-25'], '제목': ['x', 'y']})
+    import gzip
+    f = {f'{PS.BASE}/1_data/{PS.name("공부후보")}': gzip.compress(T.to_csv(index=False).encode('utf-8-sig')),
+         f'{PS.BASE}/1_data/{PS.name("주가뉴스후보")}': gzip.compress(N.to_csv(index=False).encode('utf-8-sig'))}
+    assert PS.ready(FakeDrive(f), '20261126', lambda *_: None) == {'공부후보': 2, '주가뉴스후보': 1}
+
+
+def test_study_gather_reads_log_not_fetch():
+    s = (R / 'app' / 'meeting' / 'study.py').read_text(encoding='utf-8')
+    assert 'fetch_rss' not in s.split('def gather')[1].split('\ndef ')[0].replace('events.fetch_rss를', '')

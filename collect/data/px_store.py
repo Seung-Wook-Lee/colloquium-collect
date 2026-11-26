@@ -528,3 +528,18 @@ def put_day(drive, k, col, day, df):
     new = df if old.empty else pd.concat([old[old[col].astype(str) != str(day)], df.astype(str)], ignore_index=True)
     put_rows(drive, k, new)
     return new
+
+
+def ready(drive, day, log=print):
+    """11/26 의장 "위원 공부 후보·주요 뉴스는 회의 전에 준비됐다고 보고하면 보고 판단": 그날 준비된 후보 수.
+    공부후보(후보날짜 칸)·주가뉴스후보(날짜 칸)에서 그날 줄만 센다. 돌려주는 값 = {'공부후보': n, '주가뉴스후보': n}."""
+    out = {}
+    for k, col in (('공부후보', '후보날짜'), ('주가뉴스후보', '날짜')):
+        try:
+            T = rows(drive, k, log)
+            v = T[col].astype(str).str.replace('-', '').str[:8] if col in T else pd.Series([], dtype=str)
+            out[k] = int((v == str(day)).sum())
+        except Exception as e:   # noqa: BLE001
+            log(f'[준비물] {k} 읽기 실패: {str(e)[:80]}')
+            out[k] = 0
+    return out

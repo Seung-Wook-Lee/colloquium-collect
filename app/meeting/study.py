@@ -113,10 +113,9 @@ def seen_links():
     acc = read_csv('승인누적.csv')
     s = set(acc.get('링크', []))
     d = _drive()
-    if d:
-        for f in d.ls(f'{DRIVE}/후보'):
-            if f['name'].endswith('_공부후보.csv'):
-                s |= set(read_csv(f"후보/{f['name']}").get('링크', []))
+    if d:   # 11/26: 후보는 이제 데이터베이스 칸 하나(공부후보, 후보날짜 칸) — 옛 '후보/' 폴더 대신 칸 전체에서 링크를 봄
+        import px_store as PS
+        s |= set(PS.rows(d, '공부후보').get('링크', []))
     if os.path.isdir(os.path.join(LOCAL, '후보')):
         for f in os.listdir(os.path.join(LOCAL, '후보')):
             if f.endswith('_공부후보.csv'):
@@ -127,8 +126,13 @@ def seen_links():
 def gather(day):
     R = rules()
     S = R['공부']
+    # 11/26 의장 "위원 공부 후보 모으기는 고치세요": 뉴스 제목은 아침 수집(supplement.py RSS)이 쌓은 00_사건로그.csv만 읽음.
+    # (회의가 뉴스를 받지 않게 바꾼 #365 뒤 지워진 events.fetch_rss를 부르다 멈추던 것). 이 단계는 아침 수집 끝(collect.yml)에서 돈다.
     import events
-    news, fail = events.fetch_rss(R)
+    d = _drive()
+    b = d.get('콜로키움 수집데이터/00_퀀트입력/00_사건로그.csv') if d else None
+    news = pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', dtype=str).fillna('') if b else pd.DataFrame(columns=events.LOG_COLS)
+    fail = [] if b else ['사건로그 없음']
     cut = (dt.datetime.strptime(day, '%Y%m%d') - dt.timedelta(days=S['지난일'])).strftime('%Y-%m-%d')
     news = news[news['날짜'].astype(str) >= cut] if len(news) else news
     seen = seen_links()

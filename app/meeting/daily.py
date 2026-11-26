@@ -546,6 +546,11 @@ def main():
             p = f'{W}/{name}' if name == '00_사건로그.csv' else f'{IN}/{name}'
             if os.path.exists(p):
                 jobs.append((f'{CARRY}/{name}', open(p, 'rb').read()))
+        try:   # 11/26 의장: 위원 공부 후보·주요(주가) 뉴스 후보가 회의 전에 준비됐는지 — 점검 파일 [준비물] 줄을 회의 준비 알림이 그대로 보고
+            rd = PS.ready(drive, today, log)
+            log(f"[준비물] 위원 공부 후보 {rd['공부후보']}건, 주가 뉴스 후보 {rd['주가뉴스후보']}건 ({today}, 스트림릿 '공부자료 승인'·'주가 뉴스 고르기')")
+        except Exception as e:   # noqa: BLE001
+            log(f'[준비물] 실패: {str(e)[:120]}')
         fail = [f'{dst}({e})' for dst, e in many_put(jobs) if e]
         log(f'[올리기] {len(jobs)}개 동시에')
         log(f'[올리기] 실패: {", ".join(fail) or "없음"}')

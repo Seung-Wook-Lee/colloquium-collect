@@ -66,3 +66,12 @@ jobs:
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
         run: python collect/data/fetch_est.py
+      - name: 위원 공부 후보 모으기(사건 RSS 로그 + arXiv → 데이터베이스 칸 공부후보, 회의 전에 준비, 11/26 의장)
+        if: always() && github.event.inputs.blocks == ''
+        continue-on-error: true
+        env:
+          TZ: Asia/Seoul
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: pip install pyyaml && python app/meeting/study.py gather
