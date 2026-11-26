@@ -213,12 +213,12 @@ def backtest(W, IN, use_drive, tday, B, S):
         os.makedirs(f'{IN}/장기', exist_ok=True)   # 가격은 10년치 데이터베이스(IN/가격10년_*)를 그대로 씀
         if use_drive:   # 11/26 의장 "10년치 저장본 밖에 따로 있는 과거 자료들을 저장본에 합치시오": 블록 점수·재무·수급·13F·공매도·ETF 좌수는 저장본 칸
             import drive   # 칸이 아직 없으면 PS.fetch가 옛 파일을 칸으로 옮기고 옛 파일은 휴지통(11/26 의장 "옛 파일을 지우고")
-            for k in ('블록점수', 'SEC재무', 'DART재무', '국내수급', '13F', '공매도', 'ETF좌수'):
+            for k in ('블록점수', '조합시험', 'SEC재무', 'DART재무', '국내수급', '13F', '공매도', 'ETF좌수'):
                 log(f'[성적표] 저장본 {PS.name(k)} ' + ('받음' if PS.fetch(drive, k, IN, log) else '없음'))
         r = subprocess.run([sys.executable, '-W', 'ignore', f'{QC}/backtest.py', IN], cwd=W, capture_output=True, text=True, timeout=5400, env={**os.environ, 'PYTHONPATH': PYPATH})
         if r.returncode != 0:
             raise RuntimeError((r.stderr.strip().splitlines() or ['?'])[-1])
-        log('[성적표] ' + ' | '.join(r.stdout.strip().splitlines()[:2]))
+        log('[성적표] ' + ' | '.join(l for l in r.stdout.strip().splitlines() if l.startswith(('날짜 ', 'N주', '이력에', '블록·칸')))[:400])
         out = {k: open(f'{W}/{k}', 'rb').read() for k in ('블록성적.csv', '조합시험.csv', '조합후보_오늘.csv') if os.path.exists(f'{W}/{k}')}
         if os.path.exists(f'{W}/블록성적.csv'):   # 뚜지(블록 정확도)가 읽음 — 매 회의 새로 계산하므로 따로 저장하지 않음
             shutil.copy(f'{W}/블록성적.csv', f'{IN}/블록성적.csv')
@@ -228,6 +228,9 @@ def backtest(W, IN, use_drive, tday, B, S):
         if use_drive and os.path.exists(cache):
             import drive
             drive.put(f'{D_DATA}/1_data/{PS.name("블록점수")}', open(cache, 'rb').read())
+            wc = f'{IN}/{PS.name("조합시험")}'
+            if os.path.exists(wc):
+                drive.put(f'{D_DATA}/1_data/{PS.name("조합시험")}', open(wc, 'rb').read())
         return out
     except Exception as e:
         log(f'[성적표] 실패 → 건너뜀: {str(e)[:160]}')
