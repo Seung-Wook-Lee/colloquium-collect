@@ -551,7 +551,7 @@ def conclusion(c):
             if c.m.get('CTM_RED') == 1:
                 num_.insert(0, 'CTM 빨간불(현금 전환) 신호 나옴')
             elif c.m.get('CTM_GREEN') == 1:
-                num_.insert(0, f"CTM 초록불(반등 시작) {c.m.get('CTM_GREEN_STAGE')}단계/3 신호 나옴")
+                num_.insert(0, f"지수 매수 신호(CTM 반등 시작) {c.m.get('CTM_GREEN_STAGE')}단계/3")
         if mk == '미국':
             for ix, nm_ in (('^NDX', '나스닥100'), ('^GSPC', 'S&P500')):
                 if V['bp'].get(ix) is not None:
@@ -984,24 +984,30 @@ def _top5(c):
 
 
 def _switch(c):
-    """① 시장 스위치(블록33 B01). 11/26 의장 "초록불이 나와도 시원치 않을 마당에 빨간불이 안 켜졌다가 뭔 소리냐… CTM과 MA 클러스터가 무슨 뜻인지는 써놓지도 않고":
-    맨 앞 = 매수 신호(CTM 초록불)와 뜻. 현금 전환 경고(CTM 빨간불·MA 클러스터 빨간불)는 신호가 나온 날에만 보여 줌(계산은 그대로)."""
+    """① 시장 스위치(블록33 B01). 11/26 의장: "초록불이 나와도 시원치 않을 마당에 빨간불이 안 켜졌다가 뭔 소리냐",
+    "CTM이 뭔지 MA가 뭔지 적으라고, 어떤 원리로 만들어져 나오는 건지. 초록불이라고 쓰지 말고. 칸을 나눠서 초록색 원이 나오도록".
+    → 맨 앞 = 지수 매수 신호(값 칸 = 할 일, 신호 칸 = 초록 원, 근거 칸 = CTM 뜻과 계산 원리). 현금 전환 경고는 신호가 나온 날에만(계산은 그대로)."""
     m = c.m if isinstance(c.m, dict) else {}
-    CTM = 'CTM(Chande Trend Meter) = S&P500 주봉 추세 점수 0~100(볼린저 밴드 위치·RSI 등을 합친 값, 높을수록 강한 상승 추세)'
+    CTM = ('CTM(Chande Trend Meter, 투샤 찬드 고안·StockCharts 지표) = S&P500 주봉 추세 점수 0~100. '
+           '계산 원리: ① 볼린저 밴드 위치(20·50·75·100주 평균 ± 2표준편차 띠 안에서 주봉 고가·저가·종가가 어디쯤인가, 0 = 띠 맨 아래, 1 = 맨 위)와 '
+           '② RSI 14주(오른 주 힘 ÷ 오르내린 힘 전체)를 8 : 3으로 섞어 100점으로 바꿈(StockCharts 가중은 비공개라 그림 값에 맞춘 재현). '
+           '높을수록 강한 상승 추세, 30 아래는 약한 추세')
     now = f"오늘 S&P {n(m.get('CTM_SPX'), 1)} · QQQ {n(m.get('CTM_QQQ'), 1)}"
     st = m.get('CTM_GREEN_STAGE')
+    rule = '26주 안에 CTM 70 이상(강한 상승) → 8주 안에 45 아래로 식음 → 다시 오르기 시작한 주부터 3주 동안 1/3씩'
     if m.get('CTM_GREEN') == 1:
-        out = [L('지수 매수 신호 · CTM 초록불', f"지수 적극 매수 — {st}단계/3: 지금 1/3, 이어서 2주 동안 1/3씩" if str(st) == '1' else f"지수 적극 매수 — {st}단계/3: 이번 주 1/3",
-                 f"{CTM}. 26주 안에 70 이상(강한 상승) → 8주 안에 45 아래(식음) → 다시 오르기 시작한 주 = 반등 시작. {now}", sig='green')]
+        out = [L('지수 매수 신호 (CTM 반등 시작)', f"지수 적극 매수 — {st}단계/3", chg=now, crit=rule, why=CTM, sig='green',
+                 val=f"지수 적극 매수 — {st}단계/3" + (' (지금 1/3, 이어서 2주 동안 1/3씩)' if str(st) == '1' else ''))]
     else:
-        out = [L('지수 매수 신호 · CTM 초록불', '아직 아님',
-                 f"{CTM}. 26주 안에 70 이상 → 8주 안에 45 아래 → 다시 오르기 시작한 주에 '지수 1/3 매수' 신호가 나옴. {now}")]
+        out = [L('지수 매수 신호 (CTM 반등 시작)', '아직 아님', chg=now, crit=rule, why=CTM, val='아직 아님')]
     if m.get('CTM_RED') == 1:
-        out.append(L('현금 전환 경고 · CTM 빨간불', '주식을 팔고 현금으로 — 다른 분석보다 먼저',
-                     f"{CTM}. 30 아래가 4주 이어지면 긴 하락 추세. {now}, 30 아래 {m.get('CTM_LOW_WEEKS', 0)}주", sig='red'))
+        out.append(L('현금 전환 경고 (CTM)', '주식을 팔고 현금으로', chg=f"{now}, 30 아래 {m.get('CTM_LOW_WEEKS', 0)}주",
+                     crit='S&P CTM 30 아래가 4주 이어짐 = 긴 하락 추세', why=CTM, sig='red', val='주식을 팔고 현금으로 — 다른 분석보다 먼저'))
     if m.get('MA_CLUSTER_RED') == 1:
-        out.append(L('현금 전환 경고 · MA 클러스터 빨간불', '주식을 팔고 현금으로 — 다른 분석보다 먼저',
-                     f"MA 클러스터 = S&P500 주봉 50~75주 이동평균선 묶음(긴 추세선). 주봉 종가가 묶음 맨 아래({n(m.get('MA_CLUSTER_BOT'), 0)}) 밑 + 묶음 가운데가 4주째 내려감 = 긴 추세가 꺾임(가운데 4주 기울기 {p(m.get('MA_CLUSTER_SLOPE'), 2)})", sig='red'))
+        out.append(L('현금 전환 경고 (MA 클러스터)', '주식을 팔고 현금으로', chg=f"묶음 맨 아래 {n(m.get('MA_CLUSTER_BOT'), 0)} · 가운데 4주 기울기 {p(m.get('MA_CLUSTER_SLOPE'), 2)}",
+                     crit='S&P 주봉 종가가 묶음 맨 아래 밑 + 묶음 가운데 선이 4주 전보다 낮음 = 긴 추세가 꺾임',
+                     why='MA 클러스터 = S&P500 주봉 이동평균선(MA, 최근 N주 종가 평균) 50·55·60·65·70·75주 6개를 한 묶음으로 본 것. 1년 넘는 긴 추세선이라 종가가 묶음 아래로 빠지고 묶음이 내려가면 긴 상승이 끝난 것으로 봄',
+                     sig='red', val='주식을 팔고 현금으로 — 다른 분석보다 먼저'))
     return out
 
 
@@ -1035,8 +1041,12 @@ def _limits(c):
     X = S[mu < 1]
     why = X['경보'].astype(str).str.split(' / ').explode() if len(X) and '경보' in X else pd.Series(dtype=str)
     why = why[why.str.strip().astype(bool) & (why != 'nan')].value_counts()
-    return [L('비중 한도', f"주문 승수 1 미만 {len(X)}종목 / 전체 {len(S)}종목",
-              ' · '.join(f'{k} {v}종목' for k, v in why.head(4).items()) or '걸린 경보 없음 — 대장 이탈·확정 대형 이벤트·쏠림·CTA 전환 모두 신호 안 나옴')]
+    # 11/26 의장 "비중한도는 뭐여 주문 승수가 뭐고" → 뜻을 근거 칸에
+    what = ('비중 한도 = 엔진이 위험 경보(대장 종목 이탈·확정된 큰 사건·한 층에 돈이 몰림·CTA 추세 전환)가 걸린 층의 매수 금액을 줄이는 규칙. '
+            '주문 승수 = 원래 사려던 금액에 곱하는 수(1 = 그대로, 0.5 = 절반만)')
+    hit = ' · '.join(f'{k} {v}종목' for k, v in why.head(4).items())
+    return [L('비중 한도(사는 금액 줄이기)', f"줄여서 살 종목 {len(X)}개 / 전체 {len(S)}종목" if len(X) else f"줄일 종목 없음 — 전체 {len(S)}종목 원래 금액대로",
+              (f'걸린 경보: {hit}. ' if hit else '걸린 경보 없음. ') + what)]
 
 
 def _accuracy(c):

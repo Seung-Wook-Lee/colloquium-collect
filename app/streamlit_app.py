@@ -1087,7 +1087,7 @@ try:   # 11/22 의장 1순위: B01 CTM 빨간불이면 맨 위에 현금 전환
     if _red:
         st.error('🔴 ' + ' + '.join(_red) + ' — 모든 분석을 멈추고 현금 전환')
     elif (_g := _on('CTM_GREEN')) is not None:
-        st.success(f"🟢 CTM 초록불(반등 시작) — S&P CTM {_g['값'].iloc[0]}")
+        st.success(f"🟢 지수 매수 신호(CTM 반등 시작) — S&P CTM {_g['값'].iloc[0]}")
 except Exception:   # noqa: BLE001
     pass
 turning_board(day)   # 11/22 의장: 변곡점 판(그림 9개)을 맨 위에
