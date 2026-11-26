@@ -63,19 +63,44 @@ def drive_ok():
 KR_EVENING = {'ETF겹침_반도체', 'ETF구성', 'ETF자금', 'ETF카드', '국내수급', '시타델'}   # 저녁 8시 한국 수집(한투)이 만드는 날짜 파일
 
 
+def many_get(paths, n=8):
+    """드라이브 파일 여러 개를 동시에 받음 → [(경로, bytes|None)]."""
+    import drive
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(p):
+        try:
+            return p, drive.get(p)
+        except Exception:   # noqa: BLE001
+            return p, None
+    with ThreadPoolExecutor(n) as ex:
+        return list(ex.map(one, paths))
+
+
+def many_put(jobs, n=8):
+    """[(경로, bytes)]를 동시에 올림 → [(경로, 오류|None)]."""
+    import drive
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(j):
+        try:
+            drive.put(*j); return j[0], None
+        except Exception as e:   # noqa: BLE001
+            return j[0], e
+    with ThreadPoolExecutor(n) as ex:
+        return list(ex.map(one, jobs))
+
+
 def pull_day(today, IN):
     import drive
     day = f'{D_DATA}/{today}'
     files = drive.ls(day)
+    names = [f['name'] for f in files if f['name'].startswith(f'{today}_') and f['name'].endswith(('.csv', '.txt'))]
     got = 0
-    for f in files:
-        name = f['name']
-        if not name.startswith(f'{today}_') or not name.endswith(('.csv', '.txt')):
-            continue
-        base, ext = os.path.splitext(name[len(today) + 1:])
-        data = drive.get(f'{day}/{name}')
+    for name, data in many_get([f'{day}/{n}' for n in names]):   # 11/26: 한 파일씩(2분 17초) → 동시에 8개
         if data is None:
             continue
+        base, ext = os.path.splitext(name.rsplit('/', 1)[1][len(today) + 1:])
         open(f'{IN}/{RENAME.get(base, base)}{ext}', 'wb').write(data)
         got += 1
     log(f'[받기] 아침 수집 파일 {got}개 ({day})')
@@ -185,7 +210,7 @@ def pull_db(IN):
     """10년치 데이터베이스(1_data/가격10년_시가·고가·저가·종가·거래량) → IN. 블록33·위원 원고는 PS.frame으로 여기서만 가격을 읽는다."""
     import drive
     want = [PS.name(k) for k in list(PS.F) + ['EPS']]   # 시가·고가·저가·종가·거래량 + EPS 칸(PER = 종가 ÷ EPS)
-    got = [nm for nm in want if _save(drive.get(f'{D_DATA}/1_data/{nm}'), f'{IN}/{nm}')]
+    got = [p.rsplit('/', 1)[1] for p, b in many_get([f'{D_DATA}/1_data/{nm}' for nm in want]) if _save(b, f'{IN}/{p.rsplit("/", 1)[1]}')]
     log(f'[받기] 10년치 데이터베이스 {len(got)}/{len(want)}개')
     if PS.fetch(drive, '이익추정', IN, log):   # 미국 이익 추정치(매일 아침 그날 값)
         log('[받기] 이익추정 칸')
@@ -483,32 +508,20 @@ def main():
     # 5) 드라이브
     if use_drive:
         import drive
-        fail = []
-        for k, v in outs.items():
-            try:
-                drive.put(f'{D_DATA}/{today}/{k}', v)
-            except Exception as e:
-                fail.append(f'{k}({e})')
+        # 11/26 의장 "논리적으로 10분 이상 걸리면 뻘짓": 한 파일씩 올리던 것(3분 48초)을 한꺼번에(동시에 8개) 올림
+        jobs = [(f'{D_DATA}/{today}/{k}', v) for k, v in outs.items()]
         if a.session == '국장전':
             for k, v in BLK.items():   # 블록 2·3 출력: 날짜 폴더와 '최신'(블록 폴더 바로 아래) 둘 다
                 b = v.to_csv(index=False).encode('utf-8-sig')
                 d0, nm = k.split('/')
-                for dst in (f'{D_DATA}/{d0}/{today}_{nm}', f'{D_DATA}/{d0}/{nm}'):
-                    try:
-                        drive.put(dst, b)
-                    except Exception as e:   # noqa: BLE001
-                        fail.append(f'{dst}({e})')
-        try:
-            drive.put(f'{D_DATA}/최신_' + ('' if a.session == '국장전' else '미장전_') + '회의원고.txt', txt.encode('utf-8'))
-        except Exception as e:
-            fail.append(f'최신_회의원고.txt({e})')
+                jobs += [(f'{D_DATA}/{d0}/{today}_{nm}', b), (f'{D_DATA}/{d0}/{nm}', b)]
+        jobs.append((f'{D_DATA}/최신_' + ('' if a.session == '국장전' else '미장전_') + '회의원고.txt', txt.encode('utf-8')))
         for name in sorted(set(carry_up)) + ['00_사건로그.csv']:
             p = f'{W}/{name}' if name == '00_사건로그.csv' else f'{IN}/{name}'
             if os.path.exists(p):
-                try:
-                    drive.put(f'{CARRY}/{name}', open(p, 'rb').read())
-                except Exception as e:
-                    fail.append(f'{name}({e})')
+                jobs.append((f'{CARRY}/{name}', open(p, 'rb').read()))
+        fail = [f'{dst}({e})' for dst, e in many_put(jobs) if e]
+        log(f'[올리기] {len(jobs)}개 동시에')
         log(f'[올리기] 실패: {", ".join(fail) or "없음"}')
         try:
             drive.put(f'{D_DATA}/{today}/{PFX}회의원고_점검.txt', '\n'.join(LOG).encode('utf-8'))
