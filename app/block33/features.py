@@ -117,6 +117,14 @@ def stocks(d):
             f = f.merge(q, on='번호', how='left')
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('국내수급', e)
+    # 11/26: 11/25부터 한국 수급은 저녁 8시 수집이 데이터베이스 칸(가격10년_국내수급)에만 덧붙이고 날짜 파일(국내수급.csv)을 안 만듦
+    # → B19(외국인·기관 수급)가 전부 비었던 것. 날짜 파일이 없거나 비었으면 칸에서 그날까지 30영업일로 같은 값을 만든다(hist_flow, 성적표와 같은 식).
+    try:
+        if ('f5' not in f or f['f5'].notna().sum() == 0) and _os.path.exists(f'{d}/{PS.name("국내수급")}'):
+            import hist_flow as _HK
+            f = _HK.apply(f, PS.stocks(d, 'Close', 10).index.max(), d)
+    except Exception as e:   # noqa: BLE001
+        _fail('국내수급(데이터베이스 칸)', e)
     V = _r(d, '밸류에이션')
     try:
         if len(V) and '시가총액(억원)' in V:
