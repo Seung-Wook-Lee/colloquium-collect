@@ -448,3 +448,76 @@ def put_universe(drive, u):
     buf = io.BytesIO()
     u.to_csv(buf, index=False, encoding='utf-8-sig', compression={'method': 'gzip'})
     return drive.put(f'{BASE}/1_data/{name(UNIV_KAN)}', buf.getvalue())
+
+
+# ---------------------------------------------------------------- 줄 단위 칸(공부자료·주가뉴스, 11/26 의장 "데이터베이스칸으로 합쳐")
+def _old_study_cand(drive):
+    fs = [f['name'] for f in drive.ls(f'{BASE}/위원공부/후보') if f['name'].endswith('_공부후보.csv')]
+    parts, olds = [], []
+    for n in fs:
+        b = drive.get(f'{BASE}/위원공부/후보/{n}')
+        if b:
+            parts.append(pd.read_csv(__import__('io').BytesIO(b), encoding='utf-8-sig', dtype=str).fillna('').assign(후보날짜=n[:8]))
+            olds.append(f'{BASE}/위원공부/후보/{n}')
+    return (pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()), olds
+
+
+def _old_one(path):
+    def f(drive):
+        b = drive.get(f'{BASE}/{path}')
+        return ((pd.read_csv(__import__('io').BytesIO(b), encoding='utf-8-sig', dtype=str).fillna(''), [f'{BASE}/{path}']) if b
+                else (pd.DataFrame(), []))
+    return f
+
+
+def _old_news_cand(drive):
+    parts, olds = [], []
+    today = dt.date.today()
+    for i in range(14):
+        d = (today - dt.timedelta(days=i)).strftime('%Y%m%d')
+        p = f'{BASE}/{d}/{d}_주가뉴스후보.csv'
+        b = drive.get(p)
+        if b:
+            parts.append(pd.read_csv(__import__('io').BytesIO(b), encoding='utf-8-sig', dtype=str).fillna('').assign(날짜=d))
+            olds.append(p)
+    return (pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()), olds
+
+
+ROWS = {   # 칸 이름: 옛 파일에서 옮겨 오는 함수(칸이 없을 때 한 번)
+    '공부후보': _old_study_cand,                                   # 위원공부/후보/YYYYMMDD_공부후보.csv → 후보날짜 칸
+    '공부승인': _old_one('위원공부/승인누적.csv'),
+    '주가뉴스후보': _old_news_cand,                                 # YYYYMMDD/YYYYMMDD_주가뉴스후보.csv → 날짜 칸
+    '주가뉴스판정': _old_one('뉴스실험실/00_주가뉴스_판정누적.csv'),
+}
+
+
+def rows(drive, k, log=print):
+    """줄 단위 칸 읽기(문자열). 칸이 없으면 옛 파일을 칸으로 옮기고, 올라간 것을 확인한 뒤 옛 파일은 휴지통."""
+    import gzip
+    import io
+    p = f'{BASE}/1_data/{name(k)}'
+    b = drive.get(p)
+    if b:
+        return pd.read_csv(io.BytesIO(gzip.decompress(b)), encoding='utf-8-sig', dtype=str).fillna('')
+    df, olds = ROWS[k](drive) if k in ROWS else (pd.DataFrame(), [])
+    if len(df):
+        put_rows(drive, k, df)
+        if drive.get(p):
+            for o in olds:
+                drive.trash(o)
+            log(f'[저장본] 옛 파일 {len(olds)}개 → {name(k)} 옮기고 옛 파일 휴지통')
+    return df
+
+
+def put_rows(drive, k, df):
+    import gzip
+    drive.put(f'{BASE}/1_data/{name(k)}', gzip.compress(df.to_csv(index=False).encode('utf-8-sig')))
+
+
+def put_day(drive, k, col, day, df):
+    """그날 줄만 바꿔 넣기(다른 날 줄은 그대로)."""
+    old = rows(drive, k)
+    df = df.assign(**{col: day})
+    new = df if old.empty else pd.concat([old[old[col].astype(str) != str(day)], df.astype(str)], ignore_index=True)
+    put_rows(drive, k, new)
+    return new

@@ -173,6 +173,16 @@ def stocks(d):
                                        'last_q', 'opm', 'est7', 'up7', 'dn7'] if c in q]], on='번호', how='left')
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('분기실적', e)
+    try:   # 11/26 의장 "하나로 통일해": 미국 추정치는 데이터베이스 칸 '이익추정'의 마지막 날 값(매일 아침 받음)이 분기실적보다 우선
+        E = PS.table(d, '이익추정', dtype=str)
+        if len(E):
+            E = E[E['날짜'] == E['날짜'].max()].rename(columns={'추정_7일': 'est7', '추정_30일': 'est30', '추정_90일': 'est90', '상향7': 'up7',
+                                                              '하향7': 'dn7', '상향30': 'up30', '하향30': 'dn30'})
+            ks = [c for c in ('est7', 'est30', 'est90', 'up7', 'dn7', 'up30', 'dn30') if c in E]
+            E[ks] = E[ks].apply(pd.to_numeric, errors='coerce')
+            f = f.drop(columns=[c for c in ks if c in f]).merge(E[['번호'] + ks], on='번호', how='left')
+    except Exception as e:   # noqa: BLE001
+        _fail('이익추정 칸', e)
     try:   # 11/26 의장 "최근 일주일 보고서만 참고해": 한국 종목은 한투 증권사 투자의견 칸(가격10년_투자의견)의 최근 7일 보고서
         r7 = report7(d).rename(columns={'코드': '_code'})
         f['_code'] = f['ticker'].astype(str).str.extract(r'^(\d{6})\.K[SQ]$')[0]

@@ -103,8 +103,13 @@ try:
     NT_X['등락률(%)'] = [nt_chg.get(k, '') if k else '' for k in NT_X['종목']]
     nt_lab = None
     try:
-        nt_b = gdrive.get(news_pick.LABEL_PATH) if not IN_COLAB else open(f'{BASE_DIR}/{news_pick.LABEL_PATH}', 'rb').read()
-        nt_lab = pd.read_csv(io.BytesIO(nt_b), encoding='utf-8-sig') if nt_b else None
+        import px_store as PS   # 11/26 의장 "데이터베이스칸으로 합쳐": 판정 = 1_data/가격10년_주가뉴스판정
+        nt_lab = PS.rows(gdrive, '주가뉴스판정', log)
+        nt_lab = None if nt_lab.empty else nt_lab
+        if nt_lab is not None:
+            for _c in ('긍정', '부정', '발생신호', '의장선택', '프로그램추천'):
+                if _c in nt_lab:
+                    nt_lab[_c] = pd.to_numeric(nt_lab[_c], errors='coerce').fillna(0)
     except Exception as e:
         log(f'[9 주가뉴스] 판정 누적 읽기 실패: {type(e).__name__} {e}')
     nt_model, nt_why = news_pick.fit(nt_lab)
@@ -127,7 +132,11 @@ try:
     NT_C['제목(한글)'] = ko_translate.translate(NT_C['제목'].tolist(), log=log)
     NT_C['요약(한글)'] = ko_translate.translate(NT_C['요약'].tolist(), log=log)
     nt_cols = ['순위', '구분', '시각(한국)', '판정', '긍정', '부정', '종목', '등락률(%)', '제목(한글)', '제목', '요약(한글)', '요약', '출처', '링크', '점수', '발생신호', '발생대상']
-    NT_C[nt_cols + ['프로그램추천']].to_csv(f'{DAY}/{TODAY}_주가뉴스후보.csv', index=False, encoding='utf-8-sig')
+    try:   # 후보 20건은 데이터베이스 칸(1_data/가격10년_주가뉴스후보)에 그날 줄만(새 파일 없음)
+        import px_store as PS
+        PS.put_day(gdrive, '주가뉴스후보', '날짜', TODAY, NT_C[nt_cols + ['프로그램추천']].astype(str))
+    except Exception as e:
+        log(f'[9 주가뉴스] 후보 칸 저장 실패: {type(e).__name__} {e}')
     NT_P = NT_C[NT_C['프로그램추천'] == 1][nt_cols]
     NT_P.to_csv(f'{DAY}/{TODAY}_주가뉴스.csv', index=False, encoding='utf-8-sig')
     log(f'[9 주가뉴스] 발생 신호 {sorted(nt_new) or "없음"}(누적 {nt_hist}일). {nt_why}. 대상 {len(NT_X)}건 → 후보 {len(NT_C)}건 → 선택 {len(NT_P)}건(긍정 {int((NT_P["판정"] == "긍정").sum())}, '

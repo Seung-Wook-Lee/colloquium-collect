@@ -60,3 +60,9 @@ jobs:
           DRIVE_URL: ${{ secrets.DRIVE_URL }}
           DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
         run: pip install pyyaml && python collect/data/supplement.py 아침
+      - name: 미국 이익 추정치(그날 값만 → 데이터베이스 칸 이익추정, 11/26 의장 "최근 일주일")
+        if: always() && github.event.inputs.blocks == ''
+        env:
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+        run: python collect/data/fetch_est.py
