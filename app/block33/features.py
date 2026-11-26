@@ -22,6 +22,21 @@ MISSING = {}   # 11/21 의장 '병렬식': 빠지거나 깨진 자료 {이름: �
 # 11/25 의장: 기준층(S0) 중 블록 판정에 넣는 지수 ETF(QQQM U0-2·U0-2, SPYM U0-1·U0-1). 층 이름 'S0판정' → 'S0' 예외(기준층 표시·매도 제외·성적표 제외)에 걸리지 않음
 S0_JUDGE = {'U0-1', 'U0-2'}   # SPYM·QQQM
 
+def report7(d, days=7):
+    """최근 7일 증권사 보고서: 같은 증권사 직전 보고서보다 목표가를 올림(rep7_up)·내림(rep7_dn), 보고서 수(rep7_n), 마지막 날(rep7_last)."""
+    T = PS.table(d, '투자의견', dtype={'코드': str})
+    if T.empty:
+        return pd.DataFrame(columns=['코드', 'rep7_up', 'rep7_dn', 'rep7_n', 'rep7_last'])
+    T['날짜'] = pd.to_datetime(T['날짜']); T = T.sort_values(['코드', '증권사', '날짜'])
+    T['prev'] = T.groupby(['코드', '증권사'])['목표가'].shift()
+    cut = T['날짜'].max() - pd.Timedelta(days=days)
+    R = T[T['날짜'] > cut]
+    g = R.groupby('코드')
+    return pd.DataFrame({'rep7_up': g.apply(lambda x: int((x['목표가'] > x['prev']).sum())),
+                         'rep7_dn': g.apply(lambda x: int((x['목표가'] < x['prev']).sum())),
+                         'rep7_n': g.size(), 'rep7_last': g['날짜'].max().dt.strftime('%m/%d')}).reset_index()
+
+
 def _fail(name, e):
     if name not in MISSING:
         MISSING[name] = f'{type(e).__name__}: {str(e)[:80]}'
@@ -152,11 +167,18 @@ def stocks(d):
         if len(Q):
             q = Q.rename(columns={'실적지표': 'kind', '이익_전년비': 'op_yoy', 'OPM_전년비': 'opm_yoy', 'OPM_2연속': 'opm2',
                                   '매출_전년비': 'rev_yoy', '추정_30일': 'est30', '추정_90일': 'est90', '상향30': 'up30',
-                                  '하향30': 'dn30', '최근분기': 'last_q', 'OPM': 'opm'})
+                                  '하향30': 'dn30', '최근분기': 'last_q', 'OPM': 'opm',
+                                  '추정_7일': 'est7', '상향7': 'up7', '하향7': 'dn7'})
             f = f.merge(q[[c for c in ['번호', 'kind', 'op_yoy', 'opm_yoy', 'opm2', 'rev_yoy', 'est30', 'est90', 'up30', 'dn30',
-                                       'last_q', 'opm'] if c in q]], on='번호', how='left')
+                                       'last_q', 'opm', 'est7', 'up7', 'dn7'] if c in q]], on='번호', how='left')
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('분기실적', e)
+    try:   # 11/26 의장 "최근 일주일 보고서만 참고해": 한국 종목은 한투 증권사 투자의견 칸(가격10년_투자의견)의 최근 7일 보고서
+        r7 = report7(d).rename(columns={'코드': '_code'})
+        f['_code'] = f['ticker'].astype(str).str.extract(r'^(\d{6})\.K[SQ]$')[0]
+        f = f.merge(r7, on='_code', how='left').drop(columns='_code')
+    except Exception as e:   # noqa: BLE001
+        _fail('투자의견 7일', e)
     # ETF 자체 자금 유출입(07시 ETF자금, 억원·백만달러)
     A = _r(d, 'ETF자금')
     try:

@@ -362,7 +362,12 @@ def run(d, cfg=None):
             if _ev('sec_flow5 < 0', row): why_dn.append('업종 ETF 자금 이탈')
             if _ev('rs20 < 0', row): why_dn.append('시장보다 약함')
             if _ev('peer20 < 0', row): why_dn.append('동료보다 약함')
-            if _ev('est30 < 0', row): why_dn.append('이익 추정치 하향')
+            # 11/26 의장 "11월 26일 전망을 10월 30일 거를 가지고 한다고?", "최근 일주일 보고서만 참고해": 7일 안 보고서만
+            if row.get('시장') == '한국':
+                if (row.get('rep7_dn') or 0) > (row.get('rep7_up') or 0):
+                    why_dn.append(f"이익 추정치 하향(최근 7일 목표가 내림 {int(row['rep7_dn'])}·올림 {int(row.get('rep7_up') or 0)}, 마지막 {row.get('rep7_last')})")
+            elif (row.get('dn7') or 0) > (row.get('up7') or 0):
+                why_dn.append(f"이익 추정치 하향(최근 7일 내림 {int(row['dn7'])}명·올림 {int(row.get('up7') or 0)}명)")
             if not why_dn: why_dn.append('시장 따라 하락(종목 고유 이유 없음)')
         out['20일(%)'] = None if pd.isna(row.get('ret20')) else round(row['ret20'], 1)
         out['5일(%)'] = None if pd.isna(row.get('ret5')) else round(row['ret5'], 1)

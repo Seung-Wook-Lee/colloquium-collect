@@ -292,6 +292,8 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     L = load_long(d)
     C = L['Close'][[c for c in L['Close'].columns if not str(c).startswith('^')]]
     start = C.index[0] + pd.Timedelta(days=int(BT.get('준비일', 400)))   # 252거래일 + 여유
+    # 11/26 의장 "그렇게 긴 기간은 의미가 없어. 최근 5년이면 충분해": 성적표는 최근 5년(+52주 뒤 수익을 잴 1년)만
+    start = max(start, C.index[-1] - pd.DateOffset(years=int(BT.get('기간년수', 5))))
     dates = [C.index[C.index.searchsorted(x, side='right') - 1] for x in pd.date_range(start, C.index[-1], freq=step)]
     dates = sorted(set(dates) | {C.index[-1]})
     keep, mask = price_vars(d, L, B, [dates[-1], dates[-13], dates[-53]])

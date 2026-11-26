@@ -30,8 +30,10 @@ for no,tk in t.itertuples(index=False):
         cur=row['current']
         r['추정_30일']=(cur/row['30daysAgo']-1)*100 if row.get('30daysAgo') else None
         r['추정_90일']=(cur/row['90daysAgo']-1)*100 if row.get('90daysAgo') else None
+        r['추정_7일']=(cur/row['7daysAgo']-1)*100 if row.get('7daysAgo') else None   # 11/26 의장 "최근 일주일 보고서만 참고해"
         rv=yf.Ticker(tk).eps_revisions; rr=rv.loc['+1y'] if '+1y' in rv.index else rv.iloc[-1]
         r['상향30']=rr.get('upLast30days'); r['하향30']=rr.get('downLast30days')
+        r['상향7']=rr.get('upLast7days'); r['하향7']=rr.get('downLast7Days', rr.get('downLast7days'))
     except Exception: pass
     rows.append(r)
 new=pd.DataFrame(rows)
