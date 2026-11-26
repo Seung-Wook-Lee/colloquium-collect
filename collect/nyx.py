@@ -69,7 +69,7 @@ def candle(o, h, l, c):
     """봉 한 개의 모양(2026-10-31 의장: 양봉·음봉을 보고, 음봉이라도 아랫꼬리가 길면 밑에서 강하게 밀어 올린 것).
     꼬리 길다 = 꼬리가 고저폭의 40% 이상이면서 몸통의 1.5배 이상(가정치)."""
     rng = h - l
-    if not rng or not np.isfinite(rng):
+    if not rng or not all(np.isfinite(x) for x in (o, h, l, c)):   # 11/26: 시가가 빈 날(NaN)이 성적표를 멈추던 것
         return '', np.nan, np.nan, np.nan
     body = abs(c - o)
     up, dn = h - max(o, c), min(o, c) - l
