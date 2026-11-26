@@ -129,8 +129,11 @@ def main(d, ypath, start='2000-01-07', dates=None, save=True):
     F = [(bid, k, n, e, side) for bid, b in B['시장'].items() for k, (n, e, side) in enumerate(b['공식'])]
     R = PS.frame(d, '시장지표')   # 저장본 칸 하나(CPCE·하이일드·공포탐욕·지정학위험 칸 포함)
     R = R[~R.index.duplicated()].sort_index()
-    I = pd.read_csv(f'{d}/가격10년_지수장기.csv.gz'); I['날짜'] = pd.to_datetime(I['날짜'])
-    IX = I.pivot_table(index='날짜', columns='지수', values='종가').sort_index()
+    if os.path.exists(f'{d}/가격10년_지수장기.csv.gz'):
+        I = pd.read_csv(f'{d}/가격10년_지수장기.csv.gz'); I['날짜'] = pd.to_datetime(I['날짜'])
+        IX = I.pivot_table(index='날짜', columns='지수', values='종가').sort_index()
+    else:   # 지수장기 칸이 없으면 10년치 종가 칸의 지수(^GSPC·^NDX·^KS11)
+        IX = PS.index(d)
     spx = R['SPX'].dropna() if 'SPX' in R else IX['^GSPC'].dropna()
     ndx = R['NDX'].dropna() if 'NDX' in R else IX['^NDX'].dropna()
     ks = IX['^KS11'].dropna() if '^KS11' in IX else pd.Series(dtype=float)
