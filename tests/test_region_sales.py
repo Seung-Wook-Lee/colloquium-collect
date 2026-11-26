@@ -29,3 +29,12 @@ def test_universe_out_list():
     import layers
     u = pd.DataFrame({'번호': ['K2-1', 'K2-2'], 'yfinance 티커': ['466920.KS', '463250.KS']})
     assert list(layers.apply(u)['yfinance 티커']) == ['463250.KS']
+
+
+def test_universe_manage_apply():
+    import pandas as pd
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'collect'))
+    import universe_manage as UM
+    u = pd.DataFrame({'번호': ['K2-1', 'K2-2'], 'yfinance 티커': ['466920.KS', '463250.KS']})
+    v, gone, new = UM.apply(u, out={'466920.KS'}, add=[{'번호': 'K2-9', 'yfinance 티커': 'NEW.KS'}, {'번호': 'K2-2', 'yfinance 티커': '463250.KS'}])
+    assert gone == ['466920.KS'] and new == ['NEW.KS'] and list(v['yfinance 티커']) == ['463250.KS', 'NEW.KS']
