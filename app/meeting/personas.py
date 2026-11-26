@@ -935,10 +935,15 @@ def _top5(c):
         B = {}
     Q = {k: (v or {}).get('질문', '') for k, v in (B.get('종목') or {}).items() if (v or {}).get('역할') != '매도'}   # B28(너무 많이 올랐나)은 높을수록 나쁨 → 좋은 점수 분석에서 뺌
     off = set(B.get('_꺼짐_종목', []))
+    RK = list((B.get('원칙') or {}).get('순위') or [])   # 11/26 의장: 점수 칸은 순위점수에 쓰는 블록만(B23·B26처럼 순위에 안 쓰는 블록이 섞여 헷갈림)
+    if RK:
+        Q = {b: q for b, q in Q.items() if b in RK}
     k5 = int((c.R.get('뚜지') or {}).get('기업수', 5))
     X = S[(S.get('구분') == '개별주') & (S.get('판정') == '후보')].copy() if '판정' in S else S.iloc[:0]
-    if '순위점수' in X:
-        X = X[pd.to_numeric(X['순위점수'], errors='coerce').notna()].sort_values('순위점수', ascending=False)
+    if '순위점수' in X:   # 11/26 의장 CVX 건("이게 어떻게 바닥이지?"): 엔진 결론 칸 먼저(추천 → 관찰 → 바닥 대기 → 대기), 같은 결론 안에서 순위점수
+        X = X[pd.to_numeric(X['순위점수'], errors='coerce').notna()].copy()
+        X['_g'] = X['추천'].astype(str).map(lambda v: 0 if v == '추천' else 1 if v.startswith('관찰') else 2 if v == '바닥 대기' else 3 if v.startswith('대기') else 4)
+        X = X.sort_values(['_g', '순위점수'], ascending=[True, False])
     X = X.head(k5)
     tk = lambda r: r['ticker'] if r.get('시장') == '미국' and ok(r.get('ticker')) else r['종목']   # 11/22 의장: 미국은 티커
 
@@ -963,7 +968,7 @@ def _top5(c):
         rows.append([f'{i}. {tk(r)}', str(r.get('추천', '')), n(r.get('순위점수'), 2), n(r.get('블록예비율'), 2), fmt(hi), fmt(lo), rare])
     if not len(X):
         out.append(L('엔진 상위 기업', '없음', '판정표에 순위점수가 있는 개별주 후보가 없음'))
-    G = [{'type': 'grid', 'title': f'엔진 순위점수 상위 {len(rows)}개 기업 — 무엇이 좋은 점수를 받았나', 'columns': ['기업', '엔진 판정', '순위점수', '블록 예 비율', '점수 높은 블록(0~1)', '점수 낮은 블록(0~1)', '드문 통과 공식'],
+    G = [{'type': 'grid', 'title': f'엔진 상위 {len(rows)}개 기업(결론 칸 먼저, 같은 결론 안에서 순위점수) — 순위 블록 점수', 'columns': ['기업', '엔진 판정', '순위점수', '블록 예 비율', '점수 높은 블록(0~1)', '점수 낮은 블록(0~1)', '드문 통과 공식'],
           'rows': rows, 'source': '판정표.csv(블록33 엔진) · 블록 질문 = 비공개 blocks.yaml'}] if rows else []
     try:   # 11/20 의장: 하위 블록은 언제든 넣고 뺀다 → 적용 여부 표
         import subblocks as SBK
@@ -979,15 +984,24 @@ def _top5(c):
 
 
 def _switch(c):
-    """① 시장 스위치(블록33 B01): CTM 빨간불·MA 클러스터 빨간불 = 현금 전환, CTM 초록불 = 1/3씩. 신호가 나왔든 안 나왔든 매일 숫자로."""
+    """① 시장 스위치(블록33 B01). 11/26 의장 "초록불이 나와도 시원치 않을 마당에 빨간불이 안 켜졌다가 뭔 소리냐… CTM과 MA 클러스터가 무슨 뜻인지는 써놓지도 않고":
+    맨 앞 = 매수 신호(CTM 초록불)와 뜻. 현금 전환 경고(CTM 빨간불·MA 클러스터 빨간불)는 신호가 나온 날에만 보여 줌(계산은 그대로)."""
     m = c.m if isinstance(c.m, dict) else {}
-    sig = lambda k: '신호 나옴' if m.get(k) == 1 else '계산 중, 오늘은 조건을 채우지 못해 신호 안 나옴'
-    out = [L('시장 스위치 · CTM 빨간불', sig('CTM_RED'), f"S&P 주봉 Chande Trend Meter {n(m.get('CTM_SPX'), 1)} · QQQ {n(m.get('CTM_QQQ'), 1)} — 30 아래 4주 연속이면 현금 전환(지금 30 아래 {m.get('CTM_LOW_WEEKS', 0)}주)",
-               sig='red' if m.get('CTM_RED') == 1 else ''),
-           L('시장 스위치 · MA 클러스터 빨간불', sig('MA_CLUSTER_RED'), f"S&P 주봉 종가가 50~75주선 맨 아래({n(m.get('MA_CLUSTER_BOT'), 0)}) 밑 + 가운데 4주 기울기 {p(m.get('MA_CLUSTER_SLOPE'), 2)} 마이너스면 현금 전환",
-               sig='red' if m.get('MA_CLUSTER_RED') == 1 else ''),
-           L('시장 스위치 · CTM 초록불', (f"신호 나옴 {m.get('CTM_GREEN_STAGE')}단계/3" if m.get('CTM_GREEN') == 1 else sig('CTM_GREEN')),
-             'CTM 26주 최고 70 이상 → 8주 최저 45 아래 → 최저 뒤 처음 오른 주부터 3주 동안 1/3씩', sig='green' if m.get('CTM_GREEN') == 1 else '')]
+    CTM = 'CTM(Chande Trend Meter) = S&P500 주봉 추세 점수 0~100(볼린저 밴드 위치·RSI 등을 합친 값, 높을수록 강한 상승 추세)'
+    now = f"오늘 S&P {n(m.get('CTM_SPX'), 1)} · QQQ {n(m.get('CTM_QQQ'), 1)}"
+    st = m.get('CTM_GREEN_STAGE')
+    if m.get('CTM_GREEN') == 1:
+        out = [L('지수 매수 신호 · CTM 초록불', f"지수 적극 매수 — {st}단계/3: 지금 1/3, 이어서 2주 동안 1/3씩" if str(st) == '1' else f"지수 적극 매수 — {st}단계/3: 이번 주 1/3",
+                 f"{CTM}. 26주 안에 70 이상(강한 상승) → 8주 안에 45 아래(식음) → 다시 오르기 시작한 주 = 반등 시작. {now}", sig='green')]
+    else:
+        out = [L('지수 매수 신호 · CTM 초록불', '아직 아님',
+                 f"{CTM}. 26주 안에 70 이상 → 8주 안에 45 아래 → 다시 오르기 시작한 주에 '지수 1/3 매수' 신호가 나옴. {now}")]
+    if m.get('CTM_RED') == 1:
+        out.append(L('현금 전환 경고 · CTM 빨간불', '주식을 팔고 현금으로 — 다른 분석보다 먼저',
+                     f"{CTM}. 30 아래가 4주 이어지면 긴 하락 추세. {now}, 30 아래 {m.get('CTM_LOW_WEEKS', 0)}주", sig='red'))
+    if m.get('MA_CLUSTER_RED') == 1:
+        out.append(L('현금 전환 경고 · MA 클러스터 빨간불', '주식을 팔고 현금으로 — 다른 분석보다 먼저',
+                     f"MA 클러스터 = S&P500 주봉 50~75주 이동평균선 묶음(긴 추세선). 주봉 종가가 묶음 맨 아래({n(m.get('MA_CLUSTER_BOT'), 0)}) 밑 + 묶음 가운데가 4주째 내려감 = 긴 추세가 꺾임(가운데 4주 기울기 {p(m.get('MA_CLUSTER_SLOPE'), 2)})", sig='red'))
     return out
 
 

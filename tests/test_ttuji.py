@@ -32,12 +32,22 @@ def test_ttuji_engine_order(tmp_path):
     P, c = _ctx(tmp_path)
     lines, G, md = P.ttuji(c)
     t = [x.title for x in lines]
-    order = ['시장 스위치 · CTM 빨간불', '현금 집행 여건', '미국 층 상대강도', '엔진 판정', '비중 한도', '1위 T0', '블록 정확도 상위 3개']
+    order = ['지수 매수 신호 · CTM 초록불', '현금 집행 여건', '미국 층 상대강도', '엔진 판정', '비중 한도', '1위 T0', '블록 정확도 상위 3개']
     assert all(k in t for k in order), t
     assert [t.index(k) for k in order] == sorted(t.index(k) for k in order)
     assert '**시장 블록' in md   # 스트림릿 신호 칩이 이 제목을 봄
     assert any(g.get('title', '').startswith('층 상대강도') for g in G)
-    assert '신호 안 나옴' in lines[0].fact and '꺼' not in ' '.join(str(x.fact) for x in lines)
+    assert lines[0].fact == '아직 아님' and '꺼' not in ' '.join(str(x.fact) for x in lines)
+    assert not any('빨간불' in x.title for x in lines)   # 11/26 의장: 신호 안 나온 현금 전환 경고는 원고에서 뺌
+
+
+def test_switch_green_first_and_red_only_when_fired(tmp_path):
+    P, c = _ctx(tmp_path)
+    c.m.update(CTM_GREEN=1, CTM_GREEN_STAGE=1)
+    t = P._switch(c)
+    assert t[0].title == '지수 매수 신호 · CTM 초록불' and '적극 매수' in t[0].fact and 'Chande Trend Meter' in t[0].why
+    c.m.update(CTM_RED=1)
+    assert any(x.title == '현금 전환 경고 · CTM 빨간불' for x in P._switch(c))
 
 
 def test_market_block_moved_out_of_miss_risk():
