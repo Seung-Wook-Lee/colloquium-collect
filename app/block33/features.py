@@ -503,9 +503,9 @@ def stocks(d):
             _last = (_asof - pd.Timedelta(days=int(_CX.get('시차일', 45)))).to_period('M')   # 그달 자료는 다음 달 중순에 나옴 → 그 전엔 안 씀
             _s = _E.assign(_m=pd.PeriodIndex(_E['월'].str[:7], freq='M')).groupby('_m')['수출달러'].sum().sort_index()
             _s = _s[_s.index <= _last]
-            _r = _s.rolling(3).sum()
-            if len(_r) > 15 and _s.index[-1] >= _last - 1 and _r.iloc[-13] > 0:
-                f.loc[f['ticker'].astype(str).isin(_tk), 'cos_exp_yoy'] = round((_r.iloc[-1] / _r.iloc[-13] - 1) * 100, 1)
+            _r3 = _s.rolling(3).sum()   # 이름 _r은 이 함수의 파일 읽기(_r)와 겹쳐 쓰면 안 됨(11/26 원고 멈춤)
+            if len(_r3) > 15 and _s.index[-1] >= _last - 1 and _r3.iloc[-13] > 0:
+                f.loc[f['ticker'].astype(str).isin(_tk), 'cos_exp_yoy'] = round((_r3.iloc[-1] / _r3.iloc[-13] - 1) * 100, 1)
     except Exception as e:   # noqa: BLE001
         f['cos_exp_yoy'] = np.nan
         _fail('cos_exp_yoy(화장품 수출 전년비)', e)

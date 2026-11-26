@@ -21,6 +21,7 @@ def _load(d):
     if not len(K):
         return None
     K['날짜'] = pd.to_datetime(K['날짜'].astype(str), errors='coerce')
+    K = K.drop_duplicates(['날짜', '코드'], keep='last')   # 11/26: 같은 날 두 줄(날짜 숫자·글자 섞임)이면 5일 합이 두 번 더해짐
     return {c: g.set_index('날짜').sort_index() for c, g in K.dropna(subset=['날짜']).groupby('코드')}
 
 
