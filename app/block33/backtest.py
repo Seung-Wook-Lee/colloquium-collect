@@ -251,15 +251,21 @@ def greedy(Z, cand, k, max_n=8):
     return sel
 
 
-def walk(Z, SB, H, first_test_year):
-    """해마다: 그해 1월 1일 전에 결과가 확정된 날짜만으로 조합을 고르고, 그해 성적을 잰다."""
+def walk(Z, SB, H, first_test_year, done=None):
+    """해마다: 그해 1월 1일 전에 결과가 확정된 날짜만으로 조합을 고르고, 그해 성적을 잰다.
+    done = 이미 계산한 조합 시험(10년치 데이터베이스 칸 '조합시험'): 끝난 해(올해 전)는 다시 계산하지 않고 그대로 씀(11/26 의장)."""
     cand = [b for b in SB if b in Z and Z[b].notna().any() and SB[b]['역할'] != '매도']
     Z = Z.copy(); Z['날짜'] = pd.to_datetime(Z['날짜'])
     rows, last = [], {}
+    this_year = Z['날짜'].max().year
+    done = done if done is not None and len(done) else pd.DataFrame(columns=['기간', '시험연도'])
     for w, n in H.items():
         k = f'{w}주'
         for y in sorted(Z['날짜'].dt.year.unique()):
             if y < first_test_year: continue
+            prev = done[(done['기간'] == k) & (done['시험연도'] == y)]
+            if y < this_year and len(prev):
+                rows.append(prev.iloc[0].to_dict()); continue
             start = pd.Timestamp(f'{y}-01-01')
             tr = Z[Z['날짜'] + pd.tseries.offsets.BDay(n) < start]
             te = Z[(Z['날짜'] >= start) & (Z['날짜'] < pd.Timestamp(f'{y + 1}-01-01'))]
@@ -307,8 +313,11 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     cache = os.path.join(d, PS.name('블록점수'))   # 11/26 의장 "10년치 하나에 넣으라니까": 블록 점수·N주 뒤 수익은 10년치 데이터베이스 칸(가격10년_블록점수)
     old = pd.read_csv(cache, encoding='utf-8-sig') if os.path.exists(cache) else pd.DataFrame()
     sig = ','.join(sorted(mask)) + '|' + ','.join(SB for SB in B['종목'])
+    FULL = bool(os.environ.get('BACKFILL'))   # 11/26 의장 "성적표는 한 번 돌리면 답이 다 나와있는 거 아닌가. 오늘 것만 새로 추가": 처음부터 다시는 손으로(BACKFILL=1)만
     if len(old) and str(old.get('_설정', pd.Series([''])).iloc[0]) != sig:
-        old = pd.DataFrame()   # 블록·칸이 바뀌면 처음부터 다시
+        print('블록·칸 설정이 이력과 다름 → ' + ('처음부터 다시(BACKFILL)' if FULL else '지난 줄은 그대로 두고 새 날짜만'))
+        if FULL:
+            old = pd.DataFrame()
     # 11/22 의장(BNY·PEP·STX 26주 승률 없음): 새 날짜만 덧붙이면 나중에 유니버스에 들어온 종목은 과거 주가 영영 비었다.
     # 유니버스에 있고(기준층 S0 제외) 긴 가격이 처음 절반 안에 있는데 이력에 한 줄도 없는 종목이 있으면 처음부터 다시 계산.
     if len(old):
@@ -321,8 +330,9 @@ def main(d, cfg=None, step='W-FRI', workers=None):
             miss = [n for n, t, ly in zip(U['번호'], U[tc] if tc else [None] * len(U), U.get('층', pd.Series([''] * len(U))))
                     if n not in seen and t in half.columns and half[t].notna().any()]   # 11/23 의장 'QQQM·SPYM 블록 다 돌려' → 기준층(S0)도 이력에
             if miss:
-                print(f'이력에 없는 종목 {len(miss)}개({", ".join(map(str, miss[:10]))}) → 처음부터 다시 계산')
-                old = pd.DataFrame()
+                print(f'이력에 없는 종목 {len(miss)}개({", ".join(map(str, miss[:10]))}) → ' + ('처음부터 다시(BACKFILL)' if FULL else '오늘부터 쌓음(과거 줄은 BACKFILL=1로 한 번)'))
+                if FULL:
+                    old = pd.DataFrame()
     if len(old):   # 11/26 의장 "뭘 금요일만 하냐. 그날 가격 가지고 그 주를 평가하면 되잖아" → 매일 돈다. 어제 넣은 '이번 주 중간' 줄은 지우고 오늘 가격으로 다시
         keepd = {t.date() for t in dates}
         old = old[pd.to_datetime(old['날짜']).dt.date.isin(keepd)]
@@ -349,8 +359,11 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     Z = Z[Z['층'] != 'S0']   # 이력 파일엔 기준층(QQQM·SPYM 등)도 남기고, 종목 성적표·조합 시험(종목 고르기)에서만 뺀다
     R = report(Z, SB, H)
     R.to_csv(os.path.join(d, '..', '블록성적.csv'), index=False, encoding='utf-8-sig')
-    W, last = walk(Z, SB, H, int(BT.get('첫시험연도', pd.Timestamp(dates[0]).year + 2)))
+    wc = os.path.join(d, PS.name('조합시험'))   # 끝난 해의 조합 시험은 10년치 데이터베이스 칸에 두고 다시 계산하지 않음
+    done = pd.read_csv(wc, encoding='utf-8-sig') if os.path.exists(wc) and not FULL else None
+    W, last = walk(Z, SB, H, int(BT.get('첫시험연도', pd.Timestamp(dates[0]).year + 2)), done)
     W.to_csv(os.path.join(d, '..', '조합시험.csv'), index=False, encoding='utf-8-sig')
+    W.to_csv(wc, index=False, encoding='utf-8-sig', compression='gzip')
     today = Z[Z['날짜'] == dates[-1].date()]
     # 11/19 의장: 오늘 후보는 엔진과 같은 문(이익 거르기·제2의 젠슨 황 거르기·추천 자격 연매출)을 통과한 종목에서만.
     # 엔진 판정표(out_판정표.csv)의 판정 '후보'가 그 문. 판정표가 없으면 후보를 내지 않는다.
