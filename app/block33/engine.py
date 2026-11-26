@@ -10,6 +10,7 @@ import yaml
 
 import combine as C
 import features as F
+from features import PS  # 10년치 데이터베이스(층L 가격, 11/26 야후 받기 없앰)
 import meta as MT
 import orders as O
 import qc_config as QCC
@@ -191,8 +192,10 @@ def run_stages(S, c):
 
 
 def layers_l(d, f, B, P):
-    """유니버스 생성법(universe_layers) 규칙으로 층L(L1~L5)·연변동성(%)을 붙인다. 5년 가격은 야후, 못 받으면 2년 가격으로.
-    한 실행에 한 번만 계산(d/유니버스_층L.csv)."""
+    """유니버스 생성법(universe_layers) 규칙으로 층L(L1~L5)·연변동성(%)을 붙인다.
+    11/26 의장 "ANT는 상장한 지 얼마 안 돼 자료가 없는 것도 있다. 못 구하면 비워 두고 다음날 다시":
+    가격은 야후에서 받지 않고 10년치 데이터베이스(가격10년_Close)에서 '변동성_년'만큼만 읽는다.
+    60거래일이 안 되는 종목(새로 상장)은 층L을 비워 두고, 다음 실행(다음날)에 다시 계산한다(캐시는 그 실행 폴더에만)."""
     cfg = B.get('유니버스')
     if not cfg:
         return f.assign(층L='', vol_yr=np.nan)
@@ -202,11 +205,17 @@ def layers_l(d, f, B, P):
     else:
         from data import universe_layers as UL
         U = pd.read_csv(f'{d}/유니버스.csv', encoding='utf-8-sig', dtype=str)
-        try:
-            L = UL.classify(U, cfg)
-        except Exception as e:   # noqa: BLE001
-            print(f'[층L] 5년 가격 실패 → 2년 가격: {e}')
-            L = UL.classify(U, cfg, UL.vol_from(P, U['yfinance 티커'].dropna().tolist(), cfg.get('제외_구간', []), cfg) if len(P) else {})
+        yrs = float(cfg.get('변동성_년', 5))
+        Q = PS.stocks(d, 'Close', int(yrs * 366) + 40)
+        if len(Q):
+            Q = UL.asof(Q, cfg)
+            Q = Q[Q.index > Q.index.max() - pd.DateOffset(years=int(yrs))]
+        tk = U['yfinance 티커'].dropna().tolist()
+        vol = UL.vol_from(Q, tk, cfg.get('제외_구간', []))
+        short = [t for t in tk if pd.isna(vol.get(t))]
+        if short:
+            print(f'[층L] 데이터베이스 가격이 60거래일 안 되는 종목 {len(short)}개({", ".join(short[:8])}) → 층L 비우고 다음날 다시')
+        L = UL.classify(U, cfg, vol)
         L = L[['번호', '층', '연변동성']]
         L.to_csv(cache, index=False, encoding='utf-8-sig')
     L = L.drop_duplicates('번호').set_index('번호')
