@@ -4,7 +4,7 @@
 #              GitHub에서 돌 때: 드라이브 창구(drive.py)로 필요한 파일을 내려받아 work/ 폴더에 두고,
 #                                마지막 블록 11이 결과를 드라이브에 올린다.
 #              코랩에서 돌 때  : 드라이브를 연결해 그대로 읽고 쓴다.
-#   읽는 것  : 드라이브 콜로키움/포트폴리오/콜로키움100_유니버스_YYYYMMDD.csv (날짜가 가장 늦은 파일)
+#   읽는 것  : 10년치 데이터베이스 유니버스 칸(1_data/가격10년_유니버스.csv.gz, 11/26 의장 "하나로 통일해")
 #              (2026-10-28 의장: 표는 csv. 예전 .xlsx도 읽지만 같은 날짜면 csv가 먼저)
 #              드라이브 콜로키움 수집데이터/00_누적/ (가격 이력, 실적 저장본 등 이어 쓰는 파일 전부)
 #   키       : KIS_APP_KEY, KIS_APP_SECRET, FRED_KEY, DART_KEY, SEC_EMAIL (+ GitHub에서는 DRIVE_URL, DRIVE_TOKEN)
@@ -53,6 +53,7 @@ else:
     BASE_DIR = os.path.abspath('work')
 ROOT = f'{BASE_DIR}/{D_ROOT}'
 UNIV_DIR = f'{ROOT}/포트폴리오'
+UNIV_DB = '유니버스_데이터베이스칸.csv'   # 11/26: 10년치 데이터베이스 유니버스 칸을 받아 두는 이름(로컬)
 DATA = f'{BASE_DIR}/{D_DATA}'
 DAY = f'{DATA}/{TODAY}'        # 그날 파일
 KEEP = f'{DATA}/00_누적'        # 이어 쓰는 파일(가격 이력, 실적 저장본, 회사번호 목록)
@@ -92,13 +93,14 @@ if not IN_COLAB:
     if not gdrive.ready():
         raise RuntimeError('DRIVE_URL·DRIVE_TOKEN 없음 (GitHub Secrets 확인)')
     # 1) 스튜디오 톰앤수 100 종목표: 가장 최신 것 하나만
-    names = sorted((f['name'] for f in gdrive.ls(f'{D_ROOT}/포트폴리오') if _is_univ(f['name'])), key=_univ_key)
-    if not names:
-        raise FileNotFoundError('드라이브 콜로키움/포트폴리오에 콜로키움100_유니버스 csv가 없습니다')
-    _pull(f'{D_ROOT}/포트폴리오', names[-1], f'{UNIV_DIR}/{names[-1]}')
-    # 2) 00_누적 전부 (드라이브 수정 시각을 그대로 붙여 '며칠마다 새로 받기' 판단이 맞게)
+    # 11/26 의장 "하나로 통일해": 유니버스 = 10년치 데이터베이스 칸(1_data/가격10년_유니버스) 하나
     import sys; sys.path.insert(0, os.path.abspath('data'))
     import px_store as PS
+    _U = PS.universe(gdrive, log)
+    if not len(_U):
+        raise FileNotFoundError('10년치 데이터베이스에 유니버스 칸이 없습니다')
+    _U.to_csv(f'{UNIV_DIR}/{UNIV_DB}', index=False, encoding='utf-8-sig')
+    # 2) 00_누적 전부 (드라이브 수정 시각을 그대로 붙여 '며칠마다 새로 받기' 판단이 맞게)
     for n in PS.KEEP_DROP:   # 11/26 의장 카드 '안 쓰는 5개만 지움'
         if gdrive.trash(f'{D_DATA}/00_누적/{n}'):
             log(f'[준비] 안 쓰는 00_누적/{n} 휴지통')
@@ -133,6 +135,8 @@ log(f'[준비] {NOW:%Y-%m-%d %H:%M} KST | 실행 {where} | 저장 폴더 {D_DATA
 
 # 유니버스: 포트폴리오 폴더의 최신 스튜디오 톰앤수 100 종목표 (드라이브 한글 이름이 NFD일 수 있어 NFC로 맞춰 찾는다)
 cands = sorted((f for f in os.listdir(UNIV_DIR) if _is_univ(f)), key=_univ_key)
+if os.path.exists(f'{UNIV_DIR}/{UNIV_DB}'):   # GitHub: 데이터베이스 칸에서 받은 것만 씀
+    cands = [UNIV_DB]
 if not cands:
     raise FileNotFoundError(f'포트폴리오 폴더에 콜로키움100_유니버스 csv가 없습니다: {os.listdir(UNIV_DIR)}')
 UNIV_FILE = f'{UNIV_DIR}/{cands[-1]}'

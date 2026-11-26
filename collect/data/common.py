@@ -39,13 +39,14 @@ def read(ctx, name, **kw):
 
 
 def universe(ctx):
-    """유니버스 원본: 로컬 폴더 유니버스.csv, 없으면 드라이브 콜로키움/포트폴리오 최신."""
+    """유니버스 원본: 로컬 폴더 유니버스.csv, 없으면 10년치 데이터베이스 칸(11/26 의장 "하나로 통일해")."""
     p = os.path.join(ctx['in'], '유니버스.csv')
     if not os.path.exists(p) and ctx.get('drive'):
         import drive
-        names = sorted(f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))
-        if names:
-            open(p, 'wb').write(drive.get(f'콜로키움/포트폴리오/{names[-1]}'))
+        from . import px_store as PS
+        U = PS.universe(drive)
+        if len(U):
+            U.to_csv(p, index=False, encoding='utf-8-sig')
     sys.path.insert(0, os.path.dirname(REPO) if os.path.basename(REPO) != 'collect' else REPO)
     import layers   # 11/25 새 층 → 분석 묶음(collect/layers.py)
     return layers.apply(pd.read_csv(p, encoding='utf-8-sig', dtype=str))

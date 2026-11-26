@@ -35,10 +35,13 @@ for s in ('fetch_risk.py', 'fetch_cpce.py', 'ccc_history.py'):
     print(f'[{s}]', r.returncode, (r.stdout + r.stderr).strip()[-600:])
 PS.market(drive, os.path.join(REPO, 'history'), W)   # 새로 받은 것 > 저장본 칸 > 옛 파일, 옛 파일 5개 휴지통
 for src, dst in ((f'{D}/1_data/가격10년_종가.csv.gz', '가격10년_종가.csv.gz'), (f'{D}/1_data/{PS.name("지수장기")}', PS.name('지수장기')),
-                 ('콜로키움/포트폴리오/' + max((f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv')), default='없음'), '유니버스.csv')):   # 회의 원고(daily.pull_univ)와 같은 최신 유니버스
+                 ):
     b = drive.get(src)
     if b: open(f'{W}/{dst}', 'wb').write(b)
     print(dst, '받음' if b else '없음')
+_U = PS.universe(drive)   # 11/26 의장 "하나로 통일해": 유니버스 = 10년치 데이터베이스 칸(회의 원고 daily.pull_univ와 같음)
+if len(_U): _U.to_csv(f'{W}/유니버스.csv', index=False, encoding='utf-8-sig')
+print('유니버스.csv', '받음' if len(_U) else '없음')
 # 11/24 B21 장기 펀드 13F 과거 기록(2013~, 공시일 기준) — 우리 수집 코드 fetch_13f.py --full
 r = subprocess.run([sys.executable, f'{REPO}/collect/data/fetch_13f.py', W, f'{W}/13F캐시', '--full'], capture_output=True, text=True, timeout=3000)
 print('[13F]', r.returncode, (r.stdout + r.stderr).strip()[-500:])

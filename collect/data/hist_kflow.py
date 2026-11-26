@@ -19,8 +19,7 @@ import px_store as PS  # noqa: E402  11/26 의장: 과거 자료는 10년치 저
 PATH = f'{PS.BASE}/1_data/{PS.name("국내수급")}'   # 옛 자리 1_data/장기/국내수급_일별.csv.gz
 START = sys.argv[1] if len(sys.argv) > 1 else '20171101'
 COLS = {'frgn_ntby_tr_pbmn': '외국인', 'orgn_ntby_tr_pbmn': '기관', 'prsn_ntby_tr_pbmn': '개인', 'stck_clpr': '종가'}
-names = sorted(f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))
-U = pd.read_csv(io.BytesIO(drive.get(f'콜로키움/포트폴리오/{names[-1]}')), dtype=str, encoding='utf-8-sig')
+U = PS.universe(drive)   # 11/26 의장 "하나로 통일해": 유니버스 = 10년치 데이터베이스 칸
 codes = sorted(U[(U['시장'] == '한국') & (U['구분'] == '개별주')]['코드'].dropna().str.zfill(6).unique())
 old = None
 import tempfile  # noqa: E402

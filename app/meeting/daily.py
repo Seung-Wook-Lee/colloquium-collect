@@ -169,19 +169,14 @@ def _dedup_univ(fp):
 
 
 def pull_univ(IN):
-    """유니버스: 드라이브 콜로키움/포트폴리오 최신 csv(층 칸이 있을 때만), 없으면 이어 쓰는 사본."""
+    """유니버스: 10년치 데이터베이스 칸 하나(1_data/가격10년_유니버스, 11/26 의장 "하나로 통일해"), 없으면 이어 쓰는 사본."""
     import drive
     try:
-        names = sorted(f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))
-        if names:
-            data = drive.get(f'콜로키움/포트폴리오/{names[-1]}')
-            tmp = f'{IN}/_u.csv'
-            open(tmp, 'wb').write(data)
-            if '층' in pd.read_csv(tmp, encoding='utf-8-sig', nrows=1).columns:
-                os.replace(tmp, f'{IN}/유니버스.csv'); log(f'[받기] 유니버스 {names[-1]}')
-                _dedup_univ(f'{IN}/유니버스.csv')
-                return
-            os.remove(tmp)
+        U = PS.universe(drive, log)
+        if len(U) and '층' in U:
+            U.to_csv(f'{IN}/유니버스.csv', index=False, encoding='utf-8-sig'); log(f'[받기] 유니버스 데이터베이스 칸 {len(U)}줄')
+            _dedup_univ(f'{IN}/유니버스.csv')
+            return
     except Exception as e:
         log(f'[받기] 유니버스 드라이브 실패: {e}')
 
