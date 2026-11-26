@@ -203,3 +203,34 @@ def credit_kr(code, days=3650, probe=False):
         return pd.DataFrame(columns=['융자잔고주수', '잔고율', '융자금액'])
     D = pd.DataFrame(rows, columns=['날짜', '융자잔고주수', '잔고율', '융자금액'])
     D['날짜'] = pd.to_datetime(D['날짜']); return D.set_index('날짜').sort_index()
+
+
+def opinion_kr(code, days=90, probe=False):
+    """국내 증권사 종목 투자의견 — FHKST663300C0(11/26 의장 "최근 일주일 보고서만 참고해").
+    DataFrame 칸: 날짜(보고서), 증권사, 의견, 이전의견, 목표가, 전일종가. 한 번에 받을 수 있는 만큼, 날짜를 뒤로 옮기며 받는다."""
+    end, start, rows, seen = dt.date.today(), dt.date.today() - dt.timedelta(days=days), [], set()
+    while end >= start:
+        j = _get('/uapi/domestic-stock/v1/quotations/invest-opinion', 'FHKST663300C0',
+                 {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_COND_SCR_DIV_CODE': '16633', 'FID_INPUT_ISCD': code,
+                  'FID_INPUT_DATE_1': start.strftime('%Y%m%d'), 'FID_INPUT_DATE_2': end.strftime('%Y%m%d')})
+        out = (j or {}).get('output') or []
+        if isinstance(out, dict):
+            out = [out]
+        if probe:
+            print('투자의견 응답 칸', code, list(out[0].items()) if out else j)
+            probe = False
+        ds = []
+        for o in out:
+            d = o.get('stck_bsop_date')
+            key = (d, o.get('mbcr_name'), o.get('invt_opnn'), o.get('hts_goal_prc'))
+            if not d or key in seen:
+                continue
+            seen.add(key); ds.append(d)
+            rows.append((d, (o.get('mbcr_name') or '').strip(), (o.get('invt_opnn') or '').strip(),
+                         (o.get('rgbf_invt_opnn') or '').strip(), _f(o.get('hts_goal_prc')), _f(o.get('stck_prdy_clpr'))))
+        if not ds or len(out) < 20:
+            break
+        end = dt.datetime.strptime(min(ds), '%Y%m%d').date() - dt.timedelta(days=1)
+    D = pd.DataFrame(rows, columns=['날짜', '증권사', '의견', '이전의견', '목표가', '전일종가'])
+    D['날짜'] = pd.to_datetime(D['날짜'], errors='coerce')
+    return D.dropna(subset=['날짜'])

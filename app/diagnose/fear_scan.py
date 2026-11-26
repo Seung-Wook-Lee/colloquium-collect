@@ -1,7 +1,7 @@
 """공포탐욕 스캔 — "공포탐욕이 N 이하였던 날 샀다면" 유니버스 전 종목 1달·반년·1년 뒤(11/21 의장).
 
 쓰기: python app/diagnose/fear_scan.py --fg 12 [--market 미국] [--kind 개별주] [--universe 유니버스.csv] [--out 폴더]
-  --universe 없으면 드라이브 '콜로키움/포트폴리오/콜로키움100_유니버스_*.csv' 최신본.
+  --universe 없으면 10년치 데이터베이스 유니버스 칸(11/26 하나로 통일).
 출력: <out>/공탐{N}이하_{시장}_{구분}_YYYYMMDD.csv + 화면 상위 표.
 
 틀리지 않게(11/21 의장 "이런 실수가 왜 나오니, 코딩으로"):
@@ -30,8 +30,9 @@ def universe(path=None):
     if path:
         return pd.read_csv(path)
     import drive
-    names = sorted(f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))
-    return pd.read_csv(io.BytesIO(drive.get(f'콜로키움/포트폴리오/{names[-1]}')), encoding='utf-8-sig')
+    sys.path.insert(0, os.path.join(os.path.dirname(APP), 'collect', 'data'))
+    import px_store as PS   # 11/26 의장 "하나로 통일해": 유니버스 = 10년치 데이터베이스 칸
+    return PS.universe(drive)
 
 
 def prices(tickers):

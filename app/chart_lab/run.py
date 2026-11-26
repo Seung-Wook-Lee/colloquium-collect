@@ -51,10 +51,11 @@ def load_universe(gd):
     if local:
         u = pd.read_csv(local, dtype={'코드': str}, encoding='utf-8-sig')
     else:
-        names = sorted(f['name'] for f in gd.ls(f'{D_ROOT}/포트폴리오')
-                       if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))
-        u = pd.read_csv(io.BytesIO(gd.get(f'{D_ROOT}/포트폴리오/{names[-1]}')), dtype={'코드': str}, encoding='utf-8-sig')
-        log(f'[유니버스] {names[-1]}')
+        import sys as _s
+        _s.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'collect', 'data'))
+        import px_store as PS   # 11/26 의장 "하나로 통일해": 유니버스 = 10년치 데이터베이스 칸
+        u = PS.universe(gd)
+        log(f'[유니버스] 데이터베이스 칸 {len(u)}줄')
     u = u[u['yfinance 티커'].notna()].copy()
     u['코드'] = u['코드'].astype(str).str.strip()
     u['yfinance 티커'] = u['yfinance 티커'].astype(str).str.strip()

@@ -38,3 +38,16 @@ def test_universe_manage_apply():
     u = pd.DataFrame({'번호': ['K2-1', 'K2-2'], 'yfinance 티커': ['466920.KS', '463250.KS']})
     v, gone, new = UM.apply(u, out={'466920.KS'}, add=[{'번호': 'K2-9', 'yfinance 티커': 'NEW.KS'}, {'번호': 'K2-2', 'yfinance 티커': '463250.KS'}])
     assert gone == ['466920.KS'] and new == ['NEW.KS'] and list(v['yfinance 티커']) == ['463250.KS', 'NEW.KS']
+
+
+def test_universe_one_place():
+    """11/26 의장 "하나로 통일해": 유니버스는 10년치 데이터베이스 칸(px_store.universe)만 읽는다. 옛 포트폴리오 CSV를 직접 읽는 코드 금지."""
+    R = pathlib.Path(__file__).resolve().parents[1]
+    bad = []
+    for p in list((R / 'app').rglob('*.py')) + list((R / 'collect').rglob('*.py')):
+        if p.name == 'px_store.py':
+            continue
+        t = p.read_text(encoding='utf-8', errors='ignore')
+        if "ls('콜로키움/포트폴리오')" in t or "/포트폴리오')" in t and '콜로키움100_유니버스_' in t and 'ls(' in t:
+            bad.append(str(p.relative_to(R)))
+    assert not bad, bad

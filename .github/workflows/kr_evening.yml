@@ -41,6 +41,9 @@ jobs:
       - name: 신용잔고(그날 것만)
         if: always()
         run: python collect/data/kis_credit.py
+      - name: 증권사 투자의견(새 보고서만 — 11/26 의장 "최근 일주일 보고서만")
+        if: always()
+        run: python collect/data/kis_opinion.py
       - name: 투자자별 일별 순매수(B19·B14·B22)
         if: always()
         run: python collect/data/hist_kflow.py

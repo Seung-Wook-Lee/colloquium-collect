@@ -417,3 +417,34 @@ def update(B, U, now_kst, log=print):
     if not N:
         return B
     return merge(B, N, log)
+
+
+# ---------------------------------------------------------------- 유니버스 = 10년치 데이터베이스 칸 하나(11/26 의장 "하나로 통일해")
+# 유니버스를 읽는 곳(회의·엔진·수집·블록 1·진단)은 모두 universe()만 쓴다. 넣기·빼기는 collect/universe_manage.py(layers.OUT·ADD)가 이 칸을 고친다.
+# 칸이 아직 없으면 첫 한 번만 옛 자리(콜로키움/포트폴리오 최신 CSV)를 칸으로 옮긴다(옛 파일은 지우지 않음 — 지우기는 의장 허락).
+UNIV_KAN = '유니버스'
+_UNIV_OLD = ('콜로키움/포트폴리오', '콜로키움100_유니버스_')
+
+
+def universe(drive, log=print):
+    """유니버스 표(dtype=str). 칸 1_data/가격10년_유니버스.csv.gz."""
+    import io
+    p = f'{BASE}/1_data/{name(UNIV_KAN)}'
+    b = drive.get(p)
+    if b:
+        return pd.read_csv(io.BytesIO(b), dtype=str, encoding='utf-8-sig', compression='gzip')
+    fo, pre = _UNIV_OLD
+    names = sorted(f['name'] for f in drive.ls(fo) if f['name'].startswith(pre) and f['name'].endswith('.csv'))
+    if not names:
+        return pd.DataFrame()
+    u = pd.read_csv(io.BytesIO(drive.get(f'{fo}/{names[-1]}')), dtype=str, encoding='utf-8-sig')
+    put_universe(drive, u)
+    log(f'[유니버스] 옛 {fo}/{names[-1]} → 데이터베이스 칸 {name(UNIV_KAN)}로 옮김(앞으로 이 칸 하나만 씀)')
+    return u
+
+
+def put_universe(drive, u):
+    import io
+    buf = io.BytesIO()
+    u.to_csv(buf, index=False, encoding='utf-8-sig', compression={'method': 'gzip'})
+    return drive.put(f'{BASE}/1_data/{name(UNIV_KAN)}', buf.getvalue())

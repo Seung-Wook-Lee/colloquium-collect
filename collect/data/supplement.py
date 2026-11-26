@@ -4,7 +4,7 @@
   python collect/data/supplement.py 아침     # 재무·13F·공매도(SLOW, store_first 규칙) + 시장위험 + 사건 RSS
   python collect/data/supplement.py 저녁     # 시장위험 + 사건 RSS + 미장전 시세(회의 rules.yaml 미장전.시세)
 
-드라이브: 읽기 '콜로키움 수집데이터/YYYYMMDD/'(닉스·DART·SEC), '콜로키움/포트폴리오' 최신 유니버스, 00_퀀트입력 저장본
+드라이브: 읽기 '콜로키움 수집데이터/YYYYMMDD/'(닉스·DART·SEC), 10년치 데이터베이스 유니버스 칸, 00_퀀트입력 저장본
           쓰기 00_퀀트입력/(SLOW·보조갱신일.json·시장위험.csv·00_사건로그.csv), 저녁은 YYYYMMDD/YYYYMMDD_미장전시세.csv"""
 import datetime as dt
 import io
@@ -47,9 +47,10 @@ def pull(IN, today):
         base, ext = os.path.splitext(f['name'][len(today) + 1:])
         if f['name'].startswith(f'{today}_') and RENAME.get(base, base) in ('닉스', 'DART', 'SEC'):
             _get(f'{D_DATA}/{today}/{f["name"]}', f'{IN}/{RENAME.get(base, base)}{ext}')
-    names = sorted(f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))
-    if names:
-        _get(f'콜로키움/포트폴리오/{names[-1]}', f'{IN}/유니버스.csv')
+    import px_store as PS   # 11/26 의장 "하나로 통일해": 유니버스 = 10년치 데이터베이스 칸
+    U = PS.universe(drive)
+    if len(U):
+        U.to_csv(f'{IN}/유니버스.csv', index=False, encoding='utf-8-sig')
     for nm in sorted(SLOW) + [MARK, '시장위험.csv', '00_사건로그.csv']:
         _get(f'{CARRY}/{nm}', f'{IN}/{nm}')
 

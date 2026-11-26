@@ -11,8 +11,8 @@ import drive  # noqa: E402
 import kis  # noqa: E402
 
 PATH = '콜로키움 수집데이터/1_data/신용잔고_일별.csv'
-_un = sorted(f['name'] for f in drive.ls('콜로키움/포트폴리오') if f['name'].startswith('콜로키움100_유니버스_') and f['name'].endswith('.csv'))   # 최신 유니버스(11/26 옛 팀Q 사본 지움)
-U = pd.read_csv(io.BytesIO(drive.get(f'콜로키움/포트폴리오/{_un[-1]}')), dtype={'코드': str}, encoding='utf-8-sig')
+import px_store as PS  # noqa: E402
+U = PS.universe(drive)   # 11/26 의장 "하나로 통일해": 유니버스 = 10년치 데이터베이스 칸
 codes = U[(U['시장'] == '한국') & (U['구분'] == '개별주')]['코드'].dropna().str.zfill(6).unique()
 old = None
 if drive.ready():
