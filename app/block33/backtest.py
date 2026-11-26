@@ -165,6 +165,17 @@ def price_vars(d, L, B, dates):
 
 
 def _one(args):
+    # 11/26: 5년 쌓기 중 한 날짜의 나눗셈 오류(ZeroDivisionError)가 16분 계산 전체를 멈춤 → 그 날짜만 건너뛰고 오류 줄을 남김
+    try:
+        return _one_raw(args)
+    except Exception as e:
+        import traceback
+        tb = [l.strip() for l in traceback.format_exc().splitlines() if l.strip().startswith('File') and 'colloquium' in l]
+        print(f'[성적표] {args[2].date()} 건너뜀: {type(e).__name__}: {e} | ' + ' | '.join(tb[-3:]), flush=True)
+        return None
+
+
+def _one_raw(args):
     d, L, t, B, mask = args
     tmp = tempfile.mkdtemp()
     try:
@@ -342,6 +353,11 @@ def main(d, cfg=None, step='W-FRI', workers=None):
     todo = [t for t in dates if t.date() not in have or t == dates[-1]]
     with Pool(workers or os.cpu_count()) as pool:
         new = pool.map(_one, [(d, L, t, B, mask) for t in todo])
+    bad = sum(x is None for x in new)
+    new = [x for x in new if x is not None]
+    print(f'[성적표] 날짜 {len(todo)}개 계산, 건너뜀 {bad}개')
+    if not new:
+        new = [old.iloc[:0]] if len(old) else []
     Z = pd.concat([old[old['날짜'].astype(str) != str(dates[-1].date())]] + new, ignore_index=True) if len(old) else pd.concat(new, ignore_index=True)
     Z['날짜'] = pd.to_datetime(Z['날짜']).dt.date
     # 11/26 의장 "드라이브에서 꺼내오면 되잖아": N주 뒤 수익은 이력(드라이브)에 이미 있는 칸은 그대로, 빈 칸만 계산
