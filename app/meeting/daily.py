@@ -187,6 +187,8 @@ def pull_db(IN):
     want = [PS.name(k) for k in list(PS.F) + ['EPS']]   # 시가·고가·저가·종가·거래량 + EPS 칸(PER = 종가 ÷ EPS)
     got = [nm for nm in want if _save(drive.get(f'{D_DATA}/1_data/{nm}'), f'{IN}/{nm}')]
     log(f'[받기] 10년치 데이터베이스 {len(got)}/{len(want)}개')
+    if PS.fetch(drive, '이익추정', IN, log):   # 미국 이익 추정치(매일 아침 그날 값)
+        log('[받기] 이익추정 칸')
     if PS.fetch(drive, '투자의견', IN, log):   # 11/26 의장 "최근 일주일 보고서만": 한국 종목 증권사 보고서(엔진 '이익 추정치 하향'이 7일 것만 봄)
         log('[받기] 투자의견 칸')
     return got

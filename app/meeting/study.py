@@ -24,6 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), 'collect'))   # drive.py·ko_translate.py
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), 'collect', 'data'))   # px_store.py
 KST = dt.timezone(dt.timedelta(hours=9))
 LOCAL = os.environ.get('STUDY_ROOT', '/mnt/project-files/위원공부')
 DRIVE = '콜로키움 수집데이터/위원공부'
@@ -45,30 +46,54 @@ def _drive():
         return None
 
 
+def _kan(rel):
+    """11/26 의장 "데이터베이스칸으로 합쳐": 후보·승인 기록은 10년치 데이터베이스 칸(1_data/가격10년_공부후보·공부승인)."""
+    m = re.match(r'후보/(\d{8})_공부후보\.csv$', rel)
+    if m:
+        return '공부후보', m.group(1)
+    if rel == '승인누적.csv':
+        return '공부승인', None
+    return None, None
+
+
 def read_csv(rel):
+    k, day = _kan(rel)
+    d = _drive()
+    if k and d:
+        import px_store as PS
+        T = PS.rows(d, k)
+        if day is not None:
+            T = T[T['후보날짜'].astype(str) == day] if '후보날짜' in T else T.iloc[0:0]
+        return T.reset_index(drop=True) if len(T) else pd.DataFrame(columns=COLS)
     p = os.path.join(LOCAL, rel)
     if os.path.exists(p):
         return pd.read_csv(p, encoding='utf-8-sig', dtype=str).fillna('')
-    d = _drive()
     b = d.get(f'{DRIVE}/{rel}') if d else None
     return pd.read_csv(io.BytesIO(b), encoding='utf-8-sig', dtype=str).fillna('') if b else pd.DataFrame(columns=COLS)
 
 
 def write_csv(rel, df):
+    k, day = _kan(rel)
+    d = _drive()
+    if k and d:
+        import px_store as PS
+        if day is not None:
+            PS.put_day(d, k, '후보날짜', day, df.drop(columns=['후보날짜'], errors='ignore'))
+        else:
+            PS.put_rows(d, k, df)
+        return
     b = df.to_csv(index=False).encode('utf-8-sig')
     try:
         os.makedirs(os.path.dirname(os.path.join(LOCAL, rel)), exist_ok=True)
         open(os.path.join(LOCAL, rel), 'wb').write(b)
     except OSError:
         pass
-    d = _drive()
     if d:
         d.put(f'{DRIVE}/{rel}', b)
     else:   # 11/20: 드라이브 창구 없이 만든 후보는 스트림릿 승인 화면에 안 보인다
         print(f'[주의] 드라이브 창구 없음 → {rel} 은 로컬에만 저장(승인 화면은 드라이브를 읽음)')
 
 
-# ------------------------------------------------------------------ ① 모으기
 def arxiv(q, n=20):
     """arXiv 논문(제목·요약·날짜·링크). 실패하면 빈 목록."""
     try:

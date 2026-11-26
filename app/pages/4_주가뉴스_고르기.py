@@ -1,7 +1,7 @@
 # ======================================================================
 # 주가 뉴스 고르기 — 07시 후보 20건 중 의장이 10건을 고르고 이유 한 줄을 적는다 (2026-11-20 의장)
-#   읽는 것: 드라이브 '콜로키움 수집데이터/YYYYMMDD/YYYYMMDD_주가뉴스후보.csv' (07시 블록 9-주가뉴스)
-#   쓰는 것: '콜로키움 수집데이터/뉴스실험실/00_주가뉴스_판정누적.csv' (날짜별로 바꿔 넣음)
+#   읽는 것: 10년치 데이터베이스 칸 1_data/가격10년_주가뉴스후보(날짜 칸, 아침 수집 블록 9-주가뉴스)
+#   쓰는 것: 칸 1_data/가격10년_주가뉴스판정(날짜별로 바꿔 넣음) — 11/26 의장 "데이터베이스칸으로 합쳐"
 #            다음 날 07시 news_pick.py가 이 누적으로 점수표(로지스틱 회귀)를 만들어 10건을 고른다.
 # ======================================================================
 import io, os, sys
@@ -13,7 +13,7 @@ import streamlit as st
 st.set_page_config(page_title='스튜디오 톰앤수 · 주가 뉴스 고르기', page_icon='🗞️', layout='wide')
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path[:0] = [str(ROOT / 'collect'), str(ROOT / 'app')]
+sys.path[:0] = [str(ROOT / 'collect'), str(ROOT / 'collect' / 'data'), str(ROOT / 'app')]
 try:
     for k in ('DRIVE_URL', 'DRIVE_TOKEN'):
         if k in st.secrets and not os.environ.get(k):
@@ -22,6 +22,7 @@ except Exception:
     pass
 import drive  # noqa: E402
 import news_pick  # noqa: E402
+import px_store as PS  # noqa: E402  11/26 의장 "데이터베이스칸으로 합쳐": 후보·판정 = 1_data/가격10년_주가뉴스후보·주가뉴스판정
 
 DATA = '콜로키움 수집데이터'
 GOAL = 10
@@ -38,9 +39,8 @@ def read(path):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def dates():
-    now = pd.Timestamp.now(tz='Asia/Seoul').normalize()
-    days = [(now - pd.Timedelta(days=i)).strftime('%Y%m%d') for i in range(14)]
-    return [d for d in days if any(x['name'] == f'{d}_주가뉴스후보.csv' for x in drive.ls(f'{DATA}/{d}'))]
+    T = PS.rows(drive, '주가뉴스후보')
+    return sorted(T['날짜'].astype(str).unique(), reverse=True)[:14] if '날짜' in T else []
 
 
 st.title('🗞️ 주가 뉴스 고르기')
@@ -53,13 +53,18 @@ if not ds:
     st.stop()
 day = st.selectbox('날짜', ds, format_func=lambda d: f'{d[:4]}-{d[4:6]}-{d[6:]}')
 
-cand = read(f'{DATA}/{day}/{day}_주가뉴스후보.csv')
+_T = PS.rows(drive, '주가뉴스후보')
+cand = _T[_T['날짜'].astype(str) == day].drop(columns='날짜').reset_index(drop=True)
+for _c in ('긍정', '부정', '점수', '발생신호', '프로그램추천', '순위'):
+    if _c in cand:
+        cand[_c] = pd.to_numeric(cand[_c], errors='coerce')
 if '발생대상' not in cand:
     cand['발생대상'], cand['발생신호'] = '', 0
 cand['발생대상'] = cand['발생대상'].fillna('')
 cand['의장선택'] = False
 cand['의장이유'] = ''
-acc = read(news_pick.LABEL_PATH)
+acc = PS.rows(drive, '주가뉴스판정')
+acc = None if acc.empty else acc
 if acc is not None and len(acc) and (acc['날짜'].astype(str) == day).any():
     m = acc[acc['날짜'].astype(str) == day].set_index('제목')
     cand['의장선택'] = [bool(int(m.loc[t, '의장선택'])) if t in m.index else False for t in cand['제목']]
@@ -108,13 +113,13 @@ if st.button('저장', type='primary'):
     keep = ['날짜', '구분', '출처', '종목', '등락률(%)', '긍정', '부정', '발생신호', '제목(한글)', '제목', '요약(한글)', '요약', '의장선택', '의장이유', '프로그램추천', '링크']
     out = out.reindex(columns=keep)
     acc = out if acc is None else pd.concat([acc[acc['날짜'].astype(str) != day].reindex(columns=keep), out])
-    drive.put(news_pick.LABEL_PATH, acc.sort_values('날짜').to_csv(index=False).encode('utf-8-sig'))
+    PS.put_rows(drive, '주가뉴스판정', acc.sort_values('날짜'))
     st.cache_data.clear()
     st.success(f'저장했습니다. 고름 {k}건·버림 {len(out) - k}건이 판정 누적에 들어갔고, 내일 07시 고르기에 반영됩니다.')
 
 with st.expander('지금까지 쌓인 판정과 프로그램 일치'):
-    acc = read(news_pick.LABEL_PATH)
-    if acc is None or acc.empty:
+    acc = PS.rows(drive, '주가뉴스판정')
+    if acc.empty:
         st.write('아직 없습니다.')
     else:
         acc['같음'] = (acc['의장선택'].astype(int) == 1) & (acc['프로그램추천'].astype(int) == 1)
