@@ -476,6 +476,13 @@ def stocks(d):
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('f["money_ok"] = f.apply(money, axis=1)', e)
     t2 = (f['osc_w'] > f['osc_w1']) & (f['osc_w1'] > f['osc_w2'])
+    try:   # 11/26 의장 "나머지도 다 바꾸세요"(클로토 고침): 주봉 종가의 5주 이동평균 이격도(%) — 10년치 데이터베이스 종가(금요일 주봉)
+        W = PS.stocks(d, 'Close', 120).resample('W-FRI').last()
+        g5 = (W.iloc[-1] / W.rolling(5).mean().iloc[-1] * 100).round(1)
+        f['gap5w'] = f['ticker'].map(g5)
+    except Exception as e:   # noqa: BLE001
+        f['gap5w'] = np.nan
+        _fail('gap5w(주봉 5주선 이격도)', e)
     try:
         f['turn_ok'] = (t2 | (f.get('above50', pd.Series(0, index=f.index)) == 1)).astype(int)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
