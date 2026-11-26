@@ -26,7 +26,7 @@ import tempfile  # noqa: E402
 PS.fetch(drive, '국내수급', tempfile.mkdtemp())   # 칸이 아직 없으면 옛 파일을 칸으로 옮김
 b = drive.get(PATH)
 if b:
-    old = pd.read_csv(io.BytesIO(b), dtype={'코드': str}, compression='gzip')
+    old = pd.read_csv(io.BytesIO(b), dtype={'코드': str, '날짜': str}, compression='gzip')   # 11/26: 날짜를 글자로(숫자·글자가 섞여 같은 날이 두 줄로 남고 min에서 멈추던 것)
 rows, first, rep = [], None, []
 for code in codes:
     have = old[old['코드'] == code]['날짜'].astype(str) if old is not None else pd.Series(dtype=str)
@@ -53,6 +53,7 @@ for code in codes:
 print(f'{len(codes)}종목 받음:', ' · '.join(rep[:60]))
 new = pd.DataFrame(rows)
 A = pd.concat([old, new]) if old is not None else new
-A = A[A['날짜'].astype(str) >= START].drop_duplicates(['날짜', '코드'], keep='last').sort_values(['코드', '날짜'])
+A['날짜'] = A['날짜'].astype(str)
+A = A[A['날짜'] >= START].drop_duplicates(['날짜', '코드'], keep='last').sort_values(['코드', '날짜'])
 drive.put(PATH, gzip.compress(A.to_csv(index=False).encode('utf-8')))
 print('드라이브 올림', PATH, len(A), '줄', A['날짜'].min(), '~', A['날짜'].max(), '| 실패', len(kis._ERR))

@@ -14,7 +14,10 @@ D_OUT = f'{D_DATA}/1_data'
 
 
 def cfg():
-    p = os.path.join(QCC.private_dir(), 'data.yaml')
+    try:
+        p = os.path.join(QCC.private_dir(), 'data.yaml')
+    except FileNotFoundError:   # 11/26: 비공개 설정 없이 도는 단계(저녁 DART 지역별 매출)는 설정 없이(기본값)
+        return {}
     return yaml.safe_load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
 
 
