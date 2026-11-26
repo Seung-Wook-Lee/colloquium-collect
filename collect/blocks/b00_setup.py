@@ -141,6 +141,11 @@ if UNIV_FILE.endswith('.csv'):
 else:
     u = pd.read_excel(UNIV_FILE, sheet_name='유니버스', dtype={'코드': str})
 u = u[u['yfinance 티커'].notna()].copy()
+try:   # 11/26 의장 편출은 collect/layers.py OUT 한 곳(새 유니버스 파일 만들지 않음)
+    import layers as _layers
+    u = _layers.drop_out(u).copy()
+except ImportError:
+    pass
 u['yfinance 티커'] = u['yfinance 티커'].astype(str).str.strip()
 u['코드'] = u['코드'].astype(str).str.strip()
 import layers   # 11/25 새 층(U0~U7·K0~K5) → 분석 묶음(S0~S6), collect/layers.py

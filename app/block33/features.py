@@ -223,11 +223,20 @@ def stocks(d):
     Y = _r(d, '시타델')
     try:
         if len(Y):
-            etf = Y[Y['구분'] == 'ETF'].set_index('ETF')
+            # 11/26 의장 "이건 또 왜 비었어"(B18 전부 자료 없음): 아침 수집엔 시타델에 '자금5일' 칸이 없어 KeyError → 60주 이격까지 통째로 비었음.
+            # → 있는 칸만 쓰고, 없는 칸은 비움(60주 이격은 살림). 구분 칸이 없으면 모두 ETF 줄.
+            Y = Y.copy()
+            Y['ETF'] = Y['ETF'].astype(str)
+            if '구분' not in Y:
+                Y['구분'] = 'ETF'
+            if '티커' not in Y:
+                Y['티커'] = Y['ETF']
+            etf = Y[Y['구분'] == 'ETF'].drop_duplicates('ETF').set_index('ETF')
+            col = lambda k: _num(etf[k]) if k in etf else pd.Series(np.nan, index=etf.index)
             h = Y[Y['구분'].isin(['종목', 'ETF'])][['ETF', '티커']].copy()
             h['티커'] = h['티커'].astype(str).str.upper()
-            h['sec_gap60'] = h['ETF'].map(_num(etf['60주 이격']))
-            h['sec_flow5'] = h['ETF'].map(_num(etf['자금5일']))
+            h['sec_gap60'] = h['ETF'].map(col('60주 이격'))
+            h['sec_flow5'] = h['ETF'].map(col('자금5일'))
             h = h.groupby('티커')[['sec_gap60', 'sec_flow5']].first()
             key = f['ticker'].astype(str).str.upper().str.replace(r'\.(KS|KQ)$', '', regex=True)
             f['sec_gap60'] = key.map(h['sec_gap60'])
@@ -236,6 +245,16 @@ def stocks(d):
             for c in ('sec_gap60', 'sec_flow5'):
                 fill = f.groupby(['시장', 'layer'])[c].transform('median')
                 f[c] = f[c].where(f[c].notna() | (f['구분'] != '개별주'), fill)
+    except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
+        _fail('시타델', e)
+    # 11/26 의장 "이건 또 왜 비었어"(B20 개별주 전부 자료 없음): B20 '섹터 ETF로 본 수급'은 ETF 자기 자금만 있어 개별주는 늘 비었음
+    # → 개별주는 같은 시장·같은 층 ETF들의 5·20일 자금 유입(중앙값) = 그 종목 업종 ETF로 본 수급
+    try:
+        for c in ('etf_flow5', 'etf_flow20'):
+            if c in f:
+                src = f[c].where(f['구분'] != '개별주')
+                fill = src.groupby([f['시장'], f['layer']]).transform('median')
+                f[c] = f[c].where(f['구분'] != '개별주', fill)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('시타델', e)
     # 재무 건전성·연매출(야후 info, 200종목)

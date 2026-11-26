@@ -17,8 +17,21 @@ def layer_of(no):
     return str(no).split('-')[0]
 
 
+# 편출(의장 지시, 새 유니버스 파일을 만들지 않고 여기 코드 한 곳에서 뺌 — 11/26 의장 "새 파일 만들지 말라니까").
+# 여기 있는 티커는 유니버스를 읽는 모든 곳(회의·엔진·블록 1·수집)에서 빠지고, 10년치 데이터베이스 칸도 다음 가격 수집 때 PS.keep이 지운다.
+OUT = {'466920.KS': '11/26 의장 "sol 조선 .. 유니버스에서 지워"(SOL 조선TOP3플러스)'}
+
+
+def drop_out(u):
+    """유니버스 표에서 편출 티커 줄을 뺌."""
+    if 'yfinance 티커' not in u:
+        return u
+    return u[~u['yfinance 티커'].astype(str).isin(OUT)]
+
+
 def apply(u):
-    """유니버스 표에 분석 묶음을 '층' 칸으로 붙임(새 층 코드는 '층 코드' 칸). 옛 유니버스(S0~S6)는 그대로."""
+    """유니버스 표에 분석 묶음을 '층' 칸으로 붙임(새 층 코드는 '층 코드' 칸). 옛 유니버스(S0~S6)는 그대로. 편출(OUT)은 뺌."""
+    u = drop_out(u)
     if '번호' not in u or not u['번호'].astype(str).str.match(r'^[UK]\d-\d+$').any():
         return u
     u = u.copy()
