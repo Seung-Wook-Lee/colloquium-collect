@@ -110,8 +110,8 @@ def stocks(d):
         _fail('밸류에이션', e)
     try:
         if len(V):
-            m = {'pbr': 'PBR', 'fper': '선행 PER(야후)', 'per_kis': 'PER'}   # 없는 칸은 비워 두고 나머지는 씀
-            f = f.merge(pd.DataFrame({'번호': V['번호'], **{k: _num(V[c]) if c in V else np.nan for k, c in m.items()}}), on='번호', how='left')
+            f = f.merge(pd.DataFrame({'번호': V['번호'], 'pbr': _num(V['PBR']), 'fper': _num(V['선행 PER(야후)']),
+                                      'per_kis': _num(V['PER'])}), on='번호', how='left')
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
         _fail('밸류에이션', e)
     try:
@@ -142,7 +142,6 @@ def stocks(d):
     # 층 안 순위(낮을수록 쌈)
     try:
         for k in ('per_ttm', 'pbr'):
-            if k not in f: f[k] = np.nan
             v = f[k].where(f[k] > 0)
             f[f'{k.split("_")[0]}_rank'] = v.groupby(f['layer']).rank(pct=True)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
@@ -228,7 +227,7 @@ def stocks(d):
             h = Y[Y['구분'].isin(['종목', 'ETF'])][['ETF', '티커']].copy()
             h['티커'] = h['티커'].astype(str).str.upper()
             h['sec_gap60'] = h['ETF'].map(_num(etf['60주 이격']))
-            h['sec_flow5'] = h['ETF'].map(_num(etf['자금5일'])) if '자금5일' in etf else np.nan   # ETF 자금 파일이 없는 날은 비움
+            h['sec_flow5'] = h['ETF'].map(_num(etf['자금5일']))
             h = h.groupby('티커')[['sec_gap60', 'sec_flow5']].first()
             key = f['ticker'].astype(str).str.upper().str.replace(r'\.(KS|KQ)$', '', regex=True)
             f['sec_gap60'] = key.map(h['sec_gap60'])

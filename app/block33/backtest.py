@@ -165,16 +165,6 @@ def price_vars(d, L, B, dates):
 
 
 def _one(args):
-    """한 주가 깨져도 나머지 주는 계속(11/26 회의에서 0으로 나누기 하나로 성적표 전체가 23분 뒤 실패). 깨진 주와 자리를 찍는다."""
-    try:
-        return _one_week(args)
-    except Exception:   # noqa: BLE001
-        import traceback
-        print(f'[성적표] {args[2].date()} 주 건너뜀:\n' + ''.join(traceback.format_exc().splitlines(True)[-6:]), file=sys.stderr)
-        return pd.DataFrame()
-
-
-def _one_week(args):
     d, L, t, B, mask = args
     tmp = tempfile.mkdtemp()
     try:
