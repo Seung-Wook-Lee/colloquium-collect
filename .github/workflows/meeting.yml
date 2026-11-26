@@ -18,6 +18,10 @@ on:
         description: '그날 자료로 다시 만들기 YYYYMMDD (비우면 오늘, 한국 시간)'
         required: false
         default: ''
+      backfill:
+        description: '성적표를 최근 5년으로 한 번 처음부터 계산해 데이터베이스 칸에 쌓기 — yes'
+        required: false
+        default: ''
       skip_backtest:
         description: '성적표(약 21분) 건너뛰고 지난 결과 칸만 읽기 — yes'
         required: false
@@ -61,6 +65,7 @@ jobs:
           KIS_OFF: '1'      # 11/25 의장: 회의 준비는 한투 접속 없이 저장본만(한국은 저녁 8시 수집이 받아 둠)
           BACKTEST: ${{ github.event.inputs.backtest == 'yes' && '1' || '' }}
           SKIP_BACKTEST: ${{ github.event.inputs.skip_backtest == 'yes' && '1' || '' }}
+          BACKFILL: ${{ github.event.inputs.backfill == 'yes' && '1' || '' }}
         run: |
           ARGS=""
           if [ "${{ github.event.workflow_run.name }}" = "저녁 8시 한국 자료 수집" ]; then ARGS="--session 미장전"; fi
