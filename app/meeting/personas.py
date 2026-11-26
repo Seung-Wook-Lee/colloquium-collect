@@ -750,11 +750,12 @@ def miss_citadel(c):
             else:
                 out.append(L('JPM 추세 신호 전환', '아직 아님' if (num(g.get('CTA σ 5일 변화')) or 0) <= 0 else '포지션은 오르지만 새 매수 신호 없음',
                              f"CTA 매수 신호 {int(buyn)}/3, 매수 전환까지 S&P {p(upp, 1)}, 변동성 목표 노출 5일 {p(vd, 2, '')}배"))
-        vp = num(g.get('VIX 1년 백분위(%)'))
-        if vp is not None:
-            rows.append(['VIX·VXN 1년 백분위', f"{n(vp, 0)}% · {n(g.get('VXN 1년 백분위(%)'), 0)}%",
-                         f"{n(w.get('VIX 1년 백분위(%)'), 0)}% · {n(w.get('VXN 1년 백분위(%)'), 0)}%", '',
-                         '지난 1년 중 지금보다 낮았던 날의 비율(S&P500 · 나스닥100 변동성)'])
+        if g.get('VIX') is None and isinstance(getattr(c, 'm', None), dict):   # 표에 VIX 줄이 아직 없으면(07시 수집 전) 리스크 표 VIX
+            g['VIX'] = c.m.get('VIX')
+        vx = num(g.get('VIX'))   # 11/26 의장 "그냥 vix는 숫자로 보여주는 게 좋지 않나? 이게 뭔 소리인지 어떻게 아나?" → 백분위 대신 숫자
+        if vx is not None:
+            rows.append(['VIX · VXN', f"{n(vx, 1)} · {n(g.get('VXN'), 1)}", f"{n(w.get('VIX'), 1)} · {n(w.get('VXN'), 1)}", '',
+                         'S&P500 · 나스닥100 옵션에 들어 있는 앞으로 30일 변동성 예상(%). 블록33 B02: VIX 33.5 이상 = 기회, 15.5 이하 = 부담'])
         if rows:   # 11/21 의장 "4줄 표로, 나열식은 왠만하면 쓰지마": 줄 나열 없이 표만
             G.append({'type': 'grid', 'title': '미국 포지셔닝(S&P500·나스닥100 기준)', 'columns': ['지표', '오늘', '1주 전', '구간', '읽는 법'], 'rows': rows, 'source': '수급포지셔닝.csv'})
     MM = _read(c.d, 'MMF')
