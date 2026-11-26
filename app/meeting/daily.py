@@ -366,7 +366,10 @@ def main():
         ls += [PER.L('🔴 MA 클러스터 빨간불', f"S&P 주봉이 50~75주선 맨 아래 {m.get('MA_CLUSTER_BOT')} 밑 + 가운데 4주 기울기 {m.get('MA_CLUSTER_SLOPE')}%", '블록33 B01 MA_CLUSTER_RED')] if m.get('MA_CLUSTER_RED') == 1 else []
         sec.insert(0, ('0 현금 전환', '블록33 B01', '시장', ls + [PER.L('결론', '모든 분석을 멈추고 현금 전환', '11/22 의장 1순위 규칙')], [], ''))   # 11/24: 줄은 L(제목·사실·근거) — 글자 줄이면 원고 만들기가 멈춤
     elif m.get('CTM_GREEN') == 1:   # 11/22 의장: CTM이 내려왔다가 다시 오르기 시작하면 초록불
-        sec.insert(0, ('0 CTM 초록불', '블록33 B01', '시장', [PER.L(f"🟢 CTM 초록불(반등 시작) {m.get('CTM_GREEN_STAGE')}단계/3", f"S&P CTM {m.get('CTM_SPX')} — 최저 뒤 첫 상승 주부터 3주 동안 1/3씩", '블록33 B01 CTM_GREEN')], [], ''))
+        # 11/26 의장 "초록불이라고 쓰지 말고, 칸을 나눠서 초록색 원이 나오도록" → 할 일 + 신호 칸 초록 원
+        sec.insert(0, ('0 지수 매수 신호', '블록33 B01', '시장', [PER.L('지수 매수 신호 (CTM 반등 시작)', f"지수 적극 매수 — {m.get('CTM_GREEN_STAGE')}단계/3",
+                                                               val=f"지수 적극 매수 — {m.get('CTM_GREEN_STAGE')}단계/3", chg=f"S&P CTM {m.get('CTM_SPX')}",
+                                                               crit='CTM 최저 뒤 처음 오른 주부터 3주 동안 1/3씩', why='블록33 B01 CTM_GREEN(뜻은 4 엔진 블록 센터 1번)', sig='green')], [], ''))
     PFX = f'{today}_' if a.session == '국장전' else f'{today}_미장전_'
     if a.session == '미장전':
         try:   # 저녁 8시 수집(supplement.py 저녁)이 날짜 폴더에 둔 미장전 시세
