@@ -387,14 +387,14 @@ POS_PANEL = [   # (칸, 제목, 단위, 기준선[(값, 이름, 색)], 칠할 �
      [(0.6, '많이 팜 0.6배', '#1b8a2e'), (1.0, '보통 1배', '#999')], [(0, 0.6, '#dff0e1')]),
     ('추세 신호 매수 수(21·63·100일)', 'CTA 추세 신호 — 21·63·100일 매수 신호 수', '/3',
      [(3, '전부 매수 3', '#1b8a2e')], []),
-    ('VIX 1년 백분위(%)', 'VIX·VXN 1년 백분위 — S&P500·나스닥100 변동성', '%',
-     [(80, '80%', '#c8372d')], [(80, 100, '#f7dedc')]),
+    ('VIX', 'VIX·VXN — S&P500·나스닥100 옵션 변동성 예상(11/26 의장: 백분위 대신 숫자)', '',
+     [(33.5, 'B02 기회 33.5', '#1b8a2e'), (15.5, 'B02 부담 15.5', '#c8372d')], [(33.5, 90, '#dff0e1')]),
 ]
 
 
 def _pos_line(H, col, title, unit, refs, zones):
     """11/23 의장 '크기도 작고 조잡한 디자인 → 더 자세하게, 선그래프로': 1년 선그래프 + 기준선 + 오늘·1주 전·1달 전."""
-    cols = [col] + (['VXN 1년 백분위(%)'] if col.startswith('VIX') else [])
+    cols = [col] + (['VXN'] if col == 'VIX' else [])
     D = H[['날짜'] + cols].melt('날짜', var_name='지표', value_name='값').dropna()
     if D.empty:
         return
@@ -405,8 +405,9 @@ def _pos_line(H, col, title, unit, refs, zones):
         return x.iloc[-1] if len(x) else None
     f = (lambda v: f'{v:.0f}') if unit in ('%', '/3') else (lambda v: f'{v:+.2f}' if unit == 'σ' else f'{v:.2f}')
     now = f(s.iloc[-1]) + ('' if unit == '/3' else unit)
-    if col.startswith('VIX'):
-        now = f"VIX {s.iloc[-1]:.0f}% · VXN {H['VXN 1년 백분위(%)'].dropna().iloc[-1]:.0f}%"
+    if col == 'VIX':
+        f = lambda v: f'{v:.1f}'
+        now = f"VIX {s.iloc[-1]:.1f} · VXN {H['VXN'].dropna().iloc[-1]:.1f}"
     elif unit == '/3':
         now = f"매수 {int(s.iloc[-1])}/3 · 매수 전환까지 S&P {H['CTA 매수 전환까지(%)'].dropna().iloc[-1]:+.1f}%"
     w1, m1 = at(7), at(30)
