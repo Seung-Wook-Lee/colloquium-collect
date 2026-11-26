@@ -483,6 +483,24 @@ def stocks(d):
     except Exception as e:   # noqa: BLE001
         f['gap5w'] = np.nan
         _fail('gap5w(주봉 5주선 이격도)', e)
+    try:   # 11/26 의장 "나머지도 다 바꾸세요"(에이피알 '특히 수출'): 관세청 화장품(HS 3304) 수출 3달 합 전년비(%) — 화장품 종목만(B24 공식)
+        import qc_config as _QCC
+        _CX = _QCC.load_blocks().get('화장품수출', {}) or {}
+        _tk = set(map(str, _CX.get('종목', [])))
+        _p = f'{d}/{PS.name("화장품수출")}'
+        f['cos_exp_yoy'] = np.nan
+        if _tk and _os.path.exists(_p):
+            _E = pd.read_csv(_p, dtype={'월': str}, encoding='utf-8-sig')
+            _asof = PS.stocks(d, 'Close', 10).index.max()
+            _last = (_asof - pd.Timedelta(days=int(_CX.get('시차일', 45)))).to_period('M')   # 그달 자료는 다음 달 중순에 나옴 → 그 전엔 안 씀
+            _s = _E.assign(_m=pd.PeriodIndex(_E['월'].str[:7], freq='M')).groupby('_m')['수출달러'].sum().sort_index()
+            _s = _s[_s.index <= _last]
+            _r = _s.rolling(3).sum()
+            if len(_r) > 15 and _s.index[-1] >= _last - 1 and _r.iloc[-13] > 0:
+                f.loc[f['ticker'].astype(str).isin(_tk), 'cos_exp_yoy'] = round((_r.iloc[-1] / _r.iloc[-13] - 1) * 100, 1)
+    except Exception as e:   # noqa: BLE001
+        f['cos_exp_yoy'] = np.nan
+        _fail('cos_exp_yoy(화장품 수출 전년비)', e)
     try:
         f['turn_ok'] = (t2 | (f.get('above50', pd.Series(0, index=f.index)) == 1)).astype(int)
     except Exception as e:   # noqa: BLE001  11/21 의장 '병렬식': 한 자료가 깨져도 나머지는 계속
