@@ -35,11 +35,11 @@ def secret(k):
 
 
 @st.cache_data(ttl=600, show_spinner="드라이브에서 자료를 읽는 중")
-def load():
-    body = {"token": secret("DRIVE_TOKEN"), "action": "get", "path": DB}
+def load(path=DB):
+    body = {"token": secret("DRIVE_TOKEN"), "action": "get", "path": path}
     out = requests.post(secret("DRIVE_URL"), data=json.dumps(body), timeout=300).json()
     if not out.get("ok") or not out.get("found"):
-        raise RuntimeError(out.get("error") or f"없음: {DB}")
+        raise RuntimeError(out.get("error") or f"없음: {path}")
     df = pd.read_csv(io.BytesIO(base64.b64decode(out["data"])), compression="gzip", index_col=0)
     df.index = pd.to_datetime(df.index, errors="coerce")
     return df[df.index.notna()].sort_index()
@@ -73,7 +73,7 @@ def chart(series, title, unit="", lines=(), bands=(), height=330):
         margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
         legend=dict(orientation="h", x=0, xanchor="left", y=1.02, yanchor="bottom", font=dict(size=11)),
         xaxis=dict(range=[end - pd.DateOffset(years=1), end], rangeslider=dict(visible=False),
-                   rangeselector=dict(font=dict(size=10), x=1, xanchor="right", y=1.02, yanchor="bottom", buttons=[
+                   rangeselector=dict(font=dict(size=11), x=1, xanchor="right", y=1.02, yanchor="bottom", buttons=[
                        dict(count=1, label="1개월", step="month", stepmode="backward"),
                        dict(count=3, label="3개월", step="month", stepmode="backward"),
                        dict(count=6, label="6개월", step="month", stepmode="backward"),
@@ -83,7 +83,7 @@ def chart(series, title, unit="", lines=(), bands=(), height=330):
                        dict(count=10, label="10년", step="year", stepmode="backward"),
                        dict(label="전체", step="all")])),
         yaxis=dict(fixedrange=False, ticksuffix=unit))
-    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 def change_table(s, unit="", digits=2):
@@ -113,7 +113,7 @@ def price_cta(name, price, score, freq):
         st.info(f"{name}: 아직 자료가 없습니다.")
         return
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.55, 0.45],
-                        subplot_titles=(f"{name} 가격 ({freq})", f"CTA 포지션 근사 (σ, {freq})"))
+                        subplot_titles=(f"{name} 가격 ({freq})", f"CTA 근사값 (σ, {freq})"))
     fig.add_trace(go.Scatter(x=price.index, y=price.values, name=f"{name} 가격", mode="lines",
                              line=dict(width=1.5, color="#1d4ed8"),
                              hovertemplate="%{x|%Y-%m-%d}  %{y:,.2f}<extra>가격</extra>"), row=1, col=1)
@@ -137,8 +137,9 @@ def price_cta(name, price, score, freq):
         dict(count=10, label="10년", step="year", stepmode="backward"),
         dict(label="전체", step="all")]), row=1, col=1)
     fig.update_yaxes(range=[-6, 6], row=2, col=1)
+    fig.update_yaxes(rangemode="normal", autorange=True, row=1, col=1)
     fig.update_annotations(font_size=13)
-    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 def head(no, name, s, unit="", digits=2):
@@ -180,9 +181,8 @@ with c2:
 # 2. CTA
 cta_d = CTA.cta(pd.DataFrame({k: g(k) for k in ("SPX", "NDX", "RUT")}))
 cta_s = cta_d["CTA σ"]
-head("1-2", "CTA (추세추종 펀드) 포지션 근사", cta_s, unit="σ")
-st.caption("실제 CTA 포지션은 공개되지 않아 가격으로 흉내 낸 근사 값(σ). S&P500 20%·나스닥100 60%·러셀2000 20%, "
-           "2·4·8개월과 1·2·3개월 추세, 2018년 이후 눈금, 시타델 그림 27점에 맞춘 배율. −4σ 바닥·+4σ 고점 기준은 11/23 회의 기준.")
+head("1-2", "CTA 근사값", cta_s, unit="σ")
+st.caption("CTA 포지션 근사값(σ). S&P500 20%·나스닥100 60%·러셀2000 20% 가격 추세로 계산. −4σ 바닥·+4σ 고점 기준(11/23 회의).")
 if rule is not None:
     cta_s = cta_s.resample(rule).last().dropna()
 c1, c2 = st.columns([1, 1])
@@ -193,9 +193,8 @@ with c2:
     t.index = t.index.strftime("%Y-%m-%d")
     t["CTA σ"] = t["CTA σ"].round(2)
     t["CTA σ 5일 변화"] = t["CTA σ 5일 변화"].round(2)
-    t["매수 전환까지(%)"] = t["매수 전환까지(%)"].round(1)
     t["추세 신호 매수 수"] = t["추세 신호 매수 수"].astype(int).astype(str) + "/3"
-    st.caption("최근 12일 (추세 신호 = S&P500이 21·63·100일 전보다 높은 개수, 매수 전환까지 = 다음 신호가 매수로 바뀌려면 오를 %)")
+    st.caption("최근 12일 (추세 신호 = S&P500이 21·63·100일 전보다 높은 개수)")
     st.dataframe(t, use_container_width=True, height=420)
 
 # 3. VIX
@@ -239,3 +238,56 @@ with c1:
     chart({"WTI": bar(g("WTI"), rule)}, "WTI (FRED DCOILWTICO, 달러/배럴)")
 with c2:
     change_table(g("WTI"))
+
+
+# ---------------- 2. 종목 ----------------
+PX = "콜로키움 수집데이터/1_data/가격10년_종가.csv.gz"
+US = [("SPYM", "SPYM"), ("QQQM", "QQQM"), ("NVDA", "NVDA"), ("AAPL", "AAPL"), ("MSFT", "MSFT"), ("META", "META"),
+      ("AMZN", "AMZN"), ("MU", "MU"), ("MRVL", "MRVL"), ("JNJ", "JNJ"), ("LLY", "LLY"), ("KO", "KO"), ("BLK", "BLK"),
+      ("JPM", "JPM"), ("SPCX", "SPCX"), ("TSLA", "TSLA"), ("SOXQ", "SOXQ")]
+KR = [("005930.KS", "삼성전자"), ("000660.KS", "SK하이닉스"), ("009150.KS", "삼성전기"), ("005380.KS", "현대차"),
+      ("006400.KS", "삼성SDI"), ("278470.KS", "에이피알"), ("298040.KS", "효성중공업"), ("316140.KS", "우리금융지주"),
+      ("033780.KS", "KT&G"), ("282330.KS", "BGF리테일")]
+
+
+def rsi14(c):
+    d = c.diff()
+    up = d.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
+    dn = (-d.clip(upper=0)).ewm(alpha=1 / 14, adjust=False).mean()
+    return 100 - 100 / (1 + up / dn)
+
+
+def stock_table(P, names, money):
+    rows = []
+    for t, n in names:
+        c = P[t].dropna() if t in P.columns else pd.Series(dtype=float)
+        if len(c) < 2:
+            rows.append({"종목": n, "날짜": "", "가격": "자료 없음", "전일 대비": "", "RSI(14일)": "", "PER": ""})
+            continue
+        ch = (c.iloc[-1] / c.iloc[-2] - 1) * 100
+        r = rsi14(c).iloc[-1]
+        rows.append({"종목": n, "날짜": f"{c.index[-1]:%Y-%m-%d}", "가격": money(c.iloc[-1]),
+                     "전일 대비": f"{ch:+.2f}%", "RSI(14일)": f"{r:.1f}", "PER": "준비 중"})
+    t = pd.DataFrame(rows)
+
+    def color(v):
+        return "color: #15803d" if str(v).startswith("+") else ("color: #b91c1c" if str(v).startswith("-") else "")
+    st.dataframe(t.style.map(color, subset=["전일 대비"]), hide_index=True, use_container_width=True,
+                 height=36 * (len(t) + 1) + 4)
+
+
+st.subheader("2. 종목")
+st.markdown("#### 2-1. 주요 종목 상황")
+try:
+    P = load(PX)
+except Exception as e:
+    st.error(f"종가 파일을 읽지 못했습니다: {e}")
+    st.stop()
+c1, c2 = st.columns([1, 1])
+with c1:
+    st.caption("미국 (달러)")
+    stock_table(P, US, lambda v: f"{v:,.2f}")
+with c2:
+    st.caption("한국 (원)")
+    stock_table(P, KR, lambda v: f"{v:,.0f}")
+st.caption("가격 = 드라이브 10년치 종가 파일 마지막 값, 전일 대비 = 그 앞 거래일 종가 대비, RSI = 14일 와일더 방식.")
