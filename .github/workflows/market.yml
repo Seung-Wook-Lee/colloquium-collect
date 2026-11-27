@@ -1,0 +1,37 @@
+# 회의 자료 수집 (source/market/collect.py)
+# 아침 8시(한국 시각, 화~토): 공포탐욕·VIX·하이일드·10년 금리·MOVE·WTI·S&P500·나스닥100(CTM 계산용)
+name: 회의 자료 수집
+
+on:
+  schedule:
+    - cron: "5 23 * * 1-5"   # UTC 월~금 23:05 = 한국 화~토 08:05
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "true면 받기만 하고 드라이브에 쓰지 않음"
+        required: true
+        default: "true"
+
+concurrency:
+  group: market-db
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas requests
+      - name: 수집
+        env:
+          FRED_KEY: ${{ secrets.FRED_KEY }}
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+        run: |
+          D=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry }}" = "true" ]; then D="--dry"; fi
+          python source/market/collect.py $D
