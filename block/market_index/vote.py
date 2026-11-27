@@ -43,6 +43,24 @@ def table(m, P):
     return D
 
 
+def table_kr(m, P):
+    """코스피용: 미국 MI 중 MI08·MI09를 한국 것으로 바꾸고 MI12를 더함.
+    MI08 코스피 낙폭 ≤ −20% (아래쪽 10% 들어갈 때 평균 −23.4%) / MI09 한국 유니버스 150일선 아래 ≥ 80% / MI12 코스피 50일 이격도 ≤ 93"""
+    D = table(m, P).drop(columns=["켜진 수", "자료 수", "과반"])
+    ks = P["^KS11"].dropna()
+    kr = [c for c in P.columns if c.endswith((".KS", ".KQ"))]
+    D = D.reindex(D.index.union(ks.index)).ffill(limit=3)
+    on = lambda s: s.reindex(D.index).astype(float).ffill(limit=3)
+    D["MI08"] = on(ks / ks.rolling(252, min_periods=1).max() - 1 <= -0.20)
+    D["MI09"] = on(M.breadth_below(P, kr, 150) >= 80)
+    D["MI12"] = on(ks / ks.rolling(50).mean() * 100 <= 93)
+    cols = [c for c in D.columns if c.startswith("MI")]
+    D["켜진 수"] = D[cols].sum(axis=1)
+    D["자료 수"] = D[cols].notna().sum(axis=1)
+    D["과반"] = D["켜진 수"] / D["자료 수"] > 0.5
+    return D.reindex(ks.index)
+
+
 if __name__ == "__main__":
     import check_episodes as E
     m, P = E.load("가격10년_시장지표"), E.load("가격10년_종가")
