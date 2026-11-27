@@ -15,7 +15,9 @@
   MI10 VIX ÷ VIX3M ≥ 1
   MI11 주식 풋콜 비율(Cboe) ≥ 1.0
   MI12 코스피 50일 이격도 ≤ 93 (한국만)
-  MI13 외국인 순매도(한국만, 주별) — 기준 확정 대기. MI14 QQQM vs RSP Anchored VWAP·MI15 맥클렐런 오실레이터(유니버스판) — 기준 확정 대기.
+  MI13 외국인 순매도(한국만, 의장 20:06·20:10): 한국 유니버스 개별주 외국인 순매수 합을 주별(월~금)로 더해,
+       전주가 순매도였고 이번 주 순매도가 전주보다 줄었으면(매수로 돈 경우 포함) 그 주 거래일에 초록불.
+       이번 주는 그날까지 더한 값으로 전주와 비교한다. MI14 QQQM vs RSP Anchored VWAP·MI15 맥클렐런 오실레이터(유니버스판) — 기준 확정 대기.
   신용잔고는 기준에서 뺌(20:06).
 미국 = MI01~MI08·MI10·MI11, 한국 = 여기에 MI08을 코스피로 바꾸고 MI12를 더함.
 """
@@ -40,6 +42,7 @@ RULES = [  # (번호, 이름, 기준 글)
     ("MI10", "VIX ÷ VIX3M", "1 이상"),
     ("MI11", "주식 풋콜 비율", "1.0 이상"),
     ("MI12", "코스피 50일 이격도", "93 이하 (한국만)"),
+    ("MI13", "외국인 순매수 (주별 합)", "전주 순매도보다 이번 주 매도가 줄면 (한국만)"),
 ]
 
 
@@ -54,6 +57,20 @@ def rate_gap(m):
     pol = pd.concat([m["IOER"].dropna(), m["IORB"].dropna()]).sort_index()
     pol = pol[~pol.index.duplicated(keep="last")].reindex(tn.index, method="ffill")
     return (tn - pol).dropna()
+
+
+def foreign_week(F):
+    """F: 가격10년_국내수급(날짜·코드·외국인 …, 백만원) → 주별 외국인 순매수 합(억원), 날짜별 MI13 켜짐"""
+    F = F.copy()
+    F["날짜"] = pd.to_datetime(F["날짜"].astype(str))
+    F = F.drop_duplicates(["날짜", "코드"], keep="last")
+    day = F.groupby("날짜")["외국인"].sum() / 100
+    wk = day.groupby(day.index.to_period("W-FRI"))
+    to_date = wk.cumsum()                       # 이번 주 그날까지의 합
+    full = wk.sum()                             # 주 전체 합
+    prev = pd.Series(full.shift(1).reindex(day.index.to_period("W-FRI")).values, index=day.index)
+    on = (to_date > prev) & (prev < 0)
+    return full, on.astype(float)
 
 
 def values(m, P=None):
@@ -108,12 +125,16 @@ def table(m, P=None):
                                               "MI10", "MI11"])
 
 
-def table_kr(m, P):
-    """한국: 미국 것에서 MI08을 코스피 낙폭으로 바꾸고 MI12(코스피 50일 이격도)를 더함. 날짜 = 코스피 거래일."""
+def table_kr(m, P, F=None):
+    """한국: 미국 것에서 MI08을 코스피 낙폭으로 바꾸고 MI12(코스피 50일 이격도)·MI13(외국인)을 더함. 날짜 = 코스피 거래일.
+    F = 가격10년_국내수급(없으면 MI13 빼고)."""
     S = signals(m, P)
     S["MI08"] = S.pop("MI08 코스피")
-    return _table(S, P["^KS11"].dropna().index, ["MI01", "MI02", "MI03", "MI04", "MI05", "MI06", "MI07", "MI08",
-                                                 "MI10", "MI11", "MI12"])
+    cols = ["MI01", "MI02", "MI03", "MI04", "MI05", "MI06", "MI07", "MI08", "MI10", "MI11", "MI12"]
+    if F is not None:
+        S["MI13"] = foreign_week(F)[1]
+        cols.append("MI13")
+    return _table(S, P["^KS11"].dropna().index, cols)
 
 
 if __name__ == "__main__":

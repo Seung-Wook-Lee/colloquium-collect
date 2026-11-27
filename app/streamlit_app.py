@@ -50,6 +50,16 @@ def load(path=DB):
     return df[df.index.notna()].sort_index()
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def load_flow(path="콜로키움 수집데이터/1_data/가격10년_국내수급.csv.gz"):
+    """MI13 외국인 순매수(날짜·코드 줄 형식이라 load()와 따로 읽음)"""
+    body = {"token": secret("DRIVE_TOKEN"), "action": "get", "path": path}
+    out = requests.post(secret("DRIVE_URL"), data=json.dumps(body), timeout=300).json()
+    if not out.get("ok") or not out.get("found"):
+        raise RuntimeError(out.get("error") or f"없음: {path}")
+    return pd.read_csv(io.BytesIO(base64.b64decode(out["data"])), compression="gzip", dtype={"코드": str, "날짜": str})
+
+
 def bar(s, rule):
     s = s.dropna()
     return s if rule is None else s.resample(rule).last().dropna()
@@ -219,11 +229,11 @@ g = lambda k: D[k] if k in D.columns else pd.Series(dtype=float)
 st.subheader("1. 마켓 (Market Index)")
 
 
-def lights(D, P):
+def lights(D, P, F=None):
     """MI 초록불 표: 바닥 조건에 맞으면 🟢, 아니면 ⚪, 자료 없으면 빈칸 (block/market_index/vote.py)"""
     us = VOTE.table(D)
     try:
-        kr = VOTE.table_kr(D, P)
+        kr = VOTE.table_kr(D, P, F)
     except Exception:
         kr = None
     vals = VOTE.values(D, P)
@@ -234,7 +244,14 @@ def lights(D, P):
     rows = []
     for no, name, rule_txt in VOTE.RULES:
         v = vals.get(no, pd.Series(dtype=float)).dropna()
-        if no == "MI08":
+        if no == "MI13":
+            if F is None:
+                val, dt = "자료 없음", ""
+            else:
+                full, _ = VOTE.foreign_week(F)
+                val = f"이번 주 {full.iloc[-1]:+,.0f}억 · 전주 {full.iloc[-2]:+,.0f}억"
+                dt = f"{pd.to_datetime(F['날짜'].astype(str)).max():%m-%d}"
+        elif no == "MI08":
             parts = [("S&P", vals["MI08"]), ("나스닥", vals["MI08 나스닥100"]),
                      ("코스피", vals.get("MI08 코스피", pd.Series(dtype=float)))]
             val = " · ".join(f"{n} {s.dropna().iloc[-1]:+.1f}%" for n, s in parts if len(s.dropna()))
@@ -243,7 +260,7 @@ def lights(D, P):
             val = fmt[no].format(v.iloc[-1]) if len(v) else "자료 없음"
             dt = f"{v.index[-1]:%m-%d}" if len(v) else ""
         rows.append({"번호": no, "지표": name, "초록불 기준": rule_txt, "최근 값": val, "날짜": dt,
-                     "미국": "" if no == "MI12" else dot(us[no].iloc[-1]) if no in us else "",
+                     "미국": "" if no in ("MI12", "MI13") else dot(us[no].iloc[-1]) if no in us else "",
                      "한국": dot(kr[no].iloc[-1]) if kr is not None and no in kr else ""})
     st.markdown(S.table(pd.DataFrame(rows), dim_cols=("날짜",)), unsafe_allow_html=True)
     # 최근 10거래일 켜진 비율
@@ -259,10 +276,14 @@ def lights(D, P):
 with st.container(border=True, key="card_mi_lights"):
     st.markdown("<div class='hd'><span class='no'>MI 초록불</span></div>"
                 "<div class='note'>바닥 조건에 맞으면 🟢 · 켜진 비율 = 켜진 수 ÷ 자료가 있는 기준 수 · "
-                "미국 10개(MI01~MI08·MI10·MI11), 한국 11개(MI08은 코스피, MI12 더함) · MI09 뺌 · "
-                "MI13 외국인 순매도는 자료 준비 중</div>", unsafe_allow_html=True)
+                "미국 10개(MI01~MI08·MI10·MI11), 한국 12개(MI08은 코스피, MI12·MI13 더함) · MI09 뺌 · "
+                "MI14·MI15 기준 정하는 중</div>", unsafe_allow_html=True)
     try:
-        tt = lights(D, load("콜로키움 수집데이터/1_data/가격10년_종가.csv.gz"))
+        try:
+            F = load_flow()
+        except Exception:
+            F = None
+        tt = lights(D, load("콜로키움 수집데이터/1_data/가격10년_종가.csv.gz"), F)
         st.markdown("<div class='note' style='margin-top:14px'>최근 10거래일 켜진 비율</div>", unsafe_allow_html=True)
         st.markdown(S.table(tt), unsafe_allow_html=True)
     except Exception as e:
