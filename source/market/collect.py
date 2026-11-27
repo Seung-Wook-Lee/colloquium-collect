@@ -81,7 +81,7 @@ def cboe_cpce(last):
             if "EQUITY" in str(x.get("name", "")).upper():
                 out[f"{d:%Y-%m-%d}"] = float(x["value"])
                 break
-    return pd.Series(out, dtype=float)
+    return pd.Series(out, dtype=float, index=pd.Index(list(out), dtype=object))   # 새 날이 없어도 글자 날짜 칸
 
 
 def yahoo(sym):
