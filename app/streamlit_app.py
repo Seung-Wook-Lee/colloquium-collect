@@ -19,7 +19,7 @@ import streamlit as st
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "source", "market"))
 import cta as CTA  # noqa: E402
 
-st.set_page_config(page_title="스튜디오 톰앤수 회의", layout="wide")
+st.set_page_config(page_title="스튜디오 톰앤수 회의", layout="centered")
 st.markdown("<style>html, body, [class*='css'] {font-size: 14px;} h1 {font-size: 1.5rem;} "
             "h3 {font-size: 1.1rem; margin-top: 0.6rem;}</style>", unsafe_allow_html=True)
 
@@ -149,7 +149,7 @@ except Exception as e:
     st.error(f"드라이브 자료를 읽지 못했습니다: {e}")
     st.stop()
 
-top = st.columns([3, 2])
+top = st.columns([1, 1])
 freq = top[0].radio("봉", list(RULE), horizontal=True, index=0)
 rule = RULE[freq]
 top[1].caption(f"자료: 드라이브 가격10년_시장지표 · 마지막 날짜 {D.dropna(how='all').index[-1]:%Y-%m-%d}")
@@ -158,7 +158,7 @@ g = lambda k: D[k] if k in D.columns else pd.Series(dtype=float)
 
 # 1. 공포와 탐욕 지수 (CNN 구간: 0~25 극단적 공포, 25~45 공포, 45~55 중립, 55~75 탐욕, 75~100 극단적 탐욕)
 st.subheader("1. 공포와 탐욕 지수 (CNN)")
-c1, c2 = st.columns([3, 1])
+c1, c2 = st.container(), st.container()
 with c1:
     chart({"공포와 탐욕": bar(g("공포탐욕"), rule)}, "공포와 탐욕 지수", bands=[
         (0, 25, "#b91c1c", "극단적 공포"), (25, 45, "#f97316", "공포"), (45, 55, "#9ca3af", "중립"),
@@ -174,7 +174,7 @@ cta_d = CTA.cta(pd.DataFrame({k: g(k) for k in ("SPX", "NDX", "RUT")}))
 cta_s = cta_d["CTA σ"]
 if rule is not None:
     cta_s = cta_s.resample(rule).last().dropna()
-c1, c2 = st.columns([3, 1])
+c1, c2 = st.container(), st.container()
 with c1:
     price_cta("S&P500", bar(g("SPX"), rule), cta_s, freq)
 with c2:
@@ -185,11 +185,11 @@ with c2:
     t["매수 전환까지(%)"] = t["매수 전환까지(%)"].round(1)
     t["추세 신호 매수 수"] = t["추세 신호 매수 수"].astype(int).astype(str) + "/3"
     st.caption("최근 12일 (추세 신호 = S&P500이 21·63·100일 전보다 높은 개수, 매수 전환까지 = 다음 신호가 매수로 바뀌려면 오를 %)")
-    st.dataframe(t, use_container_width=True, height=460)
+    st.dataframe(t, use_container_width=True, height=300)
 
 # 3. VIX
 st.subheader("3. VIX")
-c1, c2 = st.columns([3, 1])
+c1, c2 = st.container(), st.container()
 with c1:
     chart({"VIX": bar(g("VIX"), rule)}, "VIX (Cboe)")
 with c2:
@@ -198,7 +198,7 @@ with c2:
 # 4. 하이일드 스프레드
 st.subheader("4. 하이일드 스프레드")
 st.caption("ICE BofA 미국 하이일드 옵션조정 스프레드(FRED BAMLH0A0HYM2). FRED 공개가 최근 3년치뿐.")
-c1, c2 = st.columns([3, 1])
+c1, c2 = st.container(), st.container()
 with c1:
     chart({"하이일드 스프레드": bar(g("BAMLH0A0HYM2"), rule)}, "하이일드 스프레드", unit="%")
 with c2:
@@ -206,7 +206,7 @@ with c2:
 
 # 5. 미국채 10년 금리
 st.subheader("5. 미국채 10년 금리")
-c1, c2 = st.columns([3, 1])
+c1, c2 = st.container(), st.container()
 with c1:
     chart({"10년 금리": bar(g("DGS10"), rule)}, "미국채 10년 금리 (FRED DGS10)", unit="%",
           lines=[(4.8, "의장 기준 4.8%")])
@@ -215,7 +215,7 @@ with c2:
 
 # 6. MOVE
 st.subheader("6. MOVE 지수")
-c1, c2 = st.columns([3, 1])
+c1, c2 = st.container(), st.container()
 with c1:
     chart({"MOVE": bar(g("MOVE"), rule)}, "MOVE 지수 (미국채 변동성)")
 with c2:
@@ -223,7 +223,7 @@ with c2:
 
 # 7. WTI
 st.subheader("7. WTI 유가")
-c1, c2 = st.columns([3, 1])
+c1, c2 = st.container(), st.container()
 with c1:
     chart({"WTI": bar(g("WTI"), rule)}, "WTI (FRED DCOILWTICO, 달러/배럴)")
 with c2:
