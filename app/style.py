@@ -51,6 +51,9 @@ div[data-testid="stButtonGroup"] button p {font-size: 0.75rem !important;}
          background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 14px;}
 .jump a:hover {background: #f3f4f6; border-color: #d1d5db;}
 .anchor {scroll-margin-top: 4rem;}
+.mkt-h {font-size: 1.15rem !important; font-weight: 700; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;}
+.top-alert {font-size: 1.35rem; font-weight: 800; color: #ffffff; background: #e0313b; padding: 4px 14px;
+            border-radius: 8px; letter-spacing: -0.01em;}
 .tl {display: inline-flex; gap: 4px; align-items: center; padding: 4px 6px; margin-right: 10px; background: #1f2937;
      border-radius: 12px; vertical-align: middle; position: relative; top: -2px;}
 .tl i {width: 13px; height: 13px; border-radius: 50%; display: inline-block; background: #4b5563;}

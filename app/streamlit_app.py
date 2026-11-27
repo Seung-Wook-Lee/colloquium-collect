@@ -247,7 +247,8 @@ if top[2].button("자료 다시 읽기", width="stretch"):
 g = lambda k: D[k] if k in D.columns else pd.Series(dtype=float)
 
 st.markdown("<div id='sec-1' class='anchor'></div>", unsafe_allow_html=True)
-st.subheader("1. 마켓 (Market Index)")
+MKT_HEAD = st.empty()   # 제목 + 코스피 이격도 130 경고(계산 뒤 채움)
+MKT_HEAD.subheader("1. 마켓 (Market Index)")
 
 
 def mi_data(D):
@@ -349,6 +350,12 @@ def criteria_table(us, kr, vals, F):
 
 try:
     MI_US, MI_KR, MI_VALS, MI_F = mi_data(D)
+    # 코스피 50일 이격도 130 이상(의장 19:20 '130 고점', 20:41 "발생하면 마켓 옆에 큰 글씨로")
+    _g = MI_VALS.get("MI12", pd.Series(dtype=float)).dropna()
+    if len(_g) and _g.iloc[-1] >= 130:
+        MKT_HEAD.markdown(f"<h3 class='mkt-h'>1. 마켓 (Market Index)<span class='top-alert'>코스피 50일 이격도 "
+                          f"{_g.iloc[-1]:.1f} · 130 도착 ({_g.index[-1]:%Y-%m-%d})</span></h3>",
+                          unsafe_allow_html=True)
 except Exception as e:
     MI_US = None
     st.error(f"초록불 계산 실패: {e}")
