@@ -46,7 +46,8 @@ def judge(x, zs, sign, now):
     out_days = x[~x.index.isin(inzone)]
     lit = (lambda t: out_days >= t) if sign > 0 else (lambda t: out_days <= t)
     hit = (lambda t: (b >= t).sum()) if sign > 0 else (lambda t: (b <= t).sum())
-    row = {"저점 수": len(b), "지금 기준": now, "맞힘": int(hit(now)), "밖 켜진 날": int(lit(now).sum())}
+    row = {"저점 수": len(b), "지금 기준": now, "맞힘": int(hit(now)) if now is not None else None,
+           "밖 켜진 날": int(lit(now).sum()) if now is not None else None}
     for q, nm in ((1.0, "전부"), (0.75, "3/4"), (0.5, "절반")):
         t = b.quantile(1 - q) if sign > 0 else b.quantile(q)
         t = float(np.round(t, 2))
@@ -67,6 +68,9 @@ def run(m, P, Vol):
           ("MI04 하이일드", v["MI04"], 1, 3), ("MI05 10년−기준금리", v["MI05"], 1, 0.52), ("MI06 MOVE(5일 최고)", h5(v["MI06"]), 1, 105),
           ("MI07 WTI", v["MI07"], 1, 80), ("MI08 S&P 낙폭", v["MI08"], -1, -10), ("MI08 나스닥100 낙폭", v["MI08 나스닥100"], -1, -15),
           ("MI10 VIX÷VIX3M", v["MI10"], 1, 1), ("MI11 풋콜", v["MI11"], 1, 1.0), ("MI15 맥클렐런 미국", v["MI15"], -1, -50)]
+    if "OVX" in m:   # 원유 변동성 지수(의장 20:54 "유가를 유가변동성지수로"), 기준 미정 → 5일 최고값으로 역산
+        US.append(("MI07 원유 변동성 지수(5일 최고)", h5(m["OVX"]), 1, None))
+        US.append(("MI07 원유 변동성 지수(그날)", m["OVX"].dropna(), 1, None))
     if "MI14" in v:
         US.append(("MI14 QQQM÷RSP 주황선 대비 %", v["MI14"], -1, 10))
     KR = [("MI08 코스피 낙폭", v["MI08 코스피"], -1, -20), ("MI12 코스피 50일 이격도", v["MI12"], -1, 93),
