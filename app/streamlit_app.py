@@ -91,6 +91,9 @@ def change_table(s, unit="", digits=2):
         st.caption("자료 없음")
         return
     last_d, last = s.index[-1], s.iloc[-1]
+    newest = D.index[D.drop(columns=[c for c in ("공포탐욕",) if c in D.columns]).notna().any(axis=1)][-1]
+    if (newest - last_d).days > 3:
+        st.error(f"{last_d:%Y-%m-%d} 이후 자료 없음 (다른 자료는 {newest:%Y-%m-%d}까지)")
     rows = [("최근", last_d, last, None)]
     for name, off in (("전일", None), ("1주 전", pd.Timedelta(days=7)), ("1달 전", pd.DateOffset(months=1))):
         p = s.iloc[:-1] if off is None else s[s.index <= last_d - off]
