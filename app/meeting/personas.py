@@ -713,6 +713,12 @@ def miss_citadel(c):
         A['유입_5일'] = pd.to_numeric(A['유입_5일'], errors='coerce')
         for mk, unit, div in ((('미국', '억 달러', 100),) if pre else (('한국', '억원', 1), ('미국', '억 달러', 100))):   # 미국 원자료 백만달러 → 억 달러
             X = A[A['시장'] == mk].dropna(subset=['유입_5일'])
+            # 11/27 의장 "유니버스 종목도 아닌 것이 왜 나와": '참고-' 줄(유니버스 밖)과 '좌수 자료 의심' 줄은 순위에서 뺌
+            X = X[~X['번호'].astype(str).str.startswith('참고')] if '번호' in X else X
+            if '점검' in X:
+                X = X[X['점검'].fillna('').astype(str).str.strip() == '']
+            if '좌수변화_20일(%)' in X:
+                X = X[~(pd.to_numeric(X['좌수변화_20일(%)'], errors='coerce').abs() > 50)]
             if len(X):
                 fmt = (lambda v: p(v, 0, '')) if div == 1 else (lambda v: p(v / div, 1, ''))
                 G.append({'type': 'grid', 'title': f'{mk} ETF 자금 5일 유입·유출 상위 {k}', 'columns': ['구분', 'ETF', f'5일 유입({unit})'],
