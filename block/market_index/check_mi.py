@@ -151,7 +151,7 @@ def build(m, P):
     k150 = breadth_below(P, kr_cols, 150)
     for th in (70, 80, 90):
         KR[f"MI09 한국 유니버스 150일선 아래 ≥ {th}%"] = k150 >= th
-    for ma, ths in ((50, (95, 90, 85, 80)),):  # 의장: 50일 이격도
+    for ma, ths in ((50, (93, 90, 80)),):  # 의장: 50일 이격도, 기준 93(11/27)
         gap = ks / ks.rolling(ma).mean() * 100
         for th in ths:
             KR[f"MI12 코스피 {ma}일 이격도 ≤ {th}"] = gap <= th

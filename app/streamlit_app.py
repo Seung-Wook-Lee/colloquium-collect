@@ -208,7 +208,7 @@ if top[2].button("자료 다시 읽기", width="stretch"):
 
 g = lambda k: D[k] if k in D.columns else pd.Series(dtype=float)
 
-st.subheader("1. 마켓 (MI)")
+st.subheader("1. 마켓 (Market Index)")
 # 1-1 공포와 탐욕 (CNN 구간: 0~25 극단적 공포, 25~45 공포, 45~55 중립, 55~75 탐욕, 75~100 극단적 탐욕)
 item("MI01", "공포와 탐욕 지수", g("공포탐욕"), digits=1, title="공포와 탐욕 지수 (CNN)", yfix=[0, 100], bands=[
     (0, 25, "#dc2626", "극단적 공포"), (25, 45, "#f97316", "공포"), (45, 55, "#9ca3af", "중립"),
