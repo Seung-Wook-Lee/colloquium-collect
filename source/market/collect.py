@@ -1,7 +1,7 @@
 """회의 자료 수집 (source/market)
 
-7개 자료: 공포와 탐욕 지수, CTA 포지션 근사(S&P500·나스닥100·러셀2000 가격으로 계산), VIX, 하이일드 스프레드,
-미국채 10년 금리, MOVE 지수, WTI.
+자료: 공포와 탐욕 지수, CTA 포지션 근사(S&P500·나스닥100·러셀2000 가격으로 계산), VIX, 하이일드 스프레드,
+미국채 10년 금리, MOVE 지수, WTI, 주식 풋콜 비율.
 
 - 저장은 드라이브 '콜로키움 수집데이터/1_data/가격10년_시장지표.csv.gz' 한 파일(새 파일 없음).
 - 이미 있는 자료는 다시 받지 않는다. 각 칸의 마지막 값 다음 날짜부터만 덧붙인다.
@@ -9,7 +9,7 @@
 - 하이일드 스프레드는 FRED가 3년치만 공개 → 3년치로 간다(의장 11/27).
 - 한투에 없는 자료라 다른 곳에서 받는다(의장 11/27):
     FRED: 10년 금리(DGS10), 하이일드 스프레드(BAMLH0A0HYM2), WTI(DCOILWTICO)
-    Cboe: VIX
+    Cboe: VIX, 주식 풋콜 비율(CPCE, 날짜별 시장 통계 'EQUITY PUT/CALL RATIO', 의장 11/27 "풋콜 받으세요. 매일")
     야후: MOVE, S&P500(고가·저가 포함)·나스닥100·러셀2000 (CTA 계산용 가격)
     공포와 탐욕 지수: CNN 값을 매일 모아 공개하는 GitHub 자료(whit3rabbit/fear-greed-data)
 
@@ -64,6 +64,22 @@ def cboe_vix():
     d = pd.read_csv(io.StringIO(r.text))
     d["DATE"] = pd.to_datetime(d["DATE"]).dt.strftime("%Y-%m-%d")
     return d.set_index("DATE")["CLOSE"].astype(float)
+
+
+def cboe_cpce(last):
+    """마지막 값 다음 평일부터 오늘까지 Cboe 날짜별 시장 통계에서 주식 풋콜 비율."""
+    start = pd.Timestamp(last) + pd.Timedelta(days=1) if last else pd.Timestamp.today() - pd.Timedelta(days=30)
+    out = {}
+    for d in pd.bdate_range(start.normalize(), pd.Timestamp.today().normalize()):
+        r = requests.get(f"https://cdn.cboe.com/data/us/options/market_statistics/daily/{d:%Y-%m-%d}_daily_options",
+                         headers=UA, timeout=30)
+        if r.status_code != 200:
+            continue  # 휴장일·아직 안 나온 날
+        for x in r.json().get("ratios", []):
+            if "EQUITY" in str(x.get("name", "")).upper():
+                out[f"{d:%Y-%m-%d}"] = float(x["value"])
+                break
+    return pd.Series(out, dtype=float)
 
 
 def yahoo(sym):
@@ -124,6 +140,7 @@ def main():
                              else (pd.Timestamp.today() - pd.DateOffset(years=10)).strftime("%Y-%m-%d"))),
         ("VIX", cboe_vix),
         ("공포탐욕", cnn_fear_greed),
+        ("CPCE", lambda: cboe_cpce(df["CPCE"].last_valid_index() if "CPCE" in df.columns else None)),
     ]
     for col, f in jobs:
         try:

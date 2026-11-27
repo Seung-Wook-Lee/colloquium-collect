@@ -60,10 +60,11 @@ PERIOD = {"1개월": pd.DateOffset(months=1), "3개월": pd.DateOffset(months=3)
           "10년": pd.DateOffset(years=10), "전체": None}
 
 
-def period(key):
-    """그래프 위 기간 단추. 고른 기간만 잘라 그려서 세로 눈금이 그 기간에 맞게 잡힌다."""
-    v = st.segmented_control("기간", list(PERIOD), default="1년", key=f"p_{key}", label_visibility="collapsed")
-    return PERIOD[v or "1년"]
+def period(key, default="3년"):
+    """그래프 위 기간 단추. 고른 기간만 잘라 그려서 세로 눈금이 그 기간에 맞게 잡힌다.
+    처음 값 3년(의장 11/27), 공포와 탐욕 지수만 1년."""
+    v = st.segmented_control("기간", list(PERIOD), default=default, key=f"p_{key}", label_visibility="collapsed")
+    return PERIOD[v or default]
 
 
 def cut(s, off):
@@ -78,13 +79,13 @@ def yrange(*ss, pad=0.06):
     return [lo - d, hi + d]
 
 
-def chart(series, title, unit="", lines=(), bands=(), height=330, key=None, yfix=None):
+def chart(series, title, unit="", lines=(), bands=(), height=330, key=None, yfix=None, default="3년"):
     """series: {이름: pd.Series}. lines: (값, 글). bands: (아래, 위, 색, 글)."""
     series = {k: v for k, v in series.items() if len(v)}
     if not series:
         st.info(f"{title}: 아직 자료가 없습니다.")
         return
-    off = period(key or title)
+    off = period(key or title, default)
     series = {k: cut(v, off) for k, v in series.items()}
     fig = go.Figure()
     for lo, hi, color, text in bands:
@@ -149,6 +150,10 @@ def price_cta(name, price, score, freq):
     for v, txt in ((-4, "−4σ 바닥"), (4, "+4σ 고점")):
         fig.add_hline(y=v, line_dash="dot", line_color=S.MUTED, line_width=1, annotation_text=txt,
                       annotation_font=dict(size=10, color=S.MUTED), row=2, col=1)
+    for v in (-3.5, 3.5):  # 의장 11/27: ±3.5σ부터 주의 (점선 하나 더)
+        fig.add_hline(y=v, line_dash="dash", line_color="#b6bcc6", line_width=0.8,
+                      annotation_text=f"{v:+.1f}σ".replace("-", "−"), annotation_position="top left",
+                      annotation_font=dict(size=9, color="#9ca3af"), row=2, col=1)
     fig.update_layout(template="plotly_white", font=FONT, paper_bgcolor="#ffffff", plot_bgcolor=S.PLOT_BG,
                       height=560, margin=dict(l=8, r=8, t=30, b=8), hovermode="x unified", showlegend=False,
                       bargap=0.15, dragmode=False,
@@ -210,7 +215,7 @@ g = lambda k: D[k] if k in D.columns else pd.Series(dtype=float)
 
 st.subheader("1. 마켓 (Market Index)")
 # 1-1 공포와 탐욕 (CNN 구간: 0~25 극단적 공포, 25~45 공포, 45~55 중립, 55~75 탐욕, 75~100 극단적 탐욕)
-item("MI01", "공포와 탐욕 지수", g("공포탐욕"), digits=1, title="공포와 탐욕 지수 (CNN)", yfix=[0, 100], bands=[
+item("MI01", "공포와 탐욕 지수", g("공포탐욕"), digits=1, title="공포와 탐욕 지수 (CNN)", yfix=[0, 100], default="1년", bands=[
     (0, 25, "#dc2626", "극단적 공포"), (25, 45, "#f97316", "공포"), (45, 55, "#9ca3af", "중립"),
     (55, 75, "#84cc16", "탐욕"), (75, 100, "#16a34a", "극단적 탐욕")])
 
@@ -219,7 +224,7 @@ cta_d = CTA.cta(pd.DataFrame({k: g(k) for k in ("SPX", "NDX", "RUT")}))
 cta_s = cta_d["CTA σ"]
 with st.container(border=True, key="card_1-2"):
     head("MI02", "CTA 근사값", cta_s, unit="σ",
-         note="S&P500 20%·나스닥100 60%·러셀2000 20% 가격 추세로 계산. −4σ 바닥·+4σ 고점 기준(11/23 회의).")
+         note="S&P500 20%·나스닥100 60%·러셀2000 20% 가격 추세로 계산. −4σ 바닥·+4σ 고점 기준(11/23 회의), ±3.5σ부터 주의(11/27).")
     cs = cta_s if rule is None else cta_s.resample(rule).last().dropna()
     c1, c2 = st.columns([1, 1], gap="medium")
     with c1:

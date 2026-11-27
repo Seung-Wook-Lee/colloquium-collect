@@ -1,6 +1,6 @@
-"""MI 다수결 (의장 11/27 19:23 "단독이 아니죠. 다수결")
+"""MI 켜진 비율 (의장 11/27 19:23 "다수결", 19:27 "과반수가 아니라 %로 계산")
 
-미국 쪽 MI 11개를 날마다 켜짐(1)·꺼짐(0)으로 세고, 자료가 있는 것 중 켜진 비율이 절반을 넘으면 '과반'.
+미국 쪽 MI 11개를 날마다 켜짐(1)·꺼짐(0)으로 세고, 켜진 비율(%) = 켜진 수 ÷ 자료가 있는 기준 수 × 100.
 기준(의장 11/27, 임시 표시 = 아직 정하는 중):
   MI01 공포와 탐욕 ≤ 15 / MI02 CTA 근사값 ≤ −3.3σ / MI03 VIX ≥ 30 (5거래일 유지) / MI04 하이일드 ≥ 4% (임시)
   MI05 10년 금리 ≤ 4.8% (임시, 기준금리 대비 방식 찾는 중) / MI06 MOVE ≥ 100 (2거래일 유지) / MI07 WTI ≤ 80달러
@@ -39,14 +39,14 @@ def table(m, P):
     D = pd.DataFrame(S).ffill(limit=3)
     D["켜진 수"] = D[list(S)].sum(axis=1)
     D["자료 수"] = D[list(S)].notna().sum(axis=1)
-    D["과반"] = D["켜진 수"] / D["자료 수"] > 0.5
+    D["켜진 비율"] = D["켜진 수"] / D["자료 수"] * 100
     return D
 
 
 def table_kr(m, P):
     """코스피용: 미국 MI 중 MI08·MI09를 한국 것으로 바꾸고 MI12를 더함.
     MI08 코스피 낙폭 ≤ −20% (아래쪽 10% 들어갈 때 평균 −23.4%) / MI09 한국 유니버스 150일선 아래 ≥ 80% / MI12 코스피 50일 이격도 ≤ 93"""
-    D = table(m, P).drop(columns=["켜진 수", "자료 수", "과반"])
+    D = table(m, P).drop(columns=["켜진 수", "자료 수", "켜진 비율"])
     ks = P["^KS11"].dropna()
     kr = [c for c in P.columns if c.endswith((".KS", ".KQ"))]
     D = D.reindex(D.index.union(ks.index)).ffill(limit=3)
@@ -57,7 +57,7 @@ def table_kr(m, P):
     cols = [c for c in D.columns if c.startswith("MI")]
     D["켜진 수"] = D[cols].sum(axis=1)
     D["자료 수"] = D[cols].notna().sum(axis=1)
-    D["과반"] = D["켜진 수"] / D["자료 수"] > 0.5
+    D["켜진 비율"] = D["켜진 수"] / D["자료 수"] * 100
     return D.reindex(ks.index)
 
 
