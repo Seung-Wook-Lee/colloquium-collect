@@ -72,6 +72,21 @@ def score(px, spx, s):
     return r
 
 
+def drawdown_ranges(m, P):
+    """의장 11/27 19:18: 하락 4번의 바닥 10% 구간 날들의 낙폭(1년 최고 대비) 최소·최대, 낙폭 기준별 맞음."""
+    spx = m["SPX"].dropna()
+    idx = {"S&P500": spx, "나스닥100": m["NDX"].dropna(), "코스피": P["^KS11"].dropna()}
+    rows, tests = [], []
+    for nm, px in idx.items():
+        dd = (px / px.rolling(252, min_periods=1).max() - 1) * 100
+        for ep, (d, ld, low) in zones(px, spx).items():
+            rows.append({"지수": nm, "하락": ep, "구간": f"{d[0]:%y-%m-%d}~{d[-1]:%y-%m-%d}",
+                         "낙폭 얕은 쪽": round(dd[d].max(), 1), "낙폭 깊은 쪽": round(dd[d].min(), 1)})
+        for th in (-8, -10, -12, -15, -20):
+            tests.append({"지수": nm, "기준": f"낙폭 ≤ {th}%", **score(px, spx, dd <= th)})
+    return pd.DataFrame(rows), pd.DataFrame(tests)
+
+
 def build(m, P):
     spx = m["SPX"].dropna()
     ks = P["^KS11"].dropna()
@@ -126,3 +141,6 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 20)
     print(t.to_string(index=False))
+    a, b = drawdown_ranges(E.load("가격10년_시장지표"), E.load("가격10년_종가"))
+    print(a.to_string(index=False))
+    print(b.to_string(index=False))
