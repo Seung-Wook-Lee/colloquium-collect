@@ -1,6 +1,6 @@
 """회의 자료 수집 (source/market)
 
-7개 자료: 공포와 탐욕 지수, CTM(S&P500·나스닥100 가격으로 계산), VIX, 하이일드 스프레드,
+7개 자료: 공포와 탐욕 지수, CTA 포지션 근사(S&P500·나스닥100·러셀2000 가격으로 계산), VIX, 하이일드 스프레드,
 미국채 10년 금리, MOVE 지수, WTI.
 
 - 저장은 드라이브 '콜로키움 수집데이터/1_data/가격10년_시장지표.csv.gz' 한 파일(새 파일 없음).
@@ -10,7 +10,7 @@
 - 한투에 없는 자료라 다른 곳에서 받는다(의장 11/27):
     FRED: 10년 금리(DGS10), 하이일드 스프레드(BAMLH0A0HYM2), WTI(DCOILWTICO)
     Cboe: VIX
-    야후: MOVE, S&P500(고가·저가 포함), 나스닥100 (CTM 계산용 가격)
+    야후: MOVE, S&P500(고가·저가 포함)·나스닥100·러셀2000 (CTA 계산용 가격)
     공포와 탐욕 지수: CNN 값을 매일 모아 공개하는 GitHub 자료(whit3rabbit/fear-greed-data)
 
 실행: python source/market/collect.py [--dry]
@@ -135,7 +135,8 @@ def main():
         add_new(df, "하이일드", df["BAMLH0A0HYM2"].dropna(), log)
     for sym, cols in (("^MOVE", {"close": "MOVE"}),
                       ("^GSPC", {"close": "SPX", "high": "SPX_HIGH", "low": "SPX_LOW"}),
-                      ("^NDX", {"close": "NDX"})):
+                      ("^NDX", {"close": "NDX"}),
+                      ("^RUT", {"close": "RUT"})):
         try:
             d = yahoo(sym)
             for k, col in cols.items():
