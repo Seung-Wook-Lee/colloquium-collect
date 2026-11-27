@@ -67,6 +67,7 @@ def chart(series, title, unit="", lines=(), bands=(), height=330):
                       annotation_text=text, annotation_font_size=10)
     end = max(s.index[-1] for s in series.values())
     fig.update_layout(
+        template="plotly_white", paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
         title=dict(text=title, font=dict(size=14), x=0.01, y=0.98, yanchor="top"), height=height + 30,
         margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
         legend=dict(orientation="h", x=0, xanchor="left", y=1.02, yanchor="bottom", font=dict(size=11)),
@@ -91,6 +92,9 @@ def change_table(s, unit="", digits=2):
         st.caption("자료 없음")
         return
     last_d, last = s.index[-1], s.iloc[-1]
+    newest = D.index[D.drop(columns=[c for c in ("공포탐욕",) if c in D.columns]).notna().any(axis=1)][-1]
+    if (newest - last_d).days > 3:
+        st.error(f"{last_d:%Y-%m-%d} 이후 자료 없음 (다른 자료는 {newest:%Y-%m-%d}까지)")
     rows = [("최근", last_d, last, None)]
     for name, off in (("전일", None), ("1주 전", pd.Timedelta(days=7)), ("1달 전", pd.DateOffset(months=1))):
         p = s.iloc[:-1] if off is None else s[s.index <= last_d - off]
