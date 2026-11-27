@@ -8,6 +8,11 @@
   그 뒤 지수    = 그 과거 하락들이 지금 낙폭에 처음 닿은 날부터 13주·26주 뒤 지수 수익률 평균·승률.
   자료          = 야후 지수 종가(S&P500 1928~, 나스닥100 1985~).
 
+  11/27 의장 "단기 바닥에서 ±10% 안에 들어왔을 확률" (화면 본 숫자, band10):
+                  위 '바닥 확률'과 같은 공식(Lunde & Timmermann 하락 구간의 표본 비율)에 여유만 10%.
+                  = 과거 끝난 하락 구간 중 지금 낙폭 이상 빠졌던 것들에서, 최종 저점이 지금 가격의 10% 안(최종 저점 ≥ 지금 × 0.90)이었던 비율.
+                  10%는 같은 논문 필터의 하락 끝 기준(저점 +10%)과 같은 크기. 변수를 더하지 않음.
+
   위험률 모형(hazard, 화면·원고에 쓰는 본 숫자) = Lunde & Timmermann(2004)의 본 모형 형태:
                   하락 구간 안의 주마다 '이번 주가 최종 저점 3% 안인가'를 낙폭·기간(로그 주수)과
                   시장 상태 변수(VIX, VIX 4주 변화, 미 10년 금리 4주 변화, RSI(14), 200일선 이격, 4주 수익률)로
@@ -181,13 +186,25 @@ def buckets(W, raw, edges=(0, 20, 30, 40, 50, 60, 70, 80, 101)):
     return pd.DataFrame(rows)
 
 
+BAND = 0.10   # 11/27 의장: 단기 바닥 ±10%
+
+
+def band10(s, cfg=None):
+    """11/27 의장: 지금이 단기 바닥 ±10% 안일 확률(표본 비율, 위 prob()와 같은 공식, 여유 10%). 칸 이름 앞에 '띠10_'."""
+    r = prob(s, {**(cfg or {}), '바닥_여유': BAND})
+    return {f'띠10_{k}': v for k, v in r.items()}
+
+
 def hazard_today(idx_list=('^NDX', '^GSPC'), cfg=None):
+    """한 줄 = 기준지수. '띠10_' 칸 = 단기 바닥 ±10% 확률(화면 본 숫자), 나머지 = 로지스틱 회귀(저점 3% 안, 화면 아래 따로·gate가 씀)."""
     import stored   # 11/25 의장: 저장본에서만
     P = stored.close(list(idx_list) + ['^VIX', '^TNX'], start='1985-01-01')
     rows = []
     for t in idx_list:
         one, test = hazard(P[t], P['^VIX'], P['^TNX'], cfg)
-        rows.append({'기준지수': t, '날짜': str(P[t].dropna().index[-1].date()), **one, **{f'검정_{k}': v for k, v in test.items()}})
+        long_ = stored.close(t, start=START.get(t, '1985-01-01'))
+        rows.append({'기준지수': t, '날짜': str(P[t].dropna().index[-1].date()), **band10(long_, cfg), **one,
+                     **{f'검정_{k}': v for k, v in test.items()}})
     return pd.DataFrame(rows)
 
 

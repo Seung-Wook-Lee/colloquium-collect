@@ -553,9 +553,11 @@ def conclusion(c):
             elif c.m.get('CTM_GREEN') == 1:
                 num_.insert(0, f"지수 매수 신호(CTM 반등 시작) {c.m.get('CTM_GREEN_STAGE')}단계/3")
         if mk == '미국':
+            B10 = V['B']   # 11/27 의장: 옛 '바닥일 확률' 대신 단기 바닥 ±10% 안 확률(바닥확률.csv '띠10_확률')
+            b10 = {r['기준지수']: num(r.get('띠10_확률')) for _, r in B10.iterrows()} if len(B10) and '띠10_확률' in B10 else {}
             for ix, nm_ in (('^NDX', '나스닥100'), ('^GSPC', 'S&P500')):
-                if V['bp'].get(ix) is not None:
-                    num_.append(f"{nm_}이 이번 하락의 바닥일 확률 {V['bp'][ix]:.0f}%")
+                if b10.get(ix) is not None:
+                    num_.append(f"{nm_}이 단기 바닥 ±10% 안에 들어왔을 확률 {b10[ix]:.0f}%")
         kr = c.mac_row('S&P500' if mk == '미국' else '코스피')
         if kr is not None:
             num_.append(f"{'S&P500' if mk == '미국' else '코스피'} 사상 최고 대비 {p(num(kr.get('최고 대비(%)')))}")
