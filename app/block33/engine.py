@@ -245,8 +245,7 @@ def run(d, cfg=None):
     if m.get('DEF_미국'): m['DEF_한국'] = 1   # 11/17 의장: 미국이 방어 국면이면 한국도 방어
     m['ROT_DEF'] = int(any(v['DEF'] for v in RG.values()))
     m.update(_try('기록(제이미)', lambda: O.record(m), {}))                      # 제이미 C_rate·C_techvol·C_breadth: 기록만
-    IR = _try('지수 4국면', lambda: O.index_regime(d), {})                     # 지수 252·21일 4국면: 기록만
-    for mk, v in IR.items(): m[f'IDX_{mk}'] = v
+    IR = {}   # 11/27 의장: '지수 4국면' 지움(orders.index_regime 삭제)
     OC = B.get('주문', {})
     LR = _try('층 상대강도', lambda: O.layer_rs(d, P), {}) if len(P) else {}
     f['lay_rs_rank'] = [LR.get((mk, l), (np.nan, 0))[0] for mk, l in zip(f['시장'], f['layer'])]

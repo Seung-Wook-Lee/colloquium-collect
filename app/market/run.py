@@ -37,7 +37,6 @@ def build(IN, W, B, m, M, c=None):
         Mm = M if M is not None else pd.DataFrame(columns=['방향', '결과'])
         rows.append({'시장': mk,
                      '방어 국면(2-14)': '적용 안 함' if '2-14' in X else ('방어' if m.get(f'DEF_{mk}') else '평상'),
-                     '지수 국면': m.get(f'IDX_{mk}', ''),
                      '시장 블록 부담': int(((Mm['방향'] == '부담') & (Mm['결과'] == '통과')).sum()) if len(Mm) else None,
                      '시장 블록 기회': int(((Mm['방향'] == '기회') & (Mm['결과'] == '통과')).sum()) if len(Mm) else None,
                      'JPM 추세 신호 전환(2-6)': {1: '예', 0: '아니오'}.get(int(m['SYS_TURN'])) if m.get('SYS_TURN') is not None else '',
