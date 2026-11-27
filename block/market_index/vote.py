@@ -34,7 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "source", "market"))
 import cta as C  # noqa: E402
 
-OVX_ON = 50             # MI07 원유 변동성 지수 기준(10년 저점 절반을 맞히는 역산값)
+OVX_ON = 50             # MI07 원유 변동성 지수 기준(의장 11/28 0:17 확정, 10년 저점 절반을 맞히는 역산값)
 RULES = [  # (번호, 이름, 기준 글)
     ("MI01", "공포와 탐욕 지수", "15 이하"),
     ("MI02", "CTA 근사값", "−3.3σ 이하"),
