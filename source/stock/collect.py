@@ -8,8 +8,11 @@
 - 드라이브 '콜로키움 수집데이터/1_data/가격10년_{시가,고가,저가,종가,거래량}.csv.gz'
   뒤에 그날 하루치만 붙인다. 이미 값이 있는 칸은 건드리지 않는다. 새 파일은 만들지 않는다.
 
-실행: python source/stock/collect.py --market us|kr [--dry]
+- PER·EPS·PEG(의장 11/27): 같은 실행에서 같은 날짜로 가격10년_{PER,EPS,PEG}.csv.gz 에 붙인다(source/stock/valuation.py).
+
+실행: python source/stock/collect.py --market us|kr [--dry] [--value-only]
   --dry : 한투에서 받기만 하고 드라이브에는 쓰지 않는다(시험용).
+  --value-only : 가격은 건너뛰고 PER·EPS·PEG만 (종가 파일의 그 시장 마지막 날짜로).
 필요한 시크릿: KIS_APP_KEY, KIS_APP_SECRET, DRIVE_URL, DRIVE_TOKEN
 """
 import argparse
@@ -24,9 +27,13 @@ import time
 import pandas as pd
 import requests
 
+import valuation as V
+
 KIS = "https://openapi.koreainvestment.com:9443"
 DB_DIR = "콜로키움 수집데이터/1_data"
 FIELDS = ["시가", "고가", "저가", "종가", "거래량"]
+VALUES = ["PER", "EPS", "PEG"]
+is_kr = lambda t: t.endswith(".KS") or t.endswith(".KQ")
 
 # 한투 해외 거래소 코드: NAS(나스닥) → NYS(뉴욕) → AMS(아멕스·Arca) 차례로 찾는다.
 
@@ -78,6 +85,7 @@ class Kis:
             "grant_type": "client_credentials", "appkey": self.key, "appsecret": self.secret})
         r.raise_for_status()
         self.token = r.json()["access_token"]
+        self.excd = {}  # 미국 종목별로 찾은 거래소
         print("[한투] 접속 1번 (토큰 받음)")
 
     def get(self, path, tr_id, params):
@@ -122,17 +130,14 @@ class Kis:
                 if d and x.get("clos") not in (None, "", "0", "0.0000"):
                     rows[d] = tuple(float(x[k]) for k in ("open", "high", "low", "clos", "tvol"))
             if rows:
+                self.excd[symb] = ex
                 return rows
         return {}
 
 
 # ---------------- 수집 ----------------
-def collect(market):
-    cols = load_universe()
-    kis = Kis()
+def collect(market, kis, sub):
     got, miss = {}, []
-    is_kr = lambda t: t.endswith(".KS") or t.endswith(".KQ")
-    sub = [t for t in cols if is_kr(t) == (market == "kr")]
     for t in sub:
         if market == "kr":
             rows = kis.kr_daily(t.split(".")[0])
@@ -152,44 +157,100 @@ def collect(market):
     return pd.Timestamp(day).strftime("%Y-%m-%d"), {t: v[day] for t, v in got.items() if day in v}
 
 
+def write_day(field, day, vals, dry):
+    """가격10년_{field} 의 day 줄에 vals{종목: 값} 중 빈 칸만 채운다. 파일이 없으면 새로 만든다(PER·EPS·PEG)."""
+    path = f"{DB_DIR}/가격10년_{field}.csv.gz"
+    try:
+        df = pd.read_csv(io.BytesIO(drive_get(path)), compression="gzip", index_col=0)
+    except FileNotFoundError:
+        df = pd.DataFrame(index=pd.Index([], name="Date"), dtype=float)
+        print(f"[{field}] 파일 없음 → 새로 만듦")
+    name = df.index.name or "Date"
+    df.index = df.index.astype(str)
+    before = len(df)
+    if day not in df.index:
+        df.loc[day] = float("nan")
+    filled, kept = 0, 0
+    for t, v in vals.items():
+        if pd.isna(v):
+            continue
+        if t not in df.columns:
+            df[t] = float("nan")
+        if pd.isna(df.at[day, t]):
+            df.at[day, t] = v
+            filled += 1
+        else:
+            kept += 1
+    df = df.sort_index()
+    df.index.name = name
+    print(f"[{field}] {day} 채움 {filled}칸, 이미 있어 그대로 {kept}칸, 줄 {before}→{len(df)}")
+    if dry:
+        return
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as g:
+        g.write(df.to_csv().encode("utf-8"))
+    drive_put(path, buf.getvalue(), "application/x-gzip")
+    print(f"[{field}] 드라이브에 씀")
+
+
 def append(day, vals, dry):
     for i, field in enumerate(FIELDS):
-        path = f"{DB_DIR}/가격10년_{field}.csv.gz"
-        df = pd.read_csv(io.BytesIO(drive_get(path)), compression="gzip", index_col=0)
-        name = df.index.name
-        df.index = df.index.astype(str)
-        before = len(df)
-        if day not in df.index:
-            df.loc[day] = float("nan")
-        filled, kept = 0, 0
-        for t, v in vals.items():
-            if t not in df.columns:
-                df[t] = float("nan")
-                print(f"[{field}] 새 종목 칸 {t}")
-            if pd.isna(df.at[day, t]):
-                df.at[day, t] = v[i]
-                filled += 1
+        write_day(field, day, {t: v[i] for t, v in vals.items()}, dry)
+
+
+def values(market, kis, sub):
+    """종목별 (PER, EPS, PEG). ETF처럼 없는 값은 빈칸."""
+    out = {}
+    sec = None
+    if market == "us":
+        try:
+            sec = V.Sec()
+        except Exception as e:
+            print(f"[SEC] 못 받음 ({e}) → PEG 빈칸")
+    for t in sub:
+        try:
+            if market == "kr":
+                per, eps, g = V.kr_value(kis, t.split(".")[0])
             else:
-                kept += 1
-        df = df.sort_index()
-        df.index.name = name
-        print(f"[{field}] {day} 채움 {filled}칸, 이미 있어 그대로 {kept}칸, 줄 {before}→{len(df)}")
-        if dry:
+                symb = t.replace("-", "/")
+                per, eps = V.us_value(kis, symb, kis.excd.get(symb, "NAS"))
+                g = sec.eps_growth(t) if sec else float("nan")
+        except Exception as e:
+            print(f"[값] {t} 못 받음 ({e})")
             continue
-        buf = io.BytesIO()
-        with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as g:
-            g.write(df.to_csv().encode("utf-8"))
-        drive_put(path, buf.getvalue(), "application/x-gzip")
-        print(f"[{field}] 드라이브에 씀")
+        per = per if per > 0 else float("nan")
+        out[t] = (per, eps if eps == eps and eps != 0 else float("nan"), V.peg(per, g))
+    n = [sum(1 for v in out.values() if v[i] == v[i]) for i in range(3)]
+    print(f"[값] {market} {len(sub)}개 중 PER {n[0]}개, EPS {n[1]}개, PEG {n[2]}개")
+    show = [t for t in sub if t in out][:5]
+    for t in show:
+        print(f"   {t}: PER {out[t][0]:.2f}, EPS {out[t][1]:.2f}, PEG {out[t][2]:.2f}")
+    return out
+
+
+def last_day(market):
+    df = pd.read_csv(io.BytesIO(drive_get(f"{DB_DIR}/가격10년_종가.csv.gz")), compression="gzip", index_col=0)
+    df = df[[c for c in df.columns if not c.startswith("^") and is_kr(c) == (market == "kr")]]
+    return str(df.dropna(how="all").index[-1])[:10]
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--market", choices=["us", "kr"], required=True)
     ap.add_argument("--dry", action="store_true")
+    ap.add_argument("--value-only", action="store_true")
     a = ap.parse_args()
-    day, vals = collect(a.market)
-    append(day, vals, a.dry)
+    sub = [t for t in load_universe() if is_kr(t) == (a.market == "kr")]
+    kis = Kis()
+    if a.value_only:
+        day = last_day(a.market)
+        print(f"[값만] {day}")
+    else:
+        day, vals = collect(a.market, kis, sub)
+        append(day, vals, a.dry)
+    val = values(a.market, kis, sub)
+    for i, field in enumerate(VALUES):
+        write_day(field, day, {t: v[i] for t, v in val.items()}, a.dry)
     print("[끝] 시험 실행: 드라이브에 쓰지 않음" if a.dry else "[끝]")
 
 
