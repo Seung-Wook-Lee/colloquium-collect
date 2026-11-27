@@ -87,6 +87,29 @@ def drawdown_ranges(m, P):
     return pd.DataFrame(rows), pd.DataFrame(tests)
 
 
+def lower_tenth(m, P):
+    """의장 11/27 19:20: 고점~바닥 폭의 아래쪽 10%(종가 ≤ 바닥 + 0.1×(고점−바닥))에 들어간 날·나온 날의 고점 대비 낙폭."""
+    spx = m["SPX"].dropna()
+    rows = []
+    for nm, px in (("S&P500", spx), ("나스닥100", m["NDX"].dropna()), ("코스피", P["^KS11"].dropna())):
+        for ep, (pk, ld, low, end) in episodes(px, spx).items():
+            hi = px[pk]
+            line = low + 0.1 * (hi - low)
+            before, after = px[pk:ld], px[ld:]
+            ent, ex = before[before <= line].index[0], after[after > line].index[0]
+            dd = lambda d: round((px[d] / hi - 1) * 100, 1)
+            rows.append({"지수": nm, "하락": ep, "고점": pk.date(), "바닥": ld.date(), "바닥 낙폭": dd(ld),
+                         "들어간 날": ent.date(), "들어갈 때 낙폭": dd(ent), "나온 날": ex.date(), "나올 때 낙폭": dd(ex)})
+    return pd.DataFrame(rows)
+
+
+def kospi_gap50(P):
+    """코스피 50일 이격도(종가 ÷ 50일 평균 × 100): 하락 바닥날 값, 80 이하·130 이상 날."""
+    ks = P["^KS11"].dropna()
+    g = ks / ks.rolling(50).mean() * 100
+    return g
+
+
 def build(m, P):
     spx = m["SPX"].dropna()
     ks = P["^KS11"].dropna()
