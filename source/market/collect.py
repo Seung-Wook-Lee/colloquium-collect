@@ -11,7 +11,7 @@
     FRED: 10년 금리(DGS10), 하이일드 스프레드(BAMLH0A0HYM2), WTI(DCOILWTICO)
     Cboe: VIX
     야후: MOVE, S&P500(고가·저가 포함), 나스닥100 (CTM 계산용 가격)
-    CNN: 공포와 탐욕 지수
+    공포와 탐욕 지수: CNN 값을 매일 모아 공개하는 GitHub 자료(whit3rabbit/fear-greed-data)
 
 실행: python source/market/collect.py [--dry]
 필요한 시크릿: FRED_KEY, DRIVE_URL, DRIVE_TOKEN
@@ -79,12 +79,13 @@ def yahoo(sym):
 
 
 def cnn_fear_greed():
-    r = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata/", headers={
-        **UA, "Referer": "https://edition.cnn.com/", "Origin": "https://edition.cnn.com"}, timeout=60)
+    """CNN 공포와 탐욕 지수 일별 값을 모아 공개하는 GitHub 자료(2011~).
+    CNN 서버는 자동 접속을 막아서(418) 이 공개 자료를 쓴다(의장 11/27)."""
+    r = requests.get("https://raw.githubusercontent.com/whit3rabbit/fear-greed-data/main/fear-greed.csv",
+                     timeout=60)
     r.raise_for_status()
-    pts = r.json()["fear_and_greed_historical"]["data"]
-    s = pd.Series({pd.to_datetime(p["x"], unit="ms").strftime("%Y-%m-%d"): float(p["y"]) for p in pts})
-    return s[~s.index.duplicated(keep="last")]
+    d = pd.read_csv(io.StringIO(r.text))
+    return d.set_index("Date")["Fear Greed"].astype(float)
 
 
 # ---------------- 덧붙이기 ----------------
