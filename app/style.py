@@ -46,6 +46,16 @@ table.t td.dim {color: #9ca3af;}
 div[data-testid="stButtonGroup"] button {min-height: 26px !important; padding: 0 10px !important; font-size: 0.75rem !important;}
 div[data-testid="stButtonGroup"] button p {font-size: 0.75rem !important;}
 .gauge {padding: 4px 2px;}
+.jump {display: flex; gap: 8px; margin: -0.4rem 0 1rem 0; position: sticky; top: 3.2rem; z-index: 50;}
+.jump a {font-size: 0.85rem; font-weight: 600; color: #111827 !important; text-decoration: none !important;
+         background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 14px;}
+.jump a:hover {background: #f3f4f6; border-color: #d1d5db;}
+.anchor {scroll-margin-top: 4rem;}
+.tl {display: inline-flex; gap: 4px; align-items: center; padding: 4px 6px; margin-right: 10px; background: #1f2937;
+     border-radius: 12px; vertical-align: middle; position: relative; top: -2px;}
+.tl i {width: 13px; height: 13px; border-radius: 50%; display: inline-block; background: #4b5563;}
+.tl i.tl-g.lit {background: #22c55e; box-shadow: 0 0 8px 2px rgba(34,197,94,.75);}
+.tl i.tl-r.lit {background: #ef4444; box-shadow: 0 0 8px 2px rgba(239,68,68,.75);}
 .gauge .g-top {display: flex; justify-content: space-between; align-items: baseline;}
 .gauge .g-name {font-size: 0.95rem; font-weight: 700; color: #111827;}
 .gauge .g-dt {font-size: 0.75rem; color: #9ca3af;}
@@ -54,11 +64,14 @@ div[data-testid="stButtonGroup"] button p {font-size: 0.75rem !important;}
 .gauge .g-sub {font-size: 0.78rem; color: #6b7280; margin: 4px 0 10px 0;}
 .gauge .g-bar {height: 10px; background: #eef0f3; border-radius: 6px; overflow: hidden;}
 .gauge .g-fill {height: 100%; background: linear-gradient(90deg, #4ade80, #16a34a); border-radius: 6px;}
-.gauge .g-chips {display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px;}
-.chip {font-size: 0.7rem; font-weight: 600; padding: 3px 7px; border-radius: 999px; font-variant-numeric: tabular-nums;}
-.chip.on {background: #dcfce7; color: #15803d; border: 1px solid #86efac;}
-.chip.off {background: #f3f4f6; color: #9ca3af; border: 1px solid #e5e7eb;}
-.chip.na {background: #ffffff; color: #d1d5db; border: 1px dashed #e5e7eb;}
+.gauge .g-list {margin-top: 12px; display: grid; grid-template-columns: 1fr; row-gap: 3px;}
+.g-row {display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: #374151;}
+.g-row .g-no {font-weight: 700; color: #111827; width: 2.6rem; font-variant-numeric: tabular-nums;}
+.g-row .g-nm {color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.tl.sm {padding: 2px 4px; gap: 3px; margin-right: 0; top: 0; border-radius: 8px;}
+.tl.sm i {width: 9px; height: 9px;}
+.tl.sm i.tl-g.lit {box-shadow: 0 0 5px 1px rgba(34,197,94,.7);}
+.tl.sm i.tl-r.lit {box-shadow: 0 0 5px 1px rgba(239,68,68,.7);}
 .warn {background: #fff1f2; color: #b91c1c; border-radius: 8px; padding: 6px 10px; font-size: 0.8rem; margin-bottom: 6px;}
 </style>
 """
