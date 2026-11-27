@@ -64,14 +64,30 @@ div[data-testid="stButtonGroup"] button p {font-size: 0.75rem !important;}
 .gauge .g-sub {font-size: 0.78rem; color: #6b7280; margin: 4px 0 10px 0;}
 .gauge .g-bar {height: 10px; background: #eef0f3; border-radius: 6px; overflow: hidden;}
 .gauge .g-fill {height: 100%; background: linear-gradient(90deg, #4ade80, #16a34a); border-radius: 6px;}
-.gauge .g-list {margin-top: 12px; display: grid; grid-template-columns: 1fr; row-gap: 3px;}
-.g-row {display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: #374151;}
-.g-row .g-no {font-weight: 700; color: #111827; width: 2.6rem; font-variant-numeric: tabular-nums;}
-.g-row .g-nm {color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
-.tl.sm {padding: 2px 4px; gap: 3px; margin-right: 0; top: 0; border-radius: 8px;}
-.tl.sm i {width: 9px; height: 9px;}
-.tl.sm i.tl-g.lit {box-shadow: 0 0 5px 1px rgba(34,197,94,.7);}
-.tl.sm i.tl-r.lit {box-shadow: 0 0 5px 1px rgba(239,68,68,.7);}
+.gauge .g-list {margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;}
+.g-row {display: flex; align-items: center; gap: 6px; font-size: 0.74rem; padding: 6px 8px; border-radius: 7px;
+        border-left: 4px solid; min-width: 0;}
+.g-row .g-no {font-weight: 700; font-variant-numeric: tabular-nums; flex: none;}
+.g-row .g-nm {white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;}
+.g-row .g-lab {font-weight: 700; flex: none; font-size: 0.7rem;}
+.g-row.on {background: rgba(34,197,94,0.18); border-color: #22c55e; color: #dcfce7;}
+.g-row.on .g-lab {color: #4ade80;}
+.g-row.off {background: rgba(239,68,68,0.13); border-color: #ef4444; color: #fecaca;}
+.g-row.off .g-lab {color: #f87171;}
+.g-row.na {background: rgba(255,255,255,0.05); border-color: #64748b; color: #94a3b8;}
+/* 맨 위 '지금 바닥 근처인가?' 칸: 어두운 배경으로 아래 칸과 구분 */
+div.st-key-card_mi_lights {background: linear-gradient(160deg, #0f172a 0%, #1e293b 100%) !important;
+    border: 1px solid #0f172a !important; box-shadow: 0 6px 18px rgba(15,23,42,0.25) !important;}
+div.st-key-card_mi_lights .hd .no {color: #f8fafc; font-size: 1.15rem;}
+div.st-key-card_mi_lights .note {color: #94a3b8;}
+div.st-key-card_mi_lights .gauge .g-name {color: #f8fafc;}
+div.st-key-card_mi_lights .gauge .g-dt {color: #94a3b8;}
+div.st-key-card_mi_lights .gauge .g-val {color: #ffffff;}
+div.st-key-card_mi_lights .gauge .g-unit {color: #94a3b8;}
+div.st-key-card_mi_lights .gauge .g-sub {color: #cbd5e1;}
+div.st-key-card_mi_lights .gauge .g-bar {background: rgba(255,255,255,0.1);}
+div.st-key-card_mi_lights div[data-testid="stButtonGroup"] button {background: rgba(255,255,255,0.06); color: #e5e7eb;
+    border-color: rgba(255,255,255,0.15);}
 .warn {background: #fff1f2; color: #b91c1c; border-radius: 8px; padding: 6px 10px; font-size: 0.8rem; margin-bottom: 6px;}
 </style>
 """

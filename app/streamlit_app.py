@@ -280,9 +280,10 @@ def gauge_html(name, t):
     rows = []
     for c in [c for c in t.columns if c.startswith("MI")]:
         v = last[c]
-        g_, r_ = ("", "") if pd.isna(v) else ((" lit", "") if v >= 1 else ("", " lit"))
-        rows.append(f"<div class='g-row'><span class='tl sm'><i class='tl-g{g_}'></i><i class='tl-r{r_}'></i></span>"
-                    f"<span class='g-no'>{c}</span><span class='g-nm'>{names.get(c, '')}</span></div>")
+        st_ = "na" if pd.isna(v) else ("on" if v >= 1 else "off")
+        lab = {"on": "초록불", "off": "빨간불", "na": "자료 없음"}[st_]
+        rows.append(f"<div class='g-row {st_}'><span class='g-no'>{c}</span><span class='g-nm'>{names.get(c, '')}</span>"
+                    f"<span class='g-lab'>{lab}</span></div>")
     chips = "".join(rows)
     return (f"<div class='gauge'><div class='g-top'><span class='g-name'>{name}</span>"
             f"<span class='g-dt'>{d:%Y-%m-%d}</span></div>"
@@ -293,34 +294,20 @@ def gauge_html(name, t):
 
 
 def ratio_chart(nm, t):
-    """켜진 비율 그래프(첨부 화면 모양, 의장 11/27 20:29): 표준 이동평균 수렴·확산(12·26·9일)
-    청록 선 = 켜진 비율 12일 지수이동평균 − 26일 지수이동평균, 빨간 선 = 청록 선의 9일 지수이동평균,
-    막대 = 청록 선 − 빨간 선(0 위 청록, 0 아래 빨강)"""
+    """켜진 비율(%) 막대 그래프 (의장 11/27 20:34 "75%가 나와야", 0~100%)"""
     off = period(f"mi_ratio_{nm}", "1년")
-    r = t["켜진 비율"].dropna()
-    fast = r.ewm(span=12, adjust=False).mean() - r.ewm(span=26, adjust=False).mean()
-    slow = fast.ewm(span=9, adjust=False).mean()
-    hist = fast - slow
-    fast, slow, hist = cut(fast, off), cut(slow, off), cut(hist, off)
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=hist.index, y=hist.values, name="차이(막대)", showlegend=False,
-                         marker_color=["#2a9d8f" if v >= 0 else "#ef4444" for v in hist.values],
-                         hovertemplate="%{y:+.2f}%p<extra>막대</extra>"))
-    fig.add_trace(go.Scatter(x=fast.index, y=fast.values, name="12일−26일 평균", mode="lines",
-                             line=dict(width=1.6, color="#2a9d8f"), hovertemplate="%{y:+.2f}%p<extra>청록 선</extra>"))
-    fig.add_trace(go.Scatter(x=slow.index, y=slow.values, name="9일 평균", mode="lines",
-                             line=dict(width=1.6, color="#ef4444"), hovertemplate="%{y:+.2f}%p<extra>빨간 선</extra>"))
-    fig.add_hline(y=0, line_color="#111827", line_width=1)
-    fig.update_layout(template="plotly_white", font=FONT, paper_bgcolor="#ffffff", plot_bgcolor=S.PLOT_BG,
-                      height=330, margin=dict(l=8, r=8, t=10, b=8), hovermode="x unified", dragmode=False,
-                      bargap=0.15, showlegend=True,
-                      legend=dict(orientation="h", x=0, y=1.08, font=dict(size=11)),
+    r = cut(t["켜진 비율"].dropna(), off)
+    fig = go.Figure(go.Bar(x=r.index, y=r.values, marker_color="#22c55e", marker_line_width=0,
+                           hovertemplate="%{x|%Y-%m-%d}  %{y:.1f}%<extra></extra>"))
+    dark = dict(AXIS, gridcolor="rgba(255,255,255,0.07)", linecolor="rgba(255,255,255,0.15)",
+                tickfont=dict(size=11, color="#94a3b8"))
+    fig.update_layout(template="plotly_dark", font=dict(FONT, color="#e5e7eb"), paper_bgcolor="rgba(0,0,0,0)",
+                      plot_bgcolor="rgba(255,255,255,0.03)", height=300, margin=dict(l=8, r=8, t=10, b=8),
+                      hovermode="x", dragmode=False, bargap=0.1, showlegend=False,
                       hoverlabel=dict(bgcolor="#111827", font=dict(color="#ffffff", size=12)),
-                      xaxis=dict(AXIS, fixedrange=True),
-                      yaxis=dict(AXIS, ticksuffix="%p", side="right", fixedrange=True))
+                      xaxis=dict(dark, fixedrange=True),
+                      yaxis=dict(dark, ticksuffix="%", side="right", range=[0, 100], fixedrange=True))
     st.plotly_chart(fig, width="stretch", config=CONFIG)
-    st.markdown("<div class='note'>켜진 비율의 12일·26일 지수이동평균 차이(청록 선), 그 9일 평균(빨간 선), "
-                "둘의 차이(막대). 표준 이동평균 수렴·확산 12·26·9일 방식.</div>", unsafe_allow_html=True)
 
 
 def criteria_table(us, kr, vals, F):
@@ -372,9 +359,9 @@ if MI_US is not None:
                     "기준은 맨 아래 표</div>", unsafe_allow_html=True)
         for i, (nm, t) in enumerate((("미국", MI_US), ("한국", MI_KR))):
             if i:
-                st.markdown("<hr style='margin:10px 0 14px 0;border:none;border-top:1px solid #eef0f3'>",
+                st.markdown("<hr style='margin:10px 0 14px 0;border:none;border-top:1px solid rgba(255,255,255,0.12)'>",
                             unsafe_allow_html=True)
-            c1, c2 = st.columns([1, 2], gap="large")
+            c1, c2 = st.columns([5, 6], gap="large")
             with c1:
                 st.markdown(gauge_html(nm, t), unsafe_allow_html=True)
             with c2:
