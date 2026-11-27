@@ -1,7 +1,7 @@
 """MI 기준 시험: 바닥 인근 10% (의장 11/27 19:11)
 
-check_episodes.py 와 같은 하락 4번·같은 잣대(첫 신호 때 가격이 최종 저점에서 10% 안이었나)로
-의장이 준 기준과 찾은 표준 후보를 시험한다. '4번 밖 켜진 날' = 2016-11 이후 하락 4번(고점~바닥 10% 구간 끝) 밖에서 켜진 날 수.
+하락 4번(check_episodes.EP). 잣대(의장 11/27 19:17): 바닥 10% 구간 = 고점 뒤 종가가 최종 저점 × 1.10 이하인 날들.
+그 구간 안에 신호가 하루라도 켜지면 맞음. '구간 밖 켜진 날' = 2016-11 이후 네 구간 밖에서 켜진 날 수(헛신호).
 
 자료: 드라이브 1_data/가격10년_시장지표(SPX·VIX·MOVE·DGS10·BAMLH0A0HYM2·WTI·CPCE), 가격10년_종가(^KS11, 유니버스 종목).
 실행: python block/market_index/check_mi.py   (시크릿 DRIVE_URL, DRIVE_TOKEN)
@@ -47,23 +47,28 @@ def episodes(px, spx):
     return out
 
 
+def zones(px, spx):
+    z = {}
+    for ep, (pk, low_d, low, end) in episodes(px, spx).items():
+        w = px[pk:end]
+        z[ep] = (w[w <= low * (1 + BAND)].index, low_d, low)
+    return z
+
+
 def score(px, spx, s):
     s = s.reindex(px.index).fillna(False).astype(bool)
-    eps = episodes(px, spx)
     r, hit, inside = {}, 0, pd.Series(False, index=px.index)
-    for ep, (pk, low_d, low, end) in eps.items():
-        inside[pk:end] = True
-        on = s[pk:end]
+    for ep, (days, low_d, low) in zones(px, spx).items():
+        inside[days] = True
+        on = s[days]
         on = on[on]
         if len(on) == 0:
-            r[ep] = "신호 없음"
+            r[ep] = "없음"
             continue
-        d = on.index[0]
-        x = (px[d] / low - 1) * 100
-        hit += x <= BAND * 100
-        r[ep] = f"{d:%y-%m-%d}, {x:.1f}%"
-    r["10% 안"] = f"{hit}/4"
-    r["4번 밖 켜진 날"] = int((s & ~inside)["2016-11-21":].sum())
+        hit += 1
+        r[ep] = f"{on.index[0]:%m-%d} ({len(on)}일)"
+    r["맞음"] = f"{hit}/4"
+    r["구간 밖 켜진 날"] = int((s & ~inside)["2016-11-21":].sum())
     return r
 
 
@@ -73,12 +78,16 @@ def build(m, P):
     us_cols = [c for c in P.columns if not c.startswith("^") and not c.endswith((".KS", ".KQ"))]
     kr_cols = [c for c in P.columns if c.endswith((".KS", ".KQ"))]
     hy, mv, tn, wti, pc = (m[c].dropna() for c in ("BAMLH0A0HYM2", "MOVE", "DGS10", "WTI", "CPCE"))
+    # 연준 기준금리 = 지급준비금 이자율(IOER → 2021-07-29부터 IORB, 목표 범위 위쪽). 10년 금리 − 기준금리.
+    pol = pd.concat([m["IOER"].dropna(), m["IORB"].dropna()]).sort_index()
+    pol = pol[~pol.index.duplicated(keep="last")].reindex(tn.index, method="ffill")
+    gap = (tn - pol).dropna()
     US = {
-        "MI04 하이일드 ≥ 6%": hy >= 6, "MI04 하이일드 ≥ 8% (T. Rowe Price 800bp)": hy >= 8,
-        "MI04 하이일드 20일 +1%p": hy.diff(20) >= 1,
-        "MI05 10년 금리 ≤ 4.8%": tn <= 4.8,
-        "MI06 MOVE ≥ 100, 5거래일 유지": hold(mv >= 100, 5),
-        "MI07 WTI ≤ 1년 최고 × 70%": wti <= wti.rolling(252, min_periods=60).max() * 0.7,
+        "MI04 하이일드 ≥ 3%": hy >= 3, "MI04 하이일드 ≥ 3.5%": hy >= 3.5, "MI04 하이일드 ≥ 4%": hy >= 4,
+        "MI05 10년 − 기준금리 ≤ −0.5%p": gap <= -0.5, "MI05 10년 − 기준금리 ≤ 0": gap <= 0,
+        "MI05 10년 − 기준금리 ≥ +1%p": gap >= 1,
+        "MI06 MOVE ≥ 100, 2거래일 유지": hold(mv >= 100, 2),
+        "MI07 WTI ≤ 80달러": wti <= 80, "MI07 WTI ≥ 80달러": wti >= 80,
         "MI08 S&P500 낙폭 ≤ −10%": spx / spx.rolling(252, min_periods=1).max() - 1 <= -0.10,
         "MI08 S&P500 낙폭 ≤ −15%": spx / spx.rolling(252, min_periods=1).max() - 1 <= -0.15,
         "MI08 S&P500 낙폭 ≤ −20%": spx / spx.rolling(252, min_periods=1).max() - 1 <= -0.20,
