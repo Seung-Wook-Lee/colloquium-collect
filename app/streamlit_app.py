@@ -34,7 +34,7 @@ def secret(k):
         return os.environ.get(k)
 
 
-@st.cache_data(ttl=3600, show_spinner="드라이브에서 자료를 읽는 중")
+@st.cache_data(ttl=600, show_spinner="드라이브에서 자료를 읽는 중")
 def load():
     body = {"token": secret("DRIVE_TOKEN"), "action": "get", "path": DB}
     out = requests.post(secret("DRIVE_URL"), data=json.dumps(body), timeout=300).json()
@@ -157,6 +157,9 @@ except Exception as e:
     st.stop()
 
 top = st.columns([1, 1])
+if top[1].button("자료 다시 읽기"):
+    load.clear()
+    st.rerun()
 freq = top[0].radio("봉", list(RULE), horizontal=True, index=0)
 rule = RULE[freq]
 top[1].caption(f"자료: 드라이브 가격10년_시장지표 · 마지막 날짜 {D.dropna(how='all').index[-1]:%Y-%m-%d}")
