@@ -4,7 +4,7 @@
 밤 8시(월~금):  그날 한국 유니버스 종목 하루치
 
 - 자료는 한국투자증권(한투) 한 곳에서만 받는다. 한 번 실행 = 한투 접속 1번.
-- 유니버스 파일(드라이브 '콜로키움/포트폴리오/콜로키움100_유니버스_*.csv' 중 가장 최신)에 있는 종목만.
+- 유니버스 = 10년치 종가 파일에 있는 종목 칸 그대로(유니버스 파일 따로 없음).
 - 드라이브 '콜로키움 수집데이터/1_data/가격10년_{시가,고가,저가,종가,거래량}.csv.gz'
   뒤에 그날 하루치만 붙인다. 이미 값이 있는 칸은 건드리지 않는다. 새 파일은 만들지 않는다.
 
@@ -25,13 +25,10 @@ import pandas as pd
 import requests
 
 KIS = "https://openapi.koreainvestment.com:9443"
-UNIV_DIR = "콜로키움/포트폴리오"
-UNIV_PREFIX = "콜로키움100_유니버스_"
 DB_DIR = "콜로키움 수집데이터/1_data"
 FIELDS = ["시가", "고가", "저가", "종가", "거래량"]
 
-# 유니버스 '거래소' 칸 → 한투 해외 거래소 코드. 비면 나머지 코드로 차례로 다시 찾는다.
-US_EXCD = {"NASDAQ": "NAS", "NYSE": "NYS", "NYSE Arca": "AMS", "NYSE American": "AMS", "Cboe BZX": "AMS"}
+# 한투 해외 거래소 코드: NAS(나스닥) → NYS(뉴욕) → AMS(아멕스·Arca) 차례로 찾는다.
 
 
 # ---------------- 드라이브 창구 ----------------
@@ -63,14 +60,13 @@ def drive_put(path, raw, mime):
 
 
 def load_universe():
-    files = [f["name"] for f in drive("list", path=UNIV_DIR)["files"]
-             if f["name"].startswith(UNIV_PREFIX) and f["name"].endswith(".csv")]
-    if not files:
-        raise FileNotFoundError(f"{UNIV_DIR}/{UNIV_PREFIX}*.csv")
-    name = max(files)
-    u = pd.read_csv(io.BytesIO(drive_get(f"{UNIV_DIR}/{name}")), dtype=str, encoding="utf-8-sig")
-    print(f"[유니버스] {name} {len(u)}개")
-    return u
+    """유니버스 = 10년치 종가 파일에 있는 종목 칸 그대로(의장 11/27, 유니버스 파일 따로 없음).
+    '^'로 시작하는 칸(지수)은 종목이 아니라서 뺀다."""
+    df = pd.read_csv(io.BytesIO(drive_get(f"{DB_DIR}/가격10년_종가.csv.gz")), compression="gzip",
+                     index_col=0, nrows=1)
+    cols = [c for c in df.columns if not c.startswith("^")]
+    print(f"[유니버스] 10년치 종가 파일 종목 {len(cols)}개")
+    return cols
 
 
 # ---------------- 한투 ----------------
@@ -132,28 +128,21 @@ class Kis:
 
 # ---------------- 수집 ----------------
 def collect(market):
-    u = load_universe()
+    cols = load_universe()
     kis = Kis()
     got, miss = {}, []
-    if market == "kr":
-        sub = u[u["시장"] == "한국"]
-        for _, r in sub.iterrows():
-            t = str(r["yfinance 티커"]).strip()
-            rows = kis.kr_daily(str(r["코드"]).strip())
-            if rows:
-                got[t] = rows
-            else:
-                miss.append(t)
-    else:
-        sub = u[u["시장"] == "미국"]
-        for _, r in sub.iterrows():
-            t = str(r["yfinance 티커"]).strip()
-            rows = kis.us_daily(t.replace("-", "/"), US_EXCD.get(str(r["거래소"]).strip(), "NAS"))
-            if rows:
-                got[t] = rows
-            else:
-                miss.append(t)
-    print(f"[받기] {market} 유니버스 {len(sub)}개 중 {len(got)}개 받음, 못 받음 {len(miss)}개 {miss}")
+    is_kr = lambda t: t.endswith(".KS") or t.endswith(".KQ")
+    sub = [t for t in cols if is_kr(t) == (market == "kr")]
+    for t in sub:
+        if market == "kr":
+            rows = kis.kr_daily(t.split(".")[0])
+        else:
+            rows = kis.us_daily(t.replace("-", "/"), "NAS")
+        if rows:
+            got[t] = rows
+        else:
+            miss.append(t)
+    print(f"[받기] {market} {len(sub)}개 중 {len(got)}개 받음, 못 받음 {len(miss)}개 {miss}")
     if not got:
         raise SystemExit("한 종목도 못 받음 — 드라이브에 쓰지 않음")
     # 하루치 = 받은 자료 중 가장 최근 거래일 하나
