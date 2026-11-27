@@ -260,18 +260,32 @@ def rsi14(c):
     return 100 - 100 / (1 + up / dn)
 
 
-def stock_table(P, names, money):
+def last_val(V, t):
+    if V is None or t not in V.columns:
+        return float("nan")
+    v = V[t].dropna()
+    return v.iloc[-1] if len(v) else float("nan")
+
+
+def fmt(v, d=2):
+    return "" if pd.isna(v) else f"{v:,.{d}f}"
+
+
+def stock_table(P, VAL, names, money):
     rows = []
     for t, n in names:
         c = P[t].dropna() if t in P.columns else pd.Series(dtype=float)
         if len(c) < 2:
-            rows.append({"종목": n, "날짜": "", "가격": "자료 없음", "전일 대비": "", "RSI(14일)": "", "PER": ""})
+            rows.append({"종목": n, "날짜": "", "가격": "자료 없음", "전일 대비": "", "PER": "", "EPS": "", "PEG": "",
+                         "RSI(14일)": ""})
             continue
         ch = (c.iloc[-1] / c.iloc[-2] - 1) * 100
         rows.append({"종목": n, "날짜": f"{c.index[-1]:%m-%d}", "가격": money(c.iloc[-1]),
-                     "전일 대비": f"{ch:+.2f}%".replace("-", "−"), "RSI(14일)": f"{rsi14(c).iloc[-1]:.1f}",
-                     "PER": "준비 중"})
-    st.markdown(S.table(pd.DataFrame(rows), color_cols=("전일 대비",), dim_cols=("날짜", "PER")),
+                     "전일 대비": f"{ch:+.2f}%".replace("-", "−"),
+                     "PER": fmt(last_val(VAL["PER"], t), 1), "EPS": money(last_val(VAL["EPS"], t))
+                     if not pd.isna(last_val(VAL["EPS"], t)) else "",
+                     "PEG": fmt(last_val(VAL["PEG"], t), 2), "RSI(14일)": f"{rsi14(c).iloc[-1]:.1f}"})
+    st.markdown(S.table(pd.DataFrame(rows), color_cols=("전일 대비",), dim_cols=("날짜",)),
                 unsafe_allow_html=True)
 
 
@@ -281,14 +295,21 @@ try:
 except Exception as e:
     st.error(f"종가 파일을 읽지 못했습니다: {e}")
     st.stop()
+VAL = {}
+for k in ("PER", "EPS", "PEG"):
+    try:
+        VAL[k] = load(f"콜로키움 수집데이터/1_data/가격10년_{k}.csv.gz")
+    except Exception:
+        VAL[k] = None
 with st.container(border=True, key="card_2-1"):
     st.markdown("<div class='hd'><span class='no'>2-1. 주요 종목 상황</span></div>"
                 "<div class='note'>가격 = 드라이브 10년치 종가 파일 마지막 값 · 전일 대비 = 앞 거래일 종가 대비 · "
+                "PER·EPS = 한투, PEG = PER ÷ EPS 증가율(최근 사업연도, 미국은 SEC 공시, 증가율 0 이하면 빈칸) · "
                 "RSI = 14일 와일더 방식</div>", unsafe_allow_html=True)
     c1, c2 = st.columns([1, 1], gap="medium")
     with c1:
         st.markdown("<div class='note'><b>미국</b> (달러)</div>", unsafe_allow_html=True)
-        stock_table(P, US, lambda v: f"{v:,.2f}")
+        stock_table(P, VAL, US, lambda v: f"{v:,.2f}")
     with c2:
         st.markdown("<div class='note'><b>한국</b> (원)</div>", unsafe_allow_html=True)
-        stock_table(P, KR, lambda v: f"{v:,.0f}")
+        stock_table(P, VAL, KR, lambda v: f"{v:,.0f}")

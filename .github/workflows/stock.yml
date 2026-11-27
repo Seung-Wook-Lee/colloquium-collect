@@ -17,6 +17,10 @@ on:
         description: "true면 받기만 하고 드라이브에 쓰지 않음"
         required: true
         default: "true"
+      value_only:
+        description: "true면 가격은 건너뛰고 PER·EPS·PEG만"
+        required: false
+        default: "false"
 
 concurrency:
   group: stock-db
@@ -42,6 +46,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             M="${{ inputs.market }}"
             [ "${{ inputs.dry }}" = "true" ] && D="--dry" || D=""
+            [ "${{ inputs.value_only }}" = "true" ] && D="$D --value-only"
           elif [ "${{ github.event.schedule }}" = "0 23 * * 1-5" ]; then
             M=us; D=""
           else
