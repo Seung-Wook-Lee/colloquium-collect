@@ -4,7 +4,7 @@
 그 구간 안에 신호가 하루라도 켜지면 맞음. '구간 밖 켜진 날' = 2016-11 이후 네 구간 밖에서 켜진 날 수(헛신호).
 
 자료: 드라이브 1_data/가격10년_시장지표(SPX·VIX·MOVE·DGS10·BAMLH0A0HYM2·WTI·CPCE), 가격10년_종가(^KS11, 유니버스 종목).
-실행: python block/market_index/check_mi.py   (시크릿 DRIVE_URL, DRIVE_TOKEN)
+실행: python analysis/market_index/check_mi.py   (시크릿 DRIVE_URL, DRIVE_TOKEN)
 """
 import os
 import sys

@@ -20,14 +20,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cta as CTA  # noqa: E402
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "block", "market_index"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "analysis", "market_index"))
 import vote as VOTE  # noqa: E402
+
+_AN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "analysis")
+for _d in ("chart", "value", "flow", os.path.join("flow", "kr"), os.path.join("flow", "us")):
+    sys.path.insert(0, os.path.join(_AN, _d))
+import chart as CHART  # noqa: E402
+import value as VALUE  # noqa: E402
+import flow_kr as FLOW_KR  # noqa: E402
+import flow_us as FLOW_US  # noqa: E402
 
 import style as S  # noqa: E402
 
 # 스트림릿 서버는 한 번 불러온 모듈을 기억해 두므로, 새 코드가 올라오면 바로 쓰도록 매번 다시 불러온다
 import importlib  # noqa: E402
-for _m in (CTA, VOTE, S):
+for _m in (CTA, VOTE, S, CHART, VALUE, FLOW_KR, FLOW_US):
     importlib.reload(_m)
 
 st.set_page_config(page_title="스튜디오 톰앤수 회의", layout="wide")
@@ -228,8 +236,8 @@ def item(no, name, s, unit="", digits=2, note="", **kw):
 
 # ---------------- 화면 ----------------
 st.title("스튜디오 톰앤수 회의")
-st.markdown("<div class='jump'><a href='#sec-1'>1. 마켓</a><a href='#sec-2'>2. 종목</a>"
-            "<a href='#sec-3'>3. 기타</a></div>", unsafe_allow_html=True)
+st.markdown("<div class='jump'><a href='#sec-1'>1. 마켓</a><a href='#sec-2'>2. 밸류</a><a href='#sec-3'>3. 차트</a>"
+            "<a href='#sec-4'>4. 수급</a><a href='#sec-5'>5. 퀀트</a><a href='#sec-6'>6. 기타</a></div>", unsafe_allow_html=True)
 try:
     D = load()
 except Exception as e:
@@ -252,7 +260,7 @@ MKT_HEAD.subheader("1. 마켓 (Market Index)")
 
 
 def mi_data(D):
-    """MI 계산 (block/market_index/vote.py): 미국·한국 표, 값, 외국인 수급"""
+    """MI 계산 (analysis/market_index/vote.py): 미국·한국 표, 값, 외국인 수급"""
     P = load("콜로키움 수집데이터/1_data/가격10년_종가.csv.gz")
     try:
         Vol = load("콜로키움 수집데이터/1_data/가격10년_거래량.csv.gz")
@@ -461,7 +469,7 @@ def stock_table(P, VAL, names, money):
 
 
 st.markdown("<div id='sec-2' class='anchor'></div>", unsafe_allow_html=True)
-st.subheader("2. 종목")
+st.subheader("2. 밸류센터 (미스 밸류)")
 try:
     P = load(PX)
 except Exception as e:
@@ -487,13 +495,146 @@ with st.container(border=True, key="card_2-1"):
         stock_table(P, VAL, KR, lambda v: f"{v:,.0f}")
 
 
-# ---------------- 맨 아래: MI 기준 ----------------
+# ---------------- 2-2·3·4. 밸류·차트·수급 센터 (analysis/value·chart·flow) ----------------
+@st.cache_data(ttl=600, show_spinner=False)
+def load_long(name, dtype=None):
+    body = {"token": secret("DRIVE_TOKEN"), "action": "get", "path": f"콜로키움 수집데이터/1_data/{name}.csv.gz"}
+    out = requests.post(secret("DRIVE_URL"), data=json.dumps(body), timeout=300).json()
+    if not out.get("ok") or not out.get("found"):
+        raise RuntimeError(out.get("error") or f"없음: {name}")
+    return pd.read_csv(io.BytesIO(base64.b64decode(out["data"])), compression="gzip", low_memory=False, dtype=dtype)
+
+
+def opt(f):
+    try:
+        return f()
+    except Exception:
+        return None
+
+
+def num_table(T, names, cols, digits, color=(), note=""):
+    """T(줄 = 종목) → 화면 표. cols = [(칸 번호, 칸 제목)]"""
+    rows = []
+    for t, n in names:
+        r = {"종목": n}
+        for k, title in cols:
+            v = T.at[t, k] if (T is not None and t in T.index and k in T.columns) else None
+            d = digits.get(k, 1)
+            r[title] = "" if v is None or pd.isna(v) else (f"{v:+,.{d}f}".replace("-", "−") if k in color else f"{v:,.{d}f}")
+        rows.append(r)
+    if note:
+        st.markdown(f"<div class='note'>{note}</div>", unsafe_allow_html=True)
+    st.markdown(S.table(pd.DataFrame(rows), color_cols=tuple(t for k, t in cols if k in color)), unsafe_allow_html=True)
+
+
+def two_markets(fn):
+    c1, c2 = st.columns([1, 1], gap="medium")
+    with c1:
+        st.markdown("<div class='note'><b>미국</b></div>", unsafe_allow_html=True)
+        fn(US)
+    with c2:
+        st.markdown("<div class='note'><b>한국</b></div>", unsafe_allow_html=True)
+        fn(KR)
+
+
+ALL = US + KR
+H_ = opt(lambda: load("콜로키움 수집데이터/1_data/가격10년_고가.csv.gz"))
+L_ = opt(lambda: load("콜로키움 수집데이터/1_data/가격10년_저가.csv.gz"))
+V_ = opt(lambda: load("콜로키움 수집데이터/1_data/가격10년_거래량.csv.gz"))
+LAYER = opt(lambda: (lambda u: pd.DataFrame({"층": u["층"].values}, index=u["yfinance 티커"].fillna(u["코드"]).values))(
+    load_long("가격10년_유니버스", dtype=str)))
+
+# 2-2 밸류 V01~V11
+VT = opt(lambda: VALUE.table(load_long("가격10년_SEC재무"), load_long("가격10년_DART재무"), P, [t for t, _ in ALL]))
+with st.container(border=True, key="card_2-2"):
+    st.markdown("<div class='hd'><span class='no'>2-2. 밸류 V01~V11</span></div>", unsafe_allow_html=True)
+    if VT is None:
+        st.markdown("<div class='warn'>재무 자료를 읽지 못했습니다</div>", unsafe_allow_html=True)
+    else:
+        vc = [("V01", "V01 PBR"), ("V02", "V02 ROE%"), ("V03", "V03 매출증가%"), ("V04", "V04 영업이익률%"),
+              ("V05", "V05 부채비율%"), ("V06", "V06 배당%"), ("V07", "V07 EV/EBITDA"), ("V08", "V08 총이익/자산%"),
+              ("V09", "V09 FCF수익률%"), ("V10", "V10 F점수"), ("V11", "V11 예상밖이익")]
+        dg = {"V01": 1, "V07": 1, "V10": 0, "V11": 2}
+        st.markdown("<div class='note'>미국 SEC 공시 · 한국 DART 공시, 최근 4분기 합 기준. 한국은 자본·자산·부채 자료가 없어 "
+                    "V01·V02·V05·V07·V08·V10 빈칸, V06 배당은 자료 없음. 기준·출처는 맨 아래 6. 기타</div>",
+                    unsafe_allow_html=True)
+        st.markdown("<div class='note'><b>미국</b></div>", unsafe_allow_html=True)
+        num_table(VT, US, vc, dg, color=("V03", "V09", "V11"))
+        st.markdown("<div class='note'><b>한국</b></div>", unsafe_allow_html=True)
+        num_table(VT, KR, vc, dg, color=("V03", "V09", "V11"))
+
+# 3. 차트 C01~C12 (업종 안 순위는 유니버스 개별주 전체로)
 st.markdown("<div id='sec-3' class='anchor'></div>", unsafe_allow_html=True)
-st.subheader("3. 기타")
+st.subheader("3. 차트센터 (미스 차트)")
+CT = None
+if H_ is not None and L_ is not None and V_ is not None:
+    _uni = [c for c in P.columns if not c.startswith("^")]
+    CT = opt(lambda: CHART.table(P, H_, L_, V_, _uni, LAYER))
+with st.container(border=True, key="card_3-1"):
+    st.markdown("<div class='hd'><span class='no'>3-1. 차트 C01~C12</span></div>", unsafe_allow_html=True)
+    if CT is None:
+        st.markdown("<div class='warn'>가격 자료를 읽지 못했습니다</div>", unsafe_allow_html=True)
+    else:
+        cc = [("C01", "C01 RSI"), ("C02", "C02 MACD%"), ("C03", "C03 볼린저"), ("C04", "C04 스토캐스틱"),
+              ("C05", "C05 50−200일%"), ("C06", "C06 10개월선%"), ("C07", "C07 52주고가%"), ("C08", "C08 12−1달%"),
+              ("C09", "C09 OBV%"), ("C10", "C10 109주선%"), ("C11", "C11 상대강도%p"), ("C12", "C12 업종순위")]
+        dg = {"C02": 2, "C03": 2, "C12": 0}
+        st.markdown("<div class='note'>드라이브 10년치 시가·고가·저가·종가·거래량. C11 지수 = 미국 QQQM, 한국 코스피. "
+                    "C12 = 같은 층(업종 묶음) 유니버스 종목 안 3달 수익률 순위(1 = 가장 강함)</div>", unsafe_allow_html=True)
+        col = ("C02", "C05", "C06", "C07", "C08", "C09", "C10", "C11")
+        st.markdown("<div class='note'><b>미국</b></div>", unsafe_allow_html=True)
+        num_table(CT, US, cc, dg, color=col)
+        st.markdown("<div class='note'><b>한국</b></div>", unsafe_allow_html=True)
+        num_table(CT, KR, cc, dg, color=col)
+
+# 4. 수급 — 한국·미국 따로 (의장 "완전 다른 시장")
+st.markdown("<div id='sec-4' class='anchor'></div>", unsafe_allow_html=True)
+st.subheader("4. 수급분석센터")
+ETF_ = opt(lambda: load_long("가격10년_ETF좌수일별", dtype={"코드": str}))
+FK = opt(lambda: FLOW_KR.table(load_flow(), P, V_, ETF_, [t for t, _ in KR]))
+FU = opt(lambda: FLOW_US.table(load_long("가격10년_공매도"), V_, ETF_, [t for t, _ in US]))
+with st.container(border=True, key="card_4-1"):
+    st.markdown("<div class='hd'><span class='no'>4-1. 한국 수급</span></div>", unsafe_allow_html=True)
+    if FK is None:
+        st.markdown("<div class='warn'>국내수급 자료를 읽지 못했습니다</div>", unsafe_allow_html=True)
+    else:
+        num_table(FK, KR, [("FLOW01", "FLOW01 외국인%"), ("FLOW02", "FLOW02 기관%"), ("FLOW03", "FLOW03 동반 순매수일"),
+                           ("FLOW04", "FLOW04 개인%"), ("FLOW05", "FLOW05 거래량배"), ("FLOW06", "FLOW06 ETF좌수%"),
+                           ("FLOW07", "FLOW07 공매도")],
+                  {"FLOW03": 0, "FLOW05": 2}, color=("FLOW01", "FLOW02", "FLOW04", "FLOW06"),
+                  note="20거래일 순매수 합 ÷ 20일 거래대금(%) · 가격10년_국내수급(한투) · FLOW07 공매도는 자료 없음")
+with st.container(border=True, key="card_4-2"):
+    st.markdown("<div class='hd'><span class='no'>4-2. 미국 수급</span></div>", unsafe_allow_html=True)
+    if FU is None:
+        st.markdown("<div class='warn'>공매도 자료를 읽지 못했습니다</div>", unsafe_allow_html=True)
+    else:
+        last = FU["공매도 결제일"].dropna().max() if "공매도 결제일" in FU else ""
+        num_table(FU, US, [("FLOW01", "FLOW01 공매도 커버일수"), ("FLOW02", "FLOW02 공매도 변화%"),
+                           ("FLOW03", "FLOW03 거래량배"), ("FLOW04", "FLOW04 ETF좌수%"), ("FLOW05", "FLOW05 13F")],
+                  {"FLOW01": 2, "FLOW03": 2}, color=("FLOW02", "FLOW04"),
+                  note=f"FINRA 공매도 잔고(2주마다, 마지막 결제일 {last}) · FLOW05 13F는 자료 없음")
+
+
+# 5. 퀀트센터 — 내용은 의장 지시 후
+st.markdown("<div id='sec-5' class='anchor'></div>", unsafe_allow_html=True)
+st.subheader("5. 퀀트센터 (뚜지)")
+with st.container(border=True, key="card_5-1"):
+    st.markdown("<div class='note'>투자전략 발표 자리입니다. 내용은 의장님 지시를 받은 뒤 채웁니다.</div>", unsafe_allow_html=True)
+
+# ---------------- 맨 아래: MI 기준 ----------------
+st.markdown("<div id='sec-6' class='anchor'></div>", unsafe_allow_html=True)
+st.subheader("6. 기타")
 if MI_US is not None:
     with st.container(border=True, key="card_mi_rules"):
         st.markdown("<div class='hd'><span class='no'>MI 초록불 기준</span></div>", unsafe_allow_html=True)
         st.markdown("<div class='note'>미국 12개(MI01~MI08·MI10·MI11·MI14·MI15), 한국 13개(MI01~MI08·MI10~MI13·MI15, "
-                    "MI08은 코스피, MI15는 한국 유니버스) · MI09 뺌 · 계산 block/market_index/vote.py</div>",
+                    "MI08은 코스피, MI15는 한국 유니버스) · MI09 뺌 · 계산 analysis/market_index/vote.py</div>",
                     unsafe_allow_html=True)
         criteria_table(MI_US, MI_KR, MI_VALS, MI_F)
+
+for _key, _title, _rules in (("card_v_rules", "밸류 V01~V11 기준", VALUE.RULES), ("card_c_rules", "차트 C01~C12 기준", CHART.RULES),
+                             ("card_fk_rules", "한국 수급 FLOW01~FLOW07 기준", FLOW_KR.RULES),
+                             ("card_fu_rules", "미국 수급 FLOW01~FLOW05 기준", FLOW_US.RULES)):
+    with st.container(border=True, key=_key):
+        st.markdown(f"<div class='hd'><span class='no'>{_title}</span></div>", unsafe_allow_html=True)
+        st.markdown(S.table(pd.DataFrame(_rules, columns=["번호", "이름", "기준·계산", "출처"])), unsafe_allow_html=True)
