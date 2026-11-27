@@ -25,6 +25,11 @@ import vote as VOTE  # noqa: E402
 
 import style as S  # noqa: E402
 
+# 스트림릿 서버는 한 번 불러온 모듈을 기억해 두므로, 새 코드가 올라오면 바로 쓰도록 매번 다시 불러온다
+import importlib  # noqa: E402
+for _m in (CTA, VOTE, S):
+    importlib.reload(_m)
+
 st.set_page_config(page_title="스튜디오 톰앤수 회의", layout="wide")
 st.markdown(S.CSS, unsafe_allow_html=True)
 
