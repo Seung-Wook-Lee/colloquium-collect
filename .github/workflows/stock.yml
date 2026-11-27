@@ -1,0 +1,50 @@
+# 매일 가격 수집 (source/stock/collect.py)
+# 아침 8시(한국 시각, 화~토) = 밤새 미국 / 밤 8시(한국 시각, 월~금) = 그날 한국
+# 한 번 실행 = 한투 접속 1번
+name: 매일 가격 수집
+
+on:
+  schedule:
+    - cron: "0 23 * * 1-5"   # UTC 월~금 23:00 = 한국 화~토 08:00 → 미국
+    - cron: "0 11 * * 1-5"   # UTC 월~금 11:00 = 한국 월~금 20:00 → 한국
+  workflow_dispatch:
+    inputs:
+      market:
+        description: "us(미국) 또는 kr(한국)"
+        required: true
+        default: us
+      dry:
+        description: "true면 받기만 하고 드라이브에 쓰지 않음"
+        required: true
+        default: "true"
+
+concurrency:
+  group: stock-db
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas requests
+      - name: 수집
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          DRIVE_URL: ${{ secrets.DRIVE_URL }}
+          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            M="${{ inputs.market }}"
+            [ "${{ inputs.dry }}" = "true" ] && D="--dry" || D=""
+          elif [ "${{ github.event.schedule }}" = "0 23 * * 1-5" ]; then
+            M=us; D=""
+          else
+            M=kr; D=""
+          fi
+          python source/stock/collect.py --market "$M" $D
