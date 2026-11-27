@@ -228,6 +228,46 @@ def values(market, kis, sub):
     return out
 
 
+def market_funds(kis, dry):
+    """MI14 신용잔고·고객예탁금(억원, 금융투자협회 자료를 한투가 제공, 증시자금 종합 FHKST649100C0)
+    → 가격10년_시장지표 '신용잔고'·'고객예탁금' 칸. 마지막 값 다음 날짜부터만 덧붙인다. 값만 보여 주는 자료(의장 11/27)."""
+    j = kis.get("/uapi/domestic-stock/v1/quotations/mktfunds", "FHKST649100C0", {"FID_INPUT_DATE_1": ""})
+    rows = j.get("output") or []
+    if isinstance(rows, dict):
+        rows = [rows]
+    new = {}
+    for x in rows:
+        d = x.get("bsop_date")
+        if d:
+            new[f"{d[:4]}-{d[4:6]}-{d[6:]}"] = (V.num(x.get("crdt_loan_rmnd")), V.num(x.get("cust_dpmn_amt")))
+    print(f"[증시자금] {len(new)}일 받음" + (f" {min(new)}~{max(new)}" if new else f" (응답 {str(j)[:200]})"))
+    if not new:
+        return
+    path = f"{DB_DIR}/가격10년_시장지표.csv.gz"
+    df = pd.read_csv(io.BytesIO(drive_get(path)), compression="gzip", index_col=0)
+    name = df.index.name
+    df.index = df.index.astype(str)
+    for i, col in enumerate(("신용잔고", "고객예탁금")):
+        if col not in df.columns:
+            df[col] = float("nan")
+        last = df[col].last_valid_index()
+        add = {d: v[i] for d, v in new.items() if (last is None or d > last) and v[i] == v[i]}
+        for d, v in add.items():
+            if d not in df.index:
+                df.loc[d] = float("nan")
+            df.at[d, col] = v
+        print(f"[증시자금] {col}: 마지막 {last} → 새 {len(add)}일")
+    df = df.sort_index()
+    df.index.name = name
+    if dry:
+        return
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as g:
+        g.write(df.to_csv().encode("utf-8"))
+    drive_put(path, buf.getvalue(), "application/x-gzip")
+    print("[증시자금] 드라이브에 씀")
+
+
 def last_day(market):
     df = pd.read_csv(io.BytesIO(drive_get(f"{DB_DIR}/가격10년_종가.csv.gz")), compression="gzip", index_col=0)
     df = df[[c for c in df.columns if not c.startswith("^") and is_kr(c) == (market == "kr")]]
@@ -248,6 +288,11 @@ def main():
     else:
         day, vals = collect(a.market, kis, sub)
         append(day, vals, a.dry)
+    if a.market == "kr":
+        try:
+            market_funds(kis, a.dry)
+        except Exception as e:
+            print(f"[증시자금] 못 받음 ({e})")
     val = values(a.market, kis, sub)
     for i, field in enumerate(VALUES):
         write_day(field, day, {t: v[i] for t, v in val.items()}, a.dry)

@@ -181,11 +181,11 @@ def head(no, name, s, unit="", digits=2, note=""):
 
 def item(no, name, s, unit="", digits=2, note="", **kw):
     """한 칸: 제목 + 왼쪽 그래프 + 오른쪽 표"""
-    with st.container(border=True, key=f"card_{no}"):
+    with st.container(border=True, key=f"card_{no}_{name}"):
         head(no, name, s, unit, digits, note)
         c1, c2 = st.columns([1, 1], gap="medium")
         with c1:
-            chart({name: bar(s, rule)}, kw.pop("title", name), unit=unit, key=no, **kw)
+            chart({name: bar(s, rule)}, kw.pop("title", name), unit=unit, key=f"{no}_{name}", **kw)
         with c2:
             change_table(s, unit=unit, digits=digits)
 
@@ -208,9 +208,9 @@ if top[2].button("자료 다시 읽기", width="stretch"):
 
 g = lambda k: D[k] if k in D.columns else pd.Series(dtype=float)
 
-st.subheader("1. 마켓")
+st.subheader("1. 마켓 (MI)")
 # 1-1 공포와 탐욕 (CNN 구간: 0~25 극단적 공포, 25~45 공포, 45~55 중립, 55~75 탐욕, 75~100 극단적 탐욕)
-item("1-1", "공포와 탐욕 지수", g("공포탐욕"), digits=1, title="공포와 탐욕 지수 (CNN)", yfix=[0, 100], bands=[
+item("MI01", "공포와 탐욕 지수", g("공포탐욕"), digits=1, title="공포와 탐욕 지수 (CNN)", yfix=[0, 100], bands=[
     (0, 25, "#dc2626", "극단적 공포"), (25, 45, "#f97316", "공포"), (45, 55, "#9ca3af", "중립"),
     (55, 75, "#84cc16", "탐욕"), (75, 100, "#16a34a", "극단적 탐욕")])
 
@@ -218,7 +218,7 @@ item("1-1", "공포와 탐욕 지수", g("공포탐욕"), digits=1, title="공�
 cta_d = CTA.cta(pd.DataFrame({k: g(k) for k in ("SPX", "NDX", "RUT")}))
 cta_s = cta_d["CTA σ"]
 with st.container(border=True, key="card_1-2"):
-    head("1-2", "CTA 근사값", cta_s, unit="σ",
+    head("MI02", "CTA 근사값", cta_s, unit="σ",
          note="S&P500 20%·나스닥100 60%·러셀2000 20% 가격 추세로 계산. −4σ 바닥·+4σ 고점 기준(11/23 회의).")
     cs = cta_s if rule is None else cta_s.resample(rule).last().dropna()
     c1, c2 = st.columns([1, 1], gap="medium")
@@ -234,13 +234,17 @@ with st.container(border=True, key="card_1-2"):
                     unsafe_allow_html=True)
         st.markdown(S.table(tt, color_cols=("CTA σ", "5일 변화")), unsafe_allow_html=True)
 
-item("1-3", "VIX", g("VIX"), title="VIX (Cboe)")
-item("1-4", "하이일드 스프레드", g("BAMLH0A0HYM2"), unit="%",
+item("MI03", "VIX", g("VIX"), title="VIX (Cboe)")
+item("MI04", "하이일드 스프레드", g("BAMLH0A0HYM2"), unit="%",
      note="ICE BofA 미국 하이일드 옵션조정 스프레드(FRED BAMLH0A0HYM2). FRED 공개가 최근 3년치뿐.")
-item("1-5", "미국채 10년 금리", g("DGS10"), unit="%", title="미국채 10년 금리 (FRED DGS10)",
+item("MI05", "미국채 10년 금리", g("DGS10"), unit="%", title="미국채 10년 금리 (FRED DGS10)",
      lines=[(4.8, "의장 기준 4.8%")])
-item("1-6", "MOVE 지수", g("MOVE"), title="MOVE 지수 (미국채 변동성)")
-item("1-7", "WTI 유가", g("WTI"), title="WTI (FRED DCOILWTICO, 달러/배럴)")
+item("MI06", "MOVE 지수", g("MOVE"), title="MOVE 지수 (미국채 변동성)")
+item("MI07", "WTI 유가", g("WTI"), title="WTI (FRED DCOILWTICO, 달러/배럴)")
+# MI14 신용잔고·고객예탁금: 값만 보여 줌(의장 11/27, 기준 없음). 한투 증시자금 종합(금융투자협회 자료), 억원.
+item("MI14", "신용잔고", g("신용잔고"), unit="억원", digits=0, title="신용융자 잔고 (억원)",
+     note="한투 증시자금 종합(금융투자협회 자료). 기준 없이 값만 봅니다.")
+item("MI14", "고객예탁금", g("고객예탁금"), unit="억원", digits=0, title="고객예탁금 (억원)")
 
 
 # ---------------- 2. 종목 ----------------
