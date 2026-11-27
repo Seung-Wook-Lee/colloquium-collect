@@ -33,6 +33,9 @@ KIS = "https://openapi.koreainvestment.com:9443"
 DB_DIR = "콜로키움 수집데이터/1_data"
 FIELDS = ["시가", "고가", "저가", "종가", "거래량"]
 VALUES = ["PER", "EPS", "PEG"]
+# 지수(의장 11/27 "코스피·코스닥·S&P500·나스닥은 매일 모아야"): 종가 파일의 '^' 칸에 같이 붙인다.
+INDEX = {"kr": {"^KS11": "0001", "^KQ11": "1001"},            # 한투 국내 업종 지수 코드
+         "us": {"^GSPC": ("SPX", ".SPX"), "^NDX": ("NDX", ".NDX")}}  # 한투 해외 지수 코드 (앞에서부터 시도)
 is_kr = lambda t: t.endswith(".KS") or t.endswith(".KQ")
 
 # 한투 해외 거래소 코드: NAS(나스닥) → NYS(뉴욕) → AMS(아멕스·Arca) 차례로 찾는다.
@@ -119,6 +122,40 @@ class Kis:
                                 ("stck_oprc", "stck_hgpr", "stck_lwpr", "stck_clpr", "acml_vol"))
         return rows
 
+    def kr_index(self, code):
+        """국내 지수 일봉 → {날짜: (시가,고가,저가,종가,거래량)} (FHKUP03500100)"""
+        today = pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y%m%d")
+        start = (pd.Timestamp.now(tz="Asia/Seoul") - pd.Timedelta(days=14)).strftime("%Y%m%d")
+        j = self.get("/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice", "FHKUP03500100", {
+            "FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": code, "FID_INPUT_DATE_1": start,
+            "FID_INPUT_DATE_2": today, "FID_PERIOD_DIV_CODE": "D"})
+        rows = {}
+        for x in j.get("output2") or []:
+            d = x.get("stck_bsop_date")
+            if d and x.get("bstp_nmix_prpr") not in (None, "", "0"):
+                rows[d] = tuple(float(x.get(k) or "nan") for k in
+                                ("bstp_nmix_oprc", "bstp_nmix_hgpr", "bstp_nmix_lwpr", "bstp_nmix_prpr", "acml_vol"))
+        return rows
+
+    def us_index(self, codes):
+        """해외 지수 일봉 → {날짜: (시가,고가,저가,종가,거래량)} (FHKST03030100)"""
+        today = pd.Timestamp.now(tz="America/New_York").strftime("%Y%m%d")
+        start = (pd.Timestamp.now(tz="America/New_York") - pd.Timedelta(days=14)).strftime("%Y%m%d")
+        for code in codes:
+            j = self.get("/uapi/overseas-price/v1/quotations/inquire-daily-chartprice", "FHKST03030100", {
+                "FID_COND_MRKT_DIV_CODE": "N", "FID_INPUT_ISCD": code, "FID_INPUT_DATE_1": start,
+                "FID_INPUT_DATE_2": today, "FID_PERIOD_DIV_CODE": "D"})
+            rows = {}
+            for x in j.get("output2") or []:
+                d = x.get("stck_bsop_date")
+                if d and x.get("ovrs_nmix_prpr") not in (None, "", "0"):
+                    rows[d] = tuple(float(x.get(k) or "nan") for k in
+                                    ("ovrs_nmix_oprc", "ovrs_nmix_hgpr", "ovrs_nmix_lwpr", "ovrs_nmix_prpr", "acml_vol"))
+            if rows:
+                return rows
+            print(f"[지수] {code} 없음 ({str(j.get('msg1', ''))[:60]})")
+        return {}
+
     def us_daily(self, symb, excd):
         """해외 일봉 최근 것들 → {날짜: (시가,고가,저가,종가,거래량)}"""
         for ex in [excd] + [e for e in ("NAS", "NYS", "AMS") if e != excd]:
@@ -148,6 +185,13 @@ def collect(market, kis, sub):
         else:
             miss.append(t)
     print(f"[받기] {market} {len(sub)}개 중 {len(got)}개 받음, 못 받음 {len(miss)}개 {miss}")
+    for col, code in INDEX[market].items():
+        rows = kis.kr_index(code) if market == "kr" else kis.us_index(code)
+        if rows:
+            got[col] = rows
+            print(f"[지수] {col} {len(rows)}일, 마지막 {max(rows)} 종가 {rows[max(rows)][3]:,.2f}")
+        else:
+            print(f"[지수] {col} 못 받음")
     if not got:
         raise SystemExit("한 종목도 못 받음 — 드라이브에 쓰지 않음")
     # 하루치 = 받은 자료 중 가장 최근 거래일 하나
