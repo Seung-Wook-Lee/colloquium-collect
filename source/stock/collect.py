@@ -8,6 +8,7 @@
 - 드라이브 '콜로키움 수집데이터/1_data/가격10년_{시가,고가,저가,종가,거래량}.csv.gz'
   뒤에 그날 하루치만 붙인다. 이미 값이 있는 칸은 건드리지 않는다. 새 파일은 만들지 않는다.
 
+- 한국 실행 때 외국인·기관·개인 순매수(MI13, 의장 11/27 20:06)도 가격10년_국내수급에 붙인다.
 - PER·EPS·PEG(의장 11/27): 같은 실행에서 같은 날짜로 가격10년_{PER,EPS,PEG}.csv.gz 에 붙인다(source/stock/valuation.py).
 
 실행: python source/stock/collect.py --market us|kr [--dry] [--value-only]
@@ -312,6 +313,36 @@ def market_funds(kis, dry):
     print("[증시자금] 드라이브에 씀")
 
 
+def foreign_flow(kis, sub, dry):
+    """MI13 외국인 순매도(의장 11/27 20:06): 한국 종목 투자자별 순매수 거래대금(백만원)
+    한투 종목별 투자자매매동향(일별) FHPTJ04160001 → 드라이브 가격10년_국내수급.csv.gz(날짜·코드·외국인·기관·개인·종가)
+    파일에 이미 있는 종목(한국 유니버스 개별주)만, 종목마다 마지막 날짜 다음 날부터 덧붙인다. 장 마감(15:40) 뒤라 밤 8시에 받는다."""
+    path = f"{DB_DIR}/가격10년_국내수급.csv.gz"
+    old = pd.read_csv(io.BytesIO(drive_get(path)), compression="gzip", dtype={"코드": str, "날짜": str})
+    old["코드"] = old["코드"].str.zfill(6)
+    old = old.drop_duplicates(["날짜", "코드"], keep="last")
+    last = old.groupby("코드")["날짜"].max()
+    codes = [c for c in (t.split(".")[0] for t in sub) if c in last.index]
+    today = pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y%m%d")
+    cols = {"frgn_ntby_tr_pbmn": "외국인", "orgn_ntby_tr_pbmn": "기관", "prsn_ntby_tr_pbmn": "개인", "stck_clpr": "종가"}
+    rows = []
+    for code in codes:
+        j = kis.get("/uapi/domestic-stock/v1/quotations/investor-trade-by-stock-daily", "FHPTJ04160001", {
+            "FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code, "FID_INPUT_DATE_1": today,
+            "FID_ORG_ADJ_PRC": "", "FID_ETC_CLS_CODE": ""})
+        for x in j.get("output2") or []:
+            d = x.get("stck_bsop_date")
+            if d and d > last[code]:
+                rows.append({"날짜": d, "코드": code, **{v: V.num(x.get(k)) for k, v in cols.items()}})
+    new = pd.DataFrame(rows)
+    print(f"[국내수급] {len(codes)}종목, 새 {len(new)}줄" + (f" ({new['날짜'].min()}~{new['날짜'].max()})" if len(new) else ""))
+    if dry or new.empty:
+        return
+    A = pd.concat([old, new]).drop_duplicates(["날짜", "코드"], keep="last").sort_values(["코드", "날짜"])
+    drive_put(path, gzip.compress(A.to_csv(index=False).encode("utf-8"), mtime=0), "application/x-gzip")
+    print("[국내수급] 드라이브에 씀")
+
+
 def last_day(market):
     df = pd.read_csv(io.BytesIO(drive_get(f"{DB_DIR}/가격10년_종가.csv.gz")), compression="gzip", index_col=0)
     df = df[[c for c in df.columns if not c.startswith("^") and is_kr(c) == (market == "kr")]]
@@ -337,6 +368,10 @@ def main():
             market_funds(kis, a.dry)
         except Exception as e:
             print(f"[증시자금] 못 받음 ({e})")
+        try:
+            foreign_flow(kis, sub, a.dry)
+        except Exception as e:
+            print(f"[국내수급] 못 받음 ({e})")
     val = values(a.market, kis, sub)
     for i, field in enumerate(VALUES):
         write_day(field, day, {t: v[i] for t, v in val.items()}, a.dry)
