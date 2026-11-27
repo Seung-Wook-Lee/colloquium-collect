@@ -17,9 +17,13 @@
   MI12 코스피 50일 이격도 ≤ 93 (한국만)
   MI13 외국인 순매도(한국만, 의장 20:06·20:10): 한국 유니버스 개별주 외국인 순매수 합을 주별(월~금)로 더해,
        전주가 순매도였고 이번 주 순매도가 전주보다 줄었으면(매수로 돈 경우 포함) 그 주 거래일에 초록불.
-       이번 주는 그날까지 더한 값으로 전주와 비교한다. MI14 QQQM vs RSP Anchored VWAP·MI15 맥클렐런 오실레이터(유니버스판) — 기준 확정 대기.
+       이번 주는 그날까지 더한 값으로 전주와 비교한다.
+  MI14 QQQM vs RSP Anchored VWAP (미국만, 20:12): QQQM ÷ RSP 비율이 주황선(2023-08-11 저점부터의 RSP 거래량 가중 평균)
+       위 10% 안(비율 ≤ 주황선 × 1.10)이면 초록불.
+  MI15 맥클렐런 오실레이터(유니버스판, 20:12 역산값): 오른 종목 수 A·내린 종목 수 D로 (A − D) ÷ (A + D) × 1000의
+       19일 지수이동평균 − 39일 지수이동평균. 미국 유니버스 ≤ −50, 한국 유니버스 ≤ −80이면 초록불.
   신용잔고는 기준에서 뺌(20:06).
-미국 = MI01~MI08·MI10·MI11, 한국 = 여기에 MI08을 코스피로 바꾸고 MI12를 더함.
+미국 = MI01~MI08·MI10·MI11·MI14·MI15, 한국 = MI01~MI07·MI08(코스피)·MI10~MI13·MI15(한국 유니버스).
 """
 import os
 import sys
@@ -43,7 +47,31 @@ RULES = [  # (번호, 이름, 기준 글)
     ("MI11", "주식 풋콜 비율", "1.0 이상"),
     ("MI12", "코스피 50일 이격도", "93 이하 (한국만)"),
     ("MI13", "외국인 순매수 (주별 합)", "전주 순매도보다 이번 주 매도가 줄면 (한국만)"),
+    ("MI14", "QQQM vs RSP Anchored VWAP", "비율이 주황선 위 10% 안 (미국만)"),
+    ("MI15", "맥클렐런 오실레이터 (유니버스)", "미국 −50 이하 / 한국 −80 이하"),
 ]
+ANCHOR = "2023-08-11"   # MI14 주황선 시작일 (QQQM ÷ RSP 2023년 하반기 저점)
+
+
+def anchored_vwap(px, vol, start=ANCHOR):
+    """시작일부터 거래량 가중 평균"""
+    w = px[start:]
+    v = vol.reindex(w.index).fillna(0)
+    return (w * v).cumsum() / v.cumsum()
+
+
+def mcclellan(P, cols):
+    """유니버스판 맥클렐런 오실레이터 (비율 조정)"""
+    X = P[cols].astype(float)
+    X = X[X.notna().sum(axis=1) >= len(cols) * 0.5]  # 그 시장이 열린 날만
+    ch = X.diff()
+    a, d = (ch > 0).sum(axis=1), (ch < 0).sum(axis=1)
+    rana = ((a - d) / (a + d).where(a + d > 0) * 1000).dropna()
+    return rana.ewm(span=19, adjust=False).mean() - rana.ewm(span=39, adjust=False).mean()
+
+
+US_COLS = lambda P: [c for c in P.columns if not c.startswith("^") and not c.endswith((".KS", ".KQ"))]
+KR_COLS = lambda P: [c for c in P.columns if c.endswith((".KS", ".KQ"))]
 
 
 def hold(s, n):
@@ -73,7 +101,7 @@ def foreign_week(F):
     return full, on.astype(float)
 
 
-def values(m, P=None):
+def values(m, P=None, Vol=None):
     """기준에 쓰는 값(그날 숫자)"""
     spx = m["SPX"].dropna()
     v = {"MI01": m["공포탐욕"].dropna(), "MI02": C.cta(m[["SPX", "NDX", "RUT"]])["CTA σ"],
@@ -86,6 +114,14 @@ def values(m, P=None):
         ks = P["^KS11"].dropna()
         v["MI08 코스피"] = (ks / ks.rolling(252, min_periods=1).max() - 1) * 100
         v["MI12"] = ks / ks.rolling(50).mean() * 100
+    if P is not None:
+        v["MI15"] = mcclellan(P, US_COLS(P))
+        v["MI15 한국"] = mcclellan(P, KR_COLS(P))
+        if Vol is not None and {"QQQM", "RSP"} <= set(P.columns) and "RSP" in Vol:
+            r = (P["QQQM"] / P["RSP"]).dropna()
+            v["MI14 비율"] = r
+            v["MI14 주황선"] = anchored_vwap(r, Vol["RSP"])
+            v["MI14"] = (r / v["MI14 주황선"] - 1).dropna() * 100   # 주황선 대비 %
     return v
 
 
@@ -97,9 +133,9 @@ def _count(D):
     return D
 
 
-def signals(m, P=None):
+def signals(m, P=None, Vol=None):
     """기준마다 켜짐(1)·꺼짐(0) — 각 자료의 날짜 그대로. 미국용 MI08과 한국용 MI08 코스피·MI12."""
-    v = values(m, P)
+    v = values(m, P, Vol)
     f = lambda b: b.astype(float)
     ndx = v["MI08 나스닥100"]
     us08 = pd.concat([v["MI08"] <= -10, ndx <= -15], axis=1).ffill(limit=3).fillna(False).any(axis=1)
@@ -109,6 +145,11 @@ def signals(m, P=None):
     if "MI12" in v:
         S["MI08 코스피"] = f(v["MI08 코스피"] <= -20)
         S["MI12"] = f(v["MI12"] <= 93)
+    if "MI15" in v:
+        S["MI15"] = f(v["MI15"] <= -50)
+        S["MI15 한국"] = f(v["MI15 한국"] <= -80)
+    if "MI14" in v:
+        S["MI14"] = f(v["MI14"] <= 10)
     return S
 
 
@@ -118,22 +159,25 @@ def _table(S, idx, cols):
     return _count(D)
 
 
-def table(m, P=None):
+def table(m, P=None, Vol=None):
     """미국: 날마다 MI 켜짐(1)·꺼짐(0), 켜진 수, 켜진 비율(%). 날짜 = S&P500 거래일."""
-    S = signals(m)
-    return _table(S, m["SPX"].dropna().index, ["MI01", "MI02", "MI03", "MI04", "MI05", "MI06", "MI07", "MI08",
-                                              "MI10", "MI11"])
+    S = signals(m, P, Vol)
+    cols = ["MI01", "MI02", "MI03", "MI04", "MI05", "MI06", "MI07", "MI08", "MI10", "MI11"]
+    cols += [c for c in ("MI14", "MI15") if c in S]
+    return _table(S, m["SPX"].dropna().index, cols)
 
 
-def table_kr(m, P, F=None):
+def table_kr(m, P, F=None, Vol=None):
     """한국: 미국 것에서 MI08을 코스피 낙폭으로 바꾸고 MI12(코스피 50일 이격도)·MI13(외국인)을 더함. 날짜 = 코스피 거래일.
     F = 가격10년_국내수급(없으면 MI13 빼고)."""
-    S = signals(m, P)
+    S = signals(m, P, Vol)
     S["MI08"] = S.pop("MI08 코스피")
+    S["MI15"] = S.pop("MI15 한국")
     cols = ["MI01", "MI02", "MI03", "MI04", "MI05", "MI06", "MI07", "MI08", "MI10", "MI11", "MI12"]
     if F is not None:
         S["MI13"] = foreign_week(F)[1]
         cols.append("MI13")
+    cols.append("MI15")
     return _table(S, P["^KS11"].dropna().index, cols)
 
 

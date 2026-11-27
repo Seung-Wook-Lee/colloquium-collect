@@ -45,6 +45,20 @@ table.t td.down {color: #1f5fd6; font-weight: 600;}
 table.t td.dim {color: #9ca3af;}
 div[data-testid="stButtonGroup"] button {min-height: 26px !important; padding: 0 10px !important; font-size: 0.75rem !important;}
 div[data-testid="stButtonGroup"] button p {font-size: 0.75rem !important;}
+.gauge {padding: 4px 2px;}
+.gauge .g-top {display: flex; justify-content: space-between; align-items: baseline;}
+.gauge .g-name {font-size: 0.95rem; font-weight: 700; color: #111827;}
+.gauge .g-dt {font-size: 0.75rem; color: #9ca3af;}
+.gauge .g-val {font-size: 3rem; font-weight: 700; color: #111827; line-height: 1.1; margin-top: 6px; letter-spacing: -0.03em;}
+.gauge .g-unit {font-size: 1.3rem; font-weight: 600; color: #6b7280; margin-left: 2px;}
+.gauge .g-sub {font-size: 0.78rem; color: #6b7280; margin: 4px 0 10px 0;}
+.gauge .g-bar {height: 10px; background: #eef0f3; border-radius: 6px; overflow: hidden;}
+.gauge .g-fill {height: 100%; background: linear-gradient(90deg, #4ade80, #16a34a); border-radius: 6px;}
+.gauge .g-chips {display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px;}
+.chip {font-size: 0.7rem; font-weight: 600; padding: 3px 7px; border-radius: 999px; font-variant-numeric: tabular-nums;}
+.chip.on {background: #dcfce7; color: #15803d; border: 1px solid #86efac;}
+.chip.off {background: #f3f4f6; color: #9ca3af; border: 1px solid #e5e7eb;}
+.chip.na {background: #ffffff; color: #d1d5db; border: 1px dashed #e5e7eb;}
 .warn {background: #fff1f2; color: #b91c1c; border-radius: 8px; padding: 6px 10px; font-size: 0.8rem; margin-bottom: 6px;}
 </style>
 """
