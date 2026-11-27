@@ -281,7 +281,7 @@ def gauge_html(name, t):
     for c in [c for c in t.columns if c.startswith("MI")]:
         v = last[c]
         st_ = "na" if pd.isna(v) else ("on" if v >= 1 else "off")
-        lab = {"on": "초록불", "off": "빨간불", "na": "자료 없음"}[st_]
+        lab = "자료 없음" if st_ == "na" else ""   # 초록불·빨간불은 색으로만 (의장 20:36)
         rows.append(f"<div class='g-row {st_}'><span class='g-no'>{c}</span><span class='g-nm'>{names.get(c, '')}</span>"
                     f"<span class='g-lab'>{lab}</span></div>")
     chips = "".join(rows)
