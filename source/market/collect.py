@@ -9,7 +9,7 @@
 - 하이일드 스프레드는 FRED가 3년치만 공개 → 3년치로 간다(의장 11/27).
 - 한투에 없는 자료라 다른 곳에서 받는다(의장 11/27):
     FRED: 10년 금리(DGS10), 하이일드 스프레드(BAMLH0A0HYM2), WTI(DCOILWTICO)
-    Cboe: VIX, 주식 풋콜 비율(CPCE, 날짜별 시장 통계 'EQUITY PUT/CALL RATIO', 의장 11/27 "풋콜 받으세요. 매일")
+    Cboe: VIX, 원유 변동성 지수(OVX), 주식 풋콜 비율(CPCE, 날짜별 시장 통계 'EQUITY PUT/CALL RATIO', 의장 11/27 "풋콜 받으세요. 매일")
     야후: MOVE, S&P500(고가·저가 포함)·나스닥100·러셀2000 (CTA 계산용 가격)
     공포와 탐욕 지수: CNN 값을 매일 모아 공개하는 GitHub 자료(whit3rabbit/fear-greed-data)
 
@@ -57,13 +57,15 @@ def fred(sid, start):
     return pd.to_numeric(s, errors="coerce").dropna()
 
 
-def cboe_vix():
-    r = requests.get("https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+def cboe_vix(sym="VIX"):
+    """Cboe 지수 일별 종가 전체(VIX, OVX = 원유 변동성 지수)"""
+    r = requests.get(f"https://cdn.cboe.com/api/global/us_indices/daily_prices/{sym}_History.csv",
                      headers=UA, timeout=60)
     r.raise_for_status()
     d = pd.read_csv(io.StringIO(r.text))
     d["DATE"] = pd.to_datetime(d["DATE"]).dt.strftime("%Y-%m-%d")
-    return d.set_index("DATE")["CLOSE"].astype(float)
+    col = "CLOSE" if "CLOSE" in d.columns else d.columns[-1]   # OVX 파일은 DATE·OVX 두 칸
+    return pd.to_numeric(d.set_index("DATE")[col], errors="coerce").dropna()
 
 
 def cboe_cpce(last):
@@ -139,6 +141,7 @@ def main():
         ("WTI", lambda: fred("DCOILWTICO", start if "WTI" in df.columns and df["WTI"].notna().any()
                              else (pd.Timestamp.today() - pd.DateOffset(years=10)).strftime("%Y-%m-%d"))),
         ("VIX", cboe_vix),
+        ("OVX", lambda: cboe_vix("OVX")),   # 원유 변동성 지수(의장 11/27 20:54, MI07)
         ("공포탐욕", cnn_fear_greed),
         ("CPCE", lambda: cboe_cpce(df["CPCE"].last_valid_index() if "CPCE" in df.columns else None)),
     ]
