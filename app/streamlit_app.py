@@ -67,6 +67,7 @@ def chart(series, title, unit="", lines=(), bands=(), height=330):
                       annotation_text=text, annotation_font_size=10)
     end = max(s.index[-1] for s in series.values())
     fig.update_layout(
+        template="plotly_white", paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
         title=dict(text=title, font=dict(size=14), x=0.01, y=0.98, yanchor="top"), height=height + 30,
         margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
         legend=dict(orientation="h", x=0, xanchor="left", y=1.02, yanchor="bottom", font=dict(size=11)),
