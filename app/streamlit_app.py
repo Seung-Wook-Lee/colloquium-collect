@@ -316,7 +316,7 @@ def criteria_table(us, kr, vals, F):
     dot = lambda t, c: "" if t is None or c not in t or pd.isna(t[c].dropna().iloc[-1] if len(t[c].dropna()) else float("nan")) \
         else ("🟢" if t[c].dropna().iloc[-1] >= 1 else "⚪")
     fmt = {"MI01": "{:.1f}", "MI02": "{:+.2f}σ", "MI03": "{:.2f}", "MI04": "{:.2f}%", "MI05": "{:+.2f}%p",
-           "MI06": "{:.1f}", "MI07": "{:.2f}달러", "MI10": "{:.2f}", "MI11": "{:.2f}", "MI12": "{:.1f}"}
+           "MI06": "{:.1f}", "MI07": "{:.1f}", "MI10": "{:.2f}", "MI11": "{:.2f}", "MI12": "{:.1f}"}
     last = lambda k: vals.get(k, pd.Series(dtype=float)).dropna()
     rows = []
     for no, name, rule_txt in VOTE.RULES:
@@ -405,7 +405,8 @@ item("MI05", "미국채 10년 금리", g("DGS10"), unit="%", title="미국채 10
 item("MI05", "10년 금리 − 연준 기준금리", VOTE.rate_gap(D), unit="%p", title="10년 금리 − 연준 기준금리 (IOER→IORB)",
      lines=[(0.52, "+0.52%p 이상 초록불")])
 item("MI06", "MOVE 지수", g("MOVE"), title="MOVE 지수 (미국채 변동성)")
-item("MI07", "WTI 유가", g("WTI"), title="WTI (FRED DCOILWTICO, 달러/배럴)")
+item("MI07", "원유 변동성 지수", g("OVX"), title="원유 변동성 지수 (Cboe OVX)",
+     lines=[(VOTE.OVX_ON, f"{VOTE.OVX_ON:g} 이상 초록불")])
 # 고객예탁금: 값만 보여 줌(의장 11/27). 신용잔고는 의장 11/27 20:06 "기준에서 빼세요"로 화면에서 뺌(수집은 계속).
 item("", "고객예탁금", g("고객예탁금"), unit="억원", digits=0, title="고객예탁금 (억원)",
      note="한투 증시자금 종합(금융투자협회 자료). 기준 없이 값만 봅니다.")

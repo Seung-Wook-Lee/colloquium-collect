@@ -8,7 +8,7 @@
   MI04 하이일드 스프레드 ≥ 3%
   MI05 10년 금리 − 연준 기준금리(IOER, 2021-07-29부터 IORB) ≥ +0.52%p
   MI06 MOVE ≥ 105(20:24), 켜진 날부터 5거래일 유지
-  MI07 WTI ≥ 80달러
+  MI07 원유 변동성 지수(Cboe OVX) ≥ OVX_ON (20:54 '유가를 유가변동성지수로', WTI 80달러 대신)
   MI08 낙폭(1년 최고 대비): S&P500 ≤ −10%, 나스닥100 ≤ −15%, 코스피 ≤ −20% (19:55 "작은 조정도 잡게")
        미국은 S&P500·나스닥100 둘 중 하나라도 맞으면 켜짐, 한국은 코스피
   MI09 뺌(19:54) — 과매도 지표 검토 중
@@ -34,6 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "source", "market"))
 import cta as C  # noqa: E402
 
+OVX_ON = 50             # MI07 원유 변동성 지수 기준(10년 저점 절반을 맞히는 역산값)
 RULES = [  # (번호, 이름, 기준 글)
     ("MI01", "공포와 탐욕 지수", "15 이하"),
     ("MI02", "CTA 근사값", "−3.3σ 이하"),
@@ -41,7 +42,7 @@ RULES = [  # (번호, 이름, 기준 글)
     ("MI04", "하이일드 스프레드", "3% 이상"),
     ("MI05", "10년 금리 − 연준 기준금리", "+0.52%p 이상"),
     ("MI06", "MOVE", "105 이상, 5거래일 유지"),
-    ("MI07", "WTI", "80달러 이상"),
+    ("MI07", "원유 변동성 지수", f"{OVX_ON:g} 이상"),
     ("MI08", "지수 낙폭 (1년 최고 대비)", "S&P −10% 또는 나스닥 −15% / 코스피 −20%"),
     ("MI10", "VIX ÷ VIX3M", "1 이상"),
     ("MI11", "주식 풋콜 비율", "1.0 이상"),
@@ -106,7 +107,7 @@ def values(m, P=None, Vol=None):
     spx = m["SPX"].dropna()
     v = {"MI01": m["공포탐욕"].dropna(), "MI02": C.cta(m[["SPX", "NDX", "RUT"]])["CTA σ"],
          "MI03": m["VIX"].dropna(), "MI04": m["BAMLH0A0HYM2"].dropna(), "MI05": rate_gap(m),
-         "MI06": m["MOVE"].dropna(), "MI07": m["WTI"].dropna(),
+         "MI06": m["MOVE"].dropna(), "MI07": m["OVX"].dropna() if "OVX" in m else pd.Series(dtype=float),
          "MI08": (spx / spx.rolling(252, min_periods=1).max() - 1) * 100,
          "MI08 나스닥100": (lambda n: (n / n.rolling(252, min_periods=1).max() - 1) * 100)(m["NDX"].dropna()),
          "MI10": (m["VIX"] / m["VIX3M"]).dropna(), "MI11": m["CPCE"].dropna()}
@@ -141,7 +142,7 @@ def signals(m, P=None, Vol=None):
     us08 = pd.concat([v["MI08"] <= -10, ndx <= -15], axis=1).ffill(limit=3).fillna(False).any(axis=1)
     S = {"MI01": f(v["MI01"] <= 15), "MI02": f(v["MI02"] <= -3.3), "MI03": f(hold(v["MI03"] >= 30, 5)),
          "MI04": f(v["MI04"] >= 3), "MI05": f(v["MI05"] >= 0.52), "MI06": f(hold(v["MI06"] >= 105, 5)),
-         "MI07": f(v["MI07"] >= 80), "MI08": f(us08), "MI10": f(v["MI10"] >= 1), "MI11": f(v["MI11"] >= 1)}
+         "MI07": f(v["MI07"] >= OVX_ON), "MI08": f(us08), "MI10": f(v["MI10"] >= 1), "MI11": f(v["MI11"] >= 1)}
     if "MI12" in v:
         S["MI08 코스피"] = f(v["MI08 코스피"] <= -20)
         S["MI12"] = f(v["MI12"] <= 93)
