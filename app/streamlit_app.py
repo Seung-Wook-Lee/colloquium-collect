@@ -183,7 +183,7 @@ def head(no, name, s, unit="", digits=2, note=""):
                 f"<span class='val'>{s.iloc[-1]:,.{digits}f}{unit}</span>{chg}")
     else:
         tail = "<span class='dt'>: 자료 없음</span>"
-    st.markdown(f"<div class='hd'><span class='no'>{no}. {name}</span>{tail}</div>"
+    st.markdown(f"<div class='hd'><span class='no'>{f'{no}. ' if no else ''}{name}</span>{tail}</div>"
                 + (f"<div class='note'>{note}</div>" if note else ""), unsafe_allow_html=True)
 
 
@@ -295,14 +295,14 @@ with st.container(border=True, key="card_1-2"):
 item("MI03", "VIX", g("VIX"), title="VIX (Cboe)")
 item("MI04", "하이일드 스프레드", g("BAMLH0A0HYM2"), unit="%",
      note="ICE BofA 미국 하이일드 옵션조정 스프레드(FRED BAMLH0A0HYM2). FRED 공개가 최근 3년치뿐.")
-item("MI05", "미국채 10년 금리", g("DGS10"), unit="%", title="미국채 10년 금리 (FRED DGS10)",
-     lines=[(4.8, "의장 기준 4.8%")])
+item("MI05", "미국채 10년 금리", g("DGS10"), unit="%", title="미국채 10년 금리 (FRED DGS10)")
+item("MI05", "10년 금리 − 연준 기준금리", VOTE.rate_gap(D), unit="%p", title="10년 금리 − 연준 기준금리 (IOER→IORB)",
+     lines=[(0.52, "+0.52%p 이상 초록불")])
 item("MI06", "MOVE 지수", g("MOVE"), title="MOVE 지수 (미국채 변동성)")
 item("MI07", "WTI 유가", g("WTI"), title="WTI (FRED DCOILWTICO, 달러/배럴)")
-# MI14 신용잔고·고객예탁금: 값만 보여 줌(의장 11/27, 기준 없음). 한투 증시자금 종합(금융투자협회 자료), 억원.
-item("MI14", "신용잔고", g("신용잔고"), unit="억원", digits=0, title="신용융자 잔고 (억원)",
+# 고객예탁금: 값만 보여 줌(의장 11/27). 신용잔고는 의장 11/27 20:06 "기준에서 빼세요"로 화면에서 뺌(수집은 계속).
+item("", "고객예탁금", g("고객예탁금"), unit="억원", digits=0, title="고객예탁금 (억원)",
      note="한투 증시자금 종합(금융투자협회 자료). 기준 없이 값만 봅니다.")
-item("MI14", "고객예탁금", g("고객예탁금"), unit="억원", digits=0, title="고객예탁금 (억원)")
 
 
 # ---------------- 2. 종목 ----------------
