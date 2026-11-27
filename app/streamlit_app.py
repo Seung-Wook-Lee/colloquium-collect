@@ -185,6 +185,19 @@ def price_cta(name, price, score, freq):
     st.plotly_chart(fig, width="stretch", config=CONFIG)
 
 
+def signal_light(no):
+    """신호등: 그날 기준에 맞으면 초록 칸, 안 맞으면 빨강 칸만 켬 (MI01~MI07은 미국·한국 기준이 같아 가장 최근 날짜 값)"""
+    ss = [T[no].dropna() for T in (globals().get("MI_US"), globals().get("MI_KR"))
+          if T is not None and no in T.columns and T[no].notna().any()]
+    if not no or not ss:
+        return ""
+    x = max(ss, key=lambda v: v.index[-1])   # 미국·한국 표 중 더 최근 날짜
+    on = x.iloc[-1] > 0
+    tip = f"{no} {'초록불' if on else '빨간불'} ({x.index[-1]:%Y-%m-%d})"
+    return (f"<span class='tl' title='{tip}'><i class='tl-g{' lit' if on else ''}'></i>"
+            f"<i class='tl-r{'' if on else ' lit'}'></i></span>")
+
+
 def head(no, name, s, unit="", digits=2, note=""):
     """'1-1. 이름 : 날짜 / 숫자' 제목 (마지막 값, 전일 대비)"""
     s = s.dropna()
@@ -198,7 +211,7 @@ def head(no, name, s, unit="", digits=2, note=""):
                 f"<span class='val'>{s.iloc[-1]:,.{digits}f}{unit}</span>{chg}")
     else:
         tail = "<span class='dt'>: 자료 없음</span>"
-    st.markdown(f"<div class='hd'><span class='no'>{f'{no}. ' if no else ''}{name}</span>{tail}</div>"
+    st.markdown(f"<div class='hd'>{signal_light(no)}<span class='no'>{f'{no}. ' if no else ''}{name}</span>{tail}</div>"
                 + (f"<div class='note'>{note}</div>" if note else ""), unsafe_allow_html=True)
 
 
@@ -215,6 +228,8 @@ def item(no, name, s, unit="", digits=2, note="", **kw):
 
 # ---------------- 화면 ----------------
 st.title("스튜디오 톰앤수 회의")
+st.markdown("<div class='jump'><a href='#sec-1'>1. 마켓</a><a href='#sec-2'>2. 종목</a>"
+            "<a href='#sec-3'>3. 기타</a></div>", unsafe_allow_html=True)
 try:
     D = load()
 except Exception as e:
@@ -231,6 +246,7 @@ if top[2].button("자료 다시 읽기", width="stretch"):
 
 g = lambda k: D[k] if k in D.columns else pd.Series(dtype=float)
 
+st.markdown("<div id='sec-1' class='anchor'></div>", unsafe_allow_html=True)
 st.subheader("1. 마켓 (Market Index)")
 
 
@@ -251,7 +267,7 @@ def mi_data(D):
 
 
 def gauge_html(name, t):
-    """켜진 비율 큰 숫자 + 막대 + 기준별 동그라미"""
+    """켜진 비율 큰 숫자 + 막대 + 기준별 신호등 목록"""
     t = t.dropna(subset=["켜진 비율"])
     last = t.iloc[-1]
     d = t.index[-1]
@@ -260,35 +276,51 @@ def gauge_html(name, t):
     ch = pct - prev
     chs = (f"<span style='color:{S.UP}'>▲ {ch:.1f}%p</span>" if ch > 0 else
            f"<span style='color:{S.DOWN}'>▼ {abs(ch):.1f}%p</span>" if ch < 0 else "<span>변화 없음</span>")
-    chips = "".join(
-        f"<span class='chip {'on' if last[c] >= 1 else ('na' if pd.isna(last[c]) else 'off')}'>{c[2:]}</span>"
-        for c in t.columns if c.startswith("MI"))
+    names = {no: nm for no, nm, _ in VOTE.RULES}
+    rows = []
+    for c in [c for c in t.columns if c.startswith("MI")]:
+        v = last[c]
+        g_, r_ = ("", "") if pd.isna(v) else ((" lit", "") if v >= 1 else ("", " lit"))
+        rows.append(f"<div class='g-row'><span class='tl sm'><i class='tl-g{g_}'></i><i class='tl-r{r_}'></i></span>"
+                    f"<span class='g-no'>{c}</span><span class='g-nm'>{names.get(c, '')}</span></div>")
+    chips = "".join(rows)
     return (f"<div class='gauge'><div class='g-top'><span class='g-name'>{name}</span>"
             f"<span class='g-dt'>{d:%Y-%m-%d}</span></div>"
             f"<div class='g-val'>{pct:.1f}<span class='g-unit'>%</span></div>"
             f"<div class='g-sub'>{int(last['켜진 수'])} / {int(last['자료 수'])} 켜짐 · 전 거래일 대비 {chs}</div>"
             f"<div class='g-bar'><div class='g-fill' style='width:{pct:.1f}%'></div></div>"
-            f"<div class='g-chips'>{chips}</div></div>")
+            f"<div class='g-list'>{chips}</div></div>")
 
 
-def ratio_chart(us, kr):
-    off = period("mi_ratio", "1년")
+def ratio_chart(nm, t):
+    """켜진 비율 그래프(첨부 화면 모양, 의장 11/27 20:29): 표준 이동평균 수렴·확산(12·26·9일)
+    청록 선 = 켜진 비율 12일 지수이동평균 − 26일 지수이동평균, 빨간 선 = 청록 선의 9일 지수이동평균,
+    막대 = 청록 선 − 빨간 선(0 위 청록, 0 아래 빨강)"""
+    off = period(f"mi_ratio_{nm}", "1년")
+    r = t["켜진 비율"].dropna()
+    fast = r.ewm(span=12, adjust=False).mean() - r.ewm(span=26, adjust=False).mean()
+    slow = fast.ewm(span=9, adjust=False).mean()
+    hist = fast - slow
+    fast, slow, hist = cut(fast, off), cut(slow, off), cut(hist, off)
     fig = go.Figure()
-    for nm, t, col in (("미국", us, S.LINE), ("한국", kr, "#d97706")):
-        r = cut(t["켜진 비율"].dropna(), off)
-        if r.empty:
-            continue
-        fig.add_trace(go.Scatter(x=r.index, y=r.values, name=nm, mode="lines", line=dict(width=1.8, color=col),
-                                 hovertemplate="%{x|%Y-%m-%d}  %{y:.1f}%<extra>" + nm + "</extra>"))
-    for v in (50,):
-        fig.add_hline(y=v, line_dash="dot", line_color="#c4c9d2", line_width=1)
+    fig.add_trace(go.Bar(x=hist.index, y=hist.values, name="차이(막대)", showlegend=False,
+                         marker_color=["#2a9d8f" if v >= 0 else "#ef4444" for v in hist.values],
+                         hovertemplate="%{y:+.2f}%p<extra>막대</extra>"))
+    fig.add_trace(go.Scatter(x=fast.index, y=fast.values, name="12일−26일 평균", mode="lines",
+                             line=dict(width=1.6, color="#2a9d8f"), hovertemplate="%{y:+.2f}%p<extra>청록 선</extra>"))
+    fig.add_trace(go.Scatter(x=slow.index, y=slow.values, name="9일 평균", mode="lines",
+                             line=dict(width=1.6, color="#ef4444"), hovertemplate="%{y:+.2f}%p<extra>빨간 선</extra>"))
+    fig.add_hline(y=0, line_color="#111827", line_width=1)
     fig.update_layout(template="plotly_white", font=FONT, paper_bgcolor="#ffffff", plot_bgcolor=S.PLOT_BG,
-                      height=300, margin=dict(l=8, r=8, t=10, b=8), hovermode="x unified", dragmode=False,
+                      height=330, margin=dict(l=8, r=8, t=10, b=8), hovermode="x unified", dragmode=False,
+                      bargap=0.15, showlegend=True,
                       legend=dict(orientation="h", x=0, y=1.08, font=dict(size=11)),
                       hoverlabel=dict(bgcolor="#111827", font=dict(color="#ffffff", size=12)),
                       xaxis=dict(AXIS, fixedrange=True),
-                      yaxis=dict(AXIS, ticksuffix="%", side="right", range=[0, 100], fixedrange=True))
+                      yaxis=dict(AXIS, ticksuffix="%p", side="right", fixedrange=True))
     st.plotly_chart(fig, width="stretch", config=CONFIG)
+    st.markdown("<div class='note'>켜진 비율의 12일·26일 지수이동평균 차이(청록 선), 그 9일 평균(빨간 선), "
+                "둘의 차이(막대). 표준 이동평균 수렴·확산 12·26·9일 방식.</div>", unsafe_allow_html=True)
 
 
 def criteria_table(us, kr, vals, F):
@@ -335,16 +367,18 @@ except Exception as e:
     st.error(f"초록불 계산 실패: {e}")
 if MI_US is not None:
     with st.container(border=True, key="card_mi_lights"):
-        st.markdown("<div class='hd'><span class='no'>바닥 초록불 · 켜진 비율</span></div>"
+        st.markdown("<div class='hd'><span class='no'>지금 바닥 근처인가?</span></div>"
                     "<div class='note'>바닥 조건에 맞으면 초록불 · 켜진 비율 = 켜진 수 ÷ 자료가 있는 기준 수 · "
                     "기준은 맨 아래 표</div>", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([1, 1, 2], gap="medium")
-        with c1:
-            st.markdown(gauge_html("미국", MI_US), unsafe_allow_html=True)
-        with c2:
-            st.markdown(gauge_html("한국", MI_KR), unsafe_allow_html=True)
-        with c3:
-            ratio_chart(MI_US, MI_KR)
+        for i, (nm, t) in enumerate((("미국", MI_US), ("한국", MI_KR))):
+            if i:
+                st.markdown("<hr style='margin:10px 0 14px 0;border:none;border-top:1px solid #eef0f3'>",
+                            unsafe_allow_html=True)
+            c1, c2 = st.columns([1, 2], gap="large")
+            with c1:
+                st.markdown(gauge_html(nm, t), unsafe_allow_html=True)
+            with c2:
+                ratio_chart(nm, t)
 # 1-1 공포와 탐욕 (CNN 구간: 0~25 극단적 공포, 25~45 공포, 45~55 중립, 55~75 탐욕, 75~100 극단적 탐욕)
 item("MI01", "공포와 탐욕 지수", g("공포탐욕"), digits=1, title="공포와 탐욕 지수 (CNN)", yfix=[0, 100], default="1년", bands=[
     (0, 25, "#dc2626", "극단적 공포"), (25, 45, "#f97316", "공포"), (45, 55, "#9ca3af", "중립"),
@@ -429,6 +463,7 @@ def stock_table(P, VAL, names, money):
                 unsafe_allow_html=True)
 
 
+st.markdown("<div id='sec-2' class='anchor'></div>", unsafe_allow_html=True)
 st.subheader("2. 종목")
 try:
     P = load(PX)
@@ -456,9 +491,11 @@ with st.container(border=True, key="card_2-1"):
 
 
 # ---------------- 맨 아래: MI 기준 ----------------
+st.markdown("<div id='sec-3' class='anchor'></div>", unsafe_allow_html=True)
+st.subheader("3. 기타")
 if MI_US is not None:
-    st.subheader("MI 초록불 기준")
     with st.container(border=True, key="card_mi_rules"):
+        st.markdown("<div class='hd'><span class='no'>MI 초록불 기준</span></div>", unsafe_allow_html=True)
         st.markdown("<div class='note'>미국 12개(MI01~MI08·MI10·MI11·MI14·MI15), 한국 13개(MI01~MI08·MI10~MI13·MI15, "
                     "MI08은 코스피, MI15는 한국 유니버스) · MI09 뺌 · 계산 block/market_index/vote.py</div>",
                     unsafe_allow_html=True)
