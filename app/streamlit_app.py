@@ -12,11 +12,12 @@ import sys
 
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import requests
 import streamlit as st
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "source", "market"))
-import ctm as CTM  # noqa: E402
+import cta as CTA  # noqa: E402
 
 st.set_page_config(page_title="스튜디오 톰앤수 회의", layout="wide")
 st.markdown("<style>html, body, [class*='css'] {font-size: 14px;} h1 {font-size: 1.5rem;} "
@@ -71,7 +72,7 @@ def chart(series, title, unit="", lines=(), bands=(), height=330):
         title=dict(text=title, font=dict(size=14), x=0.01, y=0.98, yanchor="top"), height=height + 30,
         margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
         legend=dict(orientation="h", x=0, xanchor="left", y=1.02, yanchor="bottom", font=dict(size=11)),
-        xaxis=dict(range=[end - pd.DateOffset(years=1), end], rangeslider=dict(visible=True, thickness=0.06),
+        xaxis=dict(range=[end - pd.DateOffset(years=1), end], rangeslider=dict(visible=False),
                    rangeselector=dict(font=dict(size=10), x=1, xanchor="right", y=1.02, yanchor="bottom", buttons=[
                        dict(count=1, label="1개월", step="month", stepmode="backward"),
                        dict(count=3, label="3개월", step="month", stepmode="backward"),
@@ -105,6 +106,41 @@ def change_table(s, unit="", digits=2):
     st.dataframe(t, hide_index=True, use_container_width=True)
 
 
+def price_cta(name, price, score, freq):
+    """위: S&P500 가격, 아래: CTA 포지션 근사(σ) 막대. 두 칸은 날짜 축을 같이 움직인다."""
+    price = price.reindex(score.index.union(price.index)).dropna()
+    if price.empty or score.empty:
+        st.info(f"{name}: 아직 자료가 없습니다.")
+        return
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.55, 0.45],
+                        subplot_titles=(f"{name} 가격 ({freq})", f"CTA 포지션 근사 (σ, {freq})"))
+    fig.add_trace(go.Scatter(x=price.index, y=price.values, name=f"{name} 가격", mode="lines",
+                             line=dict(width=1.5, color="#1d4ed8"),
+                             hovertemplate="%{x|%Y-%m-%d}  %{y:,.2f}<extra>가격</extra>"), row=1, col=1)
+    fig.add_trace(go.Bar(x=score.index, y=score.values, name="CTA σ",
+                         marker_color=["#15803d" if v >= 0 else "#b91c1c" for v in score.values],
+                         hovertemplate="%{x|%Y-%m-%d}  %{y:.2f}σ<extra>CTA</extra>"), row=2, col=1)
+    for v, txt in ((-4, "−4σ 바닥 기준"), (4, "+4σ 고점 기준")):
+        fig.add_hline(y=v, line_dash="dash", line_color="#6b7280", line_width=1, annotation_text=txt,
+                      annotation_font_size=10, row=2, col=1)
+    end = price.index[-1]
+    fig.update_layout(template="plotly_white", paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", height=560,
+                      margin=dict(l=10, r=10, t=40, b=10), hovermode="x unified", showlegend=False, bargap=0.1)
+    fig.update_xaxes(range=[end - pd.DateOffset(years=1), end])
+    fig.update_xaxes(rangeslider=dict(visible=False))
+    fig.update_xaxes(rangeselector=dict(font=dict(size=10), x=1, xanchor="right", y=1.06, buttons=[
+        dict(count=1, label="1개월", step="month", stepmode="backward"),
+        dict(count=3, label="3개월", step="month", stepmode="backward"),
+        dict(count=6, label="6개월", step="month", stepmode="backward"),
+        dict(count=1, label="1년", step="year", stepmode="backward"),
+        dict(count=3, label="3년", step="year", stepmode="backward"),
+        dict(count=10, label="10년", step="year", stepmode="backward"),
+        dict(label="전체", step="all")]), row=1, col=1)
+    fig.update_yaxes(range=[-6, 6], row=2, col=1)
+    fig.update_annotations(font_size=13)
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
+
+
 # ---------------- 화면 ----------------
 st.title("스튜디오 톰앤수 회의")
 try:
@@ -130,26 +166,26 @@ with c1:
 with c2:
     change_table(g("공포탐욕"), digits=1)
 
-# 2. CTM
-st.subheader("2. CTM (Chande Trend Meter) · S&P500 · 나스닥100")
-st.caption("구성은 StockCharts 공개 내용, 무게는 공개되지 않아 추정값(볼린저 위치 8 : RSI 3, 11/22 그림 10곳에 맞춤). "
-           "나스닥100은 고가·저가가 없어 종가로 계산. 봉을 바꾸면 그 봉으로 다시 계산.")
-ctm_spx = CTM.ctm(g("SPX"), g("SPX_HIGH"), g("SPX_LOW"), rule)
-ctm_ndx = CTM.ctm(g("NDX"), None, None, rule)
+# 2. CTA
+st.subheader("2. CTA (추세추종 펀드) 포지션")
+st.caption("실제 CTA 포지션은 공개되지 않아 가격으로 흉내 낸 근사 값(σ). S&P500 20%·나스닥100 60%·러셀2000 20%, "
+           "2·4·8개월과 1·2·3개월 추세, 2018년 이후 눈금, 시타델 그림 27점에 맞춘 배율. −4σ 바닥·+4σ 고점 기준은 11/23 회의 기준.")
+cta_d = CTA.cta(pd.DataFrame({k: g(k) for k in ("SPX", "NDX", "RUT")}))
+cta_s = cta_d["CTA σ"]
+if rule is not None:
+    cta_s = cta_s.resample(rule).last().dropna()
 c1, c2 = st.columns([3, 1])
 with c1:
-    chart({"S&P500": ctm_spx, "나스닥100": ctm_ndx}, f"CTM ({freq})", height=380)
+    price_cta("S&P500", bar(g("SPX"), rule), cta_s, freq)
 with c2:
-    n = 12
-    t = pd.concat([ctm_spx.rename("S&P500"), ctm_ndx.rename("나스닥100")], axis=1).dropna(how="all").tail(n)
-    t["S&P500 변화"] = t["S&P500"].diff()
-    t["나스닥100 변화"] = t["나스닥100"].diff()
-    t = t.iloc[::-1].round(1)
+    t = cta_d.tail(12).iloc[::-1].copy()
     t.index = t.index.strftime("%Y-%m-%d")
-    st.caption(f"최근 {n}개 {freq}")
-    st.dataframe(t, use_container_width=True, height=380)
-chart({"S&P500": bar(g("SPX"), rule)}, "S&P500 가격", height=260)
-chart({"나스닥100": bar(g("NDX"), rule)}, "나스닥100 가격", height=260)
+    t["CTA σ"] = t["CTA σ"].round(2)
+    t["CTA σ 5일 변화"] = t["CTA σ 5일 변화"].round(2)
+    t["매수 전환까지(%)"] = t["매수 전환까지(%)"].round(1)
+    t["추세 신호 매수 수"] = t["추세 신호 매수 수"].astype(int).astype(str) + "/3"
+    st.caption("최근 12일 (추세 신호 = S&P500이 21·63·100일 전보다 높은 개수, 매수 전환까지 = 다음 신호가 매수로 바뀌려면 오를 %)")
+    st.dataframe(t, use_container_width=True, height=460)
 
 # 3. VIX
 st.subheader("3. VIX")
