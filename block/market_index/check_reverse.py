@@ -63,3 +63,31 @@ if __name__ == "__main__":
     a, b = run(E.load("가격10년_시장지표"), E.load("가격10년_종가"))
     print(a.to_string(index=False))
     print(b.to_string(index=False))
+
+
+NOW = ("2026 이번 하락", ("2026-06-01", "2026-11-27"))  # 저점은 아직 진행 중 → 지금까지의 최저
+
+
+def drawdown5(m, P):
+    """의장 11/27 19:44: 2020·2022·2025·이번 하락으로 낙폭 기준을 다시 잡고, 이란 전쟁까지 다섯 번 평균.
+    값 = 바닥 구간(고점~저점 폭 아래쪽 0.1)에 들어간 날의 낙폭(1년 최고 대비) = 그 하락을 잡는 가장 얕은 기준."""
+    import check_episodes as E
+    spx = m["SPX"].dropna()
+    old = dict(E.EP)
+    E.EP[NOW[0]] = NOW[1]
+    rows = []
+    try:
+        for nm, px in (("S&P500", spx), ("나스닥100", m["NDX"].dropna()), ("코스피", P["^KS11"].dropna())):
+            dd = (px / px.rolling(252, min_periods=1).max() - 1) * 100
+            r = {"지수": nm}
+            for ep, (days, ld, low) in M.zones(px, spx).items():
+                r[ep] = round(dd[days].max(), 1)
+            four = [r[k] for k in r if k not in ("지수", "2026 이란 전쟁")]
+            r["네 번 중 가장 얕은 값"] = max(four)
+            r["다섯 번 평균"] = round(sum(v for k, v in r.items() if k != "지수" and k in E.EP) / 5, 1)
+            r["11/24"] = round(dd.asof(pd.Timestamp("2026-11-24")), 1)
+            rows.append(r)
+    finally:
+        E.EP.clear()
+        E.EP.update(old)
+    return pd.DataFrame(rows)

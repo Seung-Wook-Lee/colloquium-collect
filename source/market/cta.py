@@ -4,7 +4,7 @@ CTA 포지션 근사값.
 - 지수 무게: S&P500 20% · 나스닥100 60% · 러셀2000 20%
 - 느린 추세(2·4·8개월, 선형, 20일 평활, 60일 변동성 조정) 80% + 빠른 추세(1·2·3개월, tanh, 40일 변동성) 20%
 - 2018년 이후 평균·표준편차로 σ 눈금, 시타델 그림(2025-11~2026-11, 27점)에 맞춘 배율 3.04
-- 추세 신호 매수 수: 첫 지수(미국 S&P500)가 21·63·100일 전보다 높은 개수(0~3)
+- 추세 신호 매수 수: S&P500 이 21·63·100일 전보다 높은 개수(0~3)
 """
 import numpy as np
 import pandas as pd
@@ -14,9 +14,9 @@ TV = 0.10
 CAL_K = 3.04
 
 
-def _trend(px, looks, kind, smooth, volwin, weights):
+def _trend(px, looks, kind, smooth, volwin):
     e = 0
-    for c, w in weights.items():
+    for c, w in WEIGHTS.items():
         lp = np.log(px[c])
         r = lp.diff()
         sd = r.rolling(250).std()
@@ -32,15 +32,11 @@ def _trend(px, looks, kind, smooth, volwin, weights):
     return (e - e["2018":].mean()) / e["2018":].std()
 
 
-def cta(D, weights=None):
-    """D: 날짜 인덱스, 지수 종가 칸 → 일별 표. weights 기본 = 미국(SPX·NDX·RUT).
-    한국(의장 11/27 "한국 시장은 저걸 계산 못하나요?"): cta(D, {"^KS11": 1.0}) — 같은 계산을 코스피 가격에 적용.
-    한국은 맞춰 볼 공개 그림이 없어 배율 3.04는 미국 것을 그대로 쓴다."""
-    weights = weights or WEIGHTS
-    px = D[list(weights)].dropna()
-    sig = CAL_K * (0.8 * _trend(px, (40, 80, 160), "lin", 20, 60, weights)
-                   + 0.2 * _trend(px, (20, 40, 60), "tanh", 1, 40, weights))
-    s = px[list(weights)[0]]
+def cta(D):
+    """D: 날짜 인덱스, SPX·NDX·RUT 종가 칸 → 일별 표"""
+    px = D[list(WEIGHTS)].dropna()
+    sig = CAL_K * (0.8 * _trend(px, (40, 80, 160), "lin", 20, 60) + 0.2 * _trend(px, (20, 40, 60), "tanh", 1, 40))
+    s = px["SPX"]
     on = pd.DataFrame({n: s > s.shift(n) for n in (21, 63, 100)})
     return pd.DataFrame({"CTA σ": sig, "CTA σ 5일 변화": sig.diff(5),
                          "추세 신호 매수 수": on.sum(axis=1)}).dropna()
