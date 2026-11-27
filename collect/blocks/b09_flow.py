@@ -4,7 +4,7 @@
 #              나가면 환매(좌수 감소)되므로, 자금유입 = 좌수 변화 × NAV(없으면 종가).
 #              좌수가 없을 때(미국 일부)는 순자산 변화 − 가격 변동분으로 계산한다.
 #              1일·5일·20일 누적 유입, 순자산 대비 %, 시장 안 순위를 낸다.
-#   대상     : 스튜디오 톰앤수 100의 ETF 전부(국내 30·미국 10) + 미국 섹터 비교용 US_EXTRA(SPDR 섹터 11개, SPY·QQQ·SOXX·MAGS)
+#   대상     : 유니버스 ETF만(11/27 의장: 유니버스 밖 참고 ETF는 뺌)
 #   소스     : 국내 = 한투 ETF 현재가(유통좌수·NAV·순자산), 안 되면 국내 현재가의 상장주수
 #              (2026-10-29 시험: 유통좌수는 그날 설정·환매 반영, 상장주수·순자산총액은 하루 늦음)
 #              미국 = 한투 해외 현재가 상세(상장주수 shar) + 야후 순자산(totalAssets)·NAV
@@ -79,8 +79,7 @@ try:
 
     etf = u[u['구분'] == 'ETF'][['번호', '정식 종목명', '시장', '거래소', '섹터/테마', '코드', 'yfinance 티커']].copy()
     have = set(etf['코드'])
-    extra = [{'번호': f'참고-{t}', '정식 종목명': t, '시장': '미국', '거래소': '', '섹터/테마': s, '코드': t, 'yfinance 티커': t}
-             for t, s in US_EXTRA.items() if t not in have]
+    extra = []   # 11/27 의장 "우리 유니버스 아닌 것이 왜 아침 회의에 나오냐": 유니버스 밖 '참고' ETF(SPY·QQQ·SOXX·MAGS 등)는 계산하지 않음
     etf = pd.concat([etf, pd.DataFrame(extra)], ignore_index=True)
 
     snap = []
@@ -180,7 +179,9 @@ try:
     fl = pd.DataFrame(rows)
     # 2026-11-11 SOXX 5일 +206억 달러(순자산의 47%) 오류: 하루·5일 유입이 순자산의 10%를 넘으면 좌수 자료 오류 의심
     big = lambda c: pd.to_numeric(fl[c], errors='coerce').abs() > pd.to_numeric(fl['순자산'], errors='coerce').abs() * 0.10
-    fl['점검'] = (big('유입_1일') | big('유입_5일')).map({True: '좌수 자료 의심', False: ''})
+    # 11/27 의장(SOXX 20일 좌수 +185%가 미국 5일 유입 2위로 원고에 나감): 20일 좌수 변화가 ±50%를 넘어도 의심
+    big20 = pd.to_numeric(fl['좌수변화_20일(%)'], errors='coerce').abs() > 50
+    fl['점검'] = (big('유입_1일') | big('유입_5일') | big20).map({True: '좌수 자료 의심', False: ''})
     fl['순위_20일'] = fl.groupby('시장')['유입_20일'].rank(ascending=False, method='min')
     fl['순위_5일'] = fl.groupby('시장')['유입_5일'].rank(ascending=False, method='min')
     fl = fl.sort_values(['시장', '유입_20일', '유입_5일'], ascending=[True, False, False], na_position='last')
