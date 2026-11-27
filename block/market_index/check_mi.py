@@ -1,6 +1,6 @@
 """MI 기준 시험: 바닥 인근 10% (의장 11/27 19:11)
 
-하락 4번(check_episodes.EP). 잣대(의장 11/27 19:17): 바닥 10% 구간 = 고점 뒤 종가가 최종 저점 × 1.10 이하인 날들.
+하락 4번(check_episodes.EP). 잣대(의장 11/27 19:21): 바닥 구간 = 고점~저점 폭을 1로 놓은 아래쪽 0.1 안의 날들(zones).
 그 구간 안에 신호가 하루라도 켜지면 맞음. '구간 밖 켜진 날' = 2016-11 이후 네 구간 밖에서 켜진 날 수(헛신호).
 
 자료: 드라이브 1_data/가격10년_시장지표(SPX·VIX·MOVE·DGS10·BAMLH0A0HYM2·WTI·CPCE), 가격10년_종가(^KS11, 유니버스 종목).
@@ -48,10 +48,15 @@ def episodes(px, spx):
 
 
 def zones(px, spx):
+    """바닥 구간(의장 11/27 19:21): 고점~저점 폭을 1로 놓고 아래쪽 0.1 안(종가 ≤ 저점 + 0.1×(고점−저점))에
+    들어간 날부터 저점 뒤 그 선 위로 나온 날 전까지."""
     z = {}
-    for ep, (pk, low_d, low, end) in episodes(px, spx).items():
-        w = px[pk:end]
-        z[ep] = (w[w <= low * (1 + BAND)].index, low_d, low)
+    for ep, (pk, low_d, low, _) in episodes(px, spx).items():
+        line = low + 0.1 * (px[pk] - low)
+        after = px[low_d:]
+        out = after[after > line].index
+        w = px[pk:out[0]] if len(out) else px[pk:]
+        z[ep] = (w[w <= line].index, low_d, low)
     return z
 
 
@@ -146,7 +151,7 @@ def build(m, P):
     k150 = breadth_below(P, kr_cols, 150)
     for th in (70, 80, 90):
         KR[f"MI09 한국 유니버스 150일선 아래 ≥ {th}%"] = k150 >= th
-    for ma, ths in ((20, (90, 85, 80)), (60, (90, 85, 80)), (200, (90, 85, 80))):
+    for ma, ths in ((50, (95, 90, 85, 80)),):  # 의장: 50일 이격도
         gap = ks / ks.rolling(ma).mean() * 100
         for th in ths:
             KR[f"MI12 코스피 {ma}일 이격도 ≤ {th}"] = gap <= th
