@@ -47,7 +47,7 @@ def run(px, D):
         depth = (1 - low / hi) * 100
         rows.append({"고점": pk.date(), "저점": tr.date(), "하락%": round(depth, 1), "종류": bucket(depth),
                      "구간 최다": int(D.at[b, "켜진 수"]), "자료 수": int(D.at[b, "자료 수"]),
-                     "과반": bool(D.loc[zone, "과반"].any())})
+                     "구간 최고 비율": round(D.loc[zone, "켜진 비율"].max(), 1)})
     return pd.DataFrame(rows)
 
 
@@ -59,4 +59,4 @@ if __name__ == "__main__":
         t = run(px, D)
         print(nm)
         print(t.to_string(index=False))
-        print(t.groupby("종류").agg(횟수=("과반", "size"), 과반=("과반", "sum"), 평균최다=("구간 최다", "mean")).round(1))
+        print(t.groupby("종류").agg(횟수=("구간 최고 비율", "size"), 평균최고비율=("구간 최고 비율", "mean"), 평균최다=("구간 최다", "mean")).round(1))
