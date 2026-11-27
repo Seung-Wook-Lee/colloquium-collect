@@ -7,7 +7,7 @@
 - 고점 = 저점 앞 최고 종가. 첫 신호는 고점 뒤부터 센다.
 자료: 드라이브 1_data/가격10년_시장지표(SPX·NDX·RUT·VIX·공포탐욕), 가격10년_종가(^KS11).
 
-실행: python block/market_index/check_episodes.py   (시크릿 DRIVE_URL, DRIVE_TOKEN)
+실행: python analysis/market_index/check_episodes.py   (시크릿 DRIVE_URL, DRIVE_TOKEN)
 """
 import base64
 import io
