@@ -245,7 +245,7 @@ class Ctx:
         if f'DEF_{mk}' not in m:
             return None
         st = '방어' if m[f'DEF_{mk}'] else '평상'
-        return st, m.get(f'ROT_G_{mk}'), m.get(f'ROT_M_{mk}'), m.get(f'IDX_{mk}')
+        return st, m.get(f'ROT_G_{mk}'), m.get(f'ROT_M_{mk}'), None   # 11/27 의장: 지수 4국면 지움
 
     def set_pick(self, who, r, rule, mark='추천', why=''):
         self.picks[who] = dict(위원=who, 표시=mark if r is not None else '해당 없음', 종목='' if r is None else r['종목'],
@@ -330,7 +330,7 @@ def mr_market(c):
         g = c.regime(mk)
         if g:
             st, G, M_, idx = g
-            out.append(L(f'{mk} 국면', f"{st} 국면 · 지수 4국면 {idx or '자료 없음'}",
+            out.append(L(f'{mk} 국면', f"{st} 국면",   # 11/27 의장: '지수 4국면' 문구 지움
                          f"AI(S1~S3)÷금융·방어(S5~S6) 비율 50일 이격 {p(G, 2)}, 20일 변화 {p(M_, 2)} — 진입 −2%·−3%(5일 중 3일+당일), 둘 다 0 이상이면 해제"))
     rows = []
     for it in cfg['지수']:
@@ -489,13 +489,8 @@ def _buy_state(c):
         gate_ok = buy
         if act == '엔진 포트폴리오대로':
             # 11/21 의장("여기서 고쳐", 하루 1억 손실): 평상 국면도 관문 — 지수 추세가 꺾였으면 '추천'을 내지 않는다. 규칙 없거나 자료 없으면 닫힘
-            okq, need = R.get('평상_통과_4국면'), R.get('평상_추세신호_최소')
-            idx4 = g[3] if g else None
+            need = R.get('평상_추세신호_최소')   # 11/27 의장: '지수 4국면' 조건은 지움
             bad = []
-            if not okq:
-                bad.append('평상 관문 규칙 없음')
-            elif idx4 not in okq:
-                bad.append(f"지수 4국면 {idx4 or '자료 없음'}(통과: {', '.join(okq)})")
             if mk == '미국':
                 tn = num(qg.get('추세 신호 매수 수(21·63·100일)'))
                 if need is None:
@@ -524,7 +519,7 @@ def conclusion(c):
         if not g:
             continue
         st = '약세' if g[0] == '방어' else '강세'
-        num_ = [f"국면 {g[0]}", f"지수 4국면 {g[3] or '자료 없음'}"]
+        num_ = [f"국면 {g[0]}"]   # 11/27 의장: '지수 4국면' 문구 지움(미국·한국)
         # 11/24 의장 "어제 미국 주가 엄청 올랐는데 1번 멘트가 영": 전날 지수가 문턱(rules.yaml 결론.급변_하루) 넘게 움직이면 그 움직임을 맨 앞에
         mv = []
         for it in (('S&P500', '나스닥') if mk == '미국' else ('코스피', '코스닥')):
@@ -553,9 +548,11 @@ def conclusion(c):
             elif c.m.get('CTM_GREEN') == 1:
                 num_.insert(0, f"지수 매수 신호(CTM 반등 시작) {c.m.get('CTM_GREEN_STAGE')}단계/3")
         if mk == '미국':
+            B10 = V['B']   # 11/27 의장: 옛 '바닥일 확률' 대신 단기 바닥 ±10% 안 확률(바닥확률.csv '띠10_확률')
+            b10 = {r['기준지수']: num(r.get('띠10_확률')) for _, r in B10.iterrows()} if len(B10) and '띠10_확률' in B10 else {}
             for ix, nm_ in (('^NDX', '나스닥100'), ('^GSPC', 'S&P500')):
-                if V['bp'].get(ix) is not None:
-                    num_.append(f"{nm_}이 이번 하락의 바닥일 확률 {V['bp'][ix]:.0f}%")
+                if b10.get(ix) is not None:
+                    num_.append(f"{nm_}이 단기 바닥 ±10% 안에 들어왔을 확률 {b10[ix]:.0f}%")
         kr = c.mac_row('S&P500' if mk == '미국' else '코스피')
         if kr is not None:
             num_.append(f"{'S&P500' if mk == '미국' else '코스피'} 사상 최고 대비 {p(num(kr.get('최고 대비(%)')))}")

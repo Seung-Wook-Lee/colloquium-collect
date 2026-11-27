@@ -180,21 +180,6 @@ def cta_flip(d):
     return out
 
 
-def index_regime(d):
-    """지수 252·21일 추세 4국면(BlackRock·MSCI·GS) — 기록만(발동식은 B00)."""
-    I = PS.index(d, 735)
-    if I.empty:
-        return {}
-    out = {}
-    for mk, k in (('미국', '^GSPC'), ('한국', '^KS11')):
-        x = I[k].dropna() if k in I else pd.Series(dtype=float)
-        if len(x) < 253:
-            continue
-        s, q = x.iloc[-1] > x.iloc[-253], x.iloc[-1] > x.iloc[-22]
-        out[mk] = {(True, True): '강세', (True, False): '조정', (False, False): '약세', (False, True): '반등'}[(s, q)]
-    return out
-
-
 def relative(d, P, f):
     """시장 안 백분위(낮은 값 = 좋음: 변동성·꼬리손실·베타 하위, 고점 근접 상위)와 같은 시장 AI 묶음 대비 상대 수익률."""
     U = _u(d); r = P.pct_change(fill_method=None)

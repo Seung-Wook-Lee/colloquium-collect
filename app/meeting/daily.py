@@ -306,7 +306,7 @@ def bottom(W, use_drive, B, S):
                 T = LB.hazard_today(cfg=(B.get('바닥') or {}).get('하락구간'))
                 T.to_csv(f'{W}/바닥확률.csv', index=False, encoding='utf-8-sig')
                 for _, r in T.iterrows():
-                    log(f"[바닥] {r['기준지수']} 이번 하락의 바닥일 확률 {r.get('확률')}% (낙폭 {r.get('지금낙폭')}%, {r.get('주수')}주) · 검정 AUC {r.get('검정_AUC')}")
+                    log(f"[바닥] {r['기준지수']} 단기 바닥 ±10% 안 확률 {r.get('띠10_확률')}% (비교 {r.get('띠10_비교수')}번) · 로지스틱 회귀 저점 3% 안 {r.get('확률')}% (낙폭 {r.get('지금낙폭')}%, {r.get('주수')}주) · 검정 AUC {r.get('검정_AUC')}")
             except Exception as e:   # noqa: BLE001
                 log(f'[바닥] 실패: {str(e)[:160]}')
         try:   # 11/23 의장(11/20 금요일 놓침): 분할 매수 판정(market/buy_plan.py)도 매일 → 블록2 gate가 읽음

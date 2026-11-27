@@ -887,12 +887,13 @@ def bottom_prob():
     return LB.hazard_today()
 
 
-def bottom(day, name, title='바닥 근접도'):
-    """이번 하락에서 지금이 바닥(최종 저점 3% 안)일 확률. 지수 종가·VIX·금리로 화면에서 바로 계산."""
+def bottom(day, name, title='단기 바닥 ±10% 안에 들어왔을 확률'):
+    """11/27 의장: '바닥 근접도'를 지우고 "지금이 단기 바닥에서 ±10% 안에 들어왔을 확률"을 본 숫자로.
+    아래에 로지스틱 회귀(옛 계산)를 따로 둠. 둘 다 엔진(daily.py, 하위 블록 2-12)이 만든 바닥확률.csv를 먼저 읽는다."""
     pre = '미장전_' if name.startswith('미장전') else ''
-    T = read_csv(day, pre + '바닥확률.csv')   # 엔진(daily.py, 하위 블록 2-12)이 만든 파일을 먼저 읽는다
-    if T is None or not len(T) or '확률' not in T:
-        try:   # 그 날 파일이 아직 없으면 같은 코드로 바로 계산
+    T = read_csv(day, pre + '바닥확률.csv')
+    if T is None or not len(T) or '띠10_확률' not in T:
+        try:   # 그 날 파일이 아직 없거나 옛 파일이면 같은 코드로 바로 계산
             T = bottom_prob()
         except Exception as e:   # noqa: BLE001
             st.caption(f'바닥 확률 계산 실패: {e}')
@@ -902,26 +903,42 @@ def bottom(day, name, title='바닥 근접도'):
     def pct(v, sign=False):
         x = pd.to_numeric(v, errors='coerce')
         return '' if pd.isna(x) else (f'{x:+.1f}%' if sign else f'{x:.1f}%')
+
+    def down(r, k='띠10_하락중'):
+        return str(r.get(k)) in ('True', '1', '1.0')
     with st.container(border=True):
         st.markdown(sec_title(title), unsafe_allow_html=True)
         cols = st.columns(len(T))
         for col, (_, r) in zip(cols, T.iterrows()):
             nm = NAME.get(r.get('기준지수'), r.get('기준지수'))
             with col:
-                if str(r.get('하락중')) not in ('True', '1', '1.0'):
+                if not down(r):
                     st.metric(f'{nm}', '하락 구간 아님'); continue
-                st.metric(f'{nm}이 지금 이번 하락의 바닥일 확률', pct(r.get('확률')))
-                st.markdown(f'<div class="sub">고점 대비 {pct(r.get("지금낙폭"))} · {int(r.get("주수"))}주째 · VIX {r.get("VIX"):.1f} · RSI {r.get("RSI"):.0f}</div>'
-                            f'<div class="sub">확률이 비슷했던 과거 {int(r.get("비슷한확률_주수"))}주, 그 뒤 지수</div>', unsafe_allow_html=True)
-                mdd = (f'{pct(r.get("뒤13주_최대낙폭_평균"), True)} (최악 {pct(r.get("뒤13주_최대낙폭_최악"), True)})'
-                       if '뒤13주_최대낙폭_평균' in r and pd.notna(r.get('뒤13주_최대낙폭_평균')) else '자료 없음')
-                st.markdown('<table class="num-t"><tr><th></th><th>평균 수익률</th><th>승률</th><th>그 사이 최대 낙폭</th></tr>'
-                            f'<tr><td class="lab">13주 뒤</td><td>{pct(r.get("뒤13주_평균"), True)}</td><td>{pct(r.get("뒤13주_승률"))}</td><td>{mdd}</td></tr>'
-                            f'<tr><td class="lab">26주 뒤</td><td>{pct(r.get("뒤26주_평균"), True)}</td><td>{pct(r.get("뒤26주_승률"))}</td><td></td></tr></table>', unsafe_allow_html=True)
-        tt = '; '.join(f"{NAME.get(r['기준지수'])} AUC {r['검정_AUC']:.2f}" for _, r in T.iterrows())
-        st.markdown('<div class="note">산출 방법: Lunde &amp; Timmermann(2004) 위험률 모형. 하락 구간(고점 −5%에서 시작, 저점 +10%에서 끝, R bbdetection 판정) 안에서 '
-                    '낙폭·기간·VIX·금리·RSI·200일선 이격으로 "최종 저점 3% 안일 확률"을 계산. '
-                    f'2000년부터 해마다 그 전 자료로만 학습해 검정({tt}).</div>', unsafe_allow_html=True)
+                st.metric(f'{nm}: 최종 저점이 지금 가격의 10% 안일 확률', pct(r.get('띠10_확률')))
+                st.markdown(f'<div class="sub">고점({r.get("띠10_고점일")}) 대비 {pct(r.get("띠10_지금낙폭"))} · '
+                            f'과거 하락 중 이만큼 이상 빠졌던 {int(r.get("띠10_비교수"))}번 기준 · 그 하락들의 최종 낙폭 중앙값 {pct(r.get("띠10_최종낙폭_중앙값"))}</div>'
+                            f'<div class="sub">그 {int(r.get("띠10_비교수"))}번이 지금 낙폭에 처음 닿은 날 산 경우</div>', unsafe_allow_html=True)
+                st.markdown('<table class="num-t"><tr><th></th><th>평균 수익률</th><th>승률</th></tr>'
+                            f'<tr><td class="lab">13주 뒤</td><td>{pct(r.get("띠10_뒤13주_평균"), True)}</td><td>{pct(r.get("띠10_뒤13주_승률"))}</td></tr>'
+                            f'<tr><td class="lab">26주 뒤</td><td>{pct(r.get("띠10_뒤26주_평균"), True)}</td><td>{pct(r.get("띠10_뒤26주_승률"))}</td></tr></table>', unsafe_allow_html=True)
+        st.markdown('<div class="note">산출 방법: 하락 구간 = Lunde &amp; Timmermann(2004) 필터(고점 −5%에서 시작, 저점 +10%에서 끝, R bbdetection 코드 그대로). '
+                    '확률 = 과거 끝난 하락 구간 중 지금 낙폭 이상 빠졌던 것들에서, 최종 저점이 지금 가격의 10% 안이었던 비율. '
+                    '10%는 같은 필터의 하락 끝 기준과 같은 크기. 자료: S&amp;P500 1928~, 나스닥100 1985~.</div>', unsafe_allow_html=True)
+    if '확률' in T:   # 11/27 의장: 로지스틱 회귀는 살려서 아래에 따로
+        with st.container(border=True):
+            st.markdown(sec_title('로지스틱 회귀: 최종 저점 3% 안일 확률'), unsafe_allow_html=True)
+            cols = st.columns(len(T))
+            for col, (_, r) in zip(cols, T.iterrows()):
+                nm = NAME.get(r.get('기준지수'), r.get('기준지수'))
+                with col:
+                    if not down(r, '하락중'):
+                        st.metric(f'{nm}', '하락 구간 아님'); continue
+                    st.metric(f'{nm}', pct(r.get('확률')))
+                    st.markdown(f'<div class="sub">{int(r.get("주수"))}주째 · VIX {r.get("VIX"):.1f} · RSI {r.get("RSI"):.0f} · 검정 AUC {r.get("검정_AUC"):.2f}</div>',
+                                unsafe_allow_html=True)
+            st.markdown('<div class="note">하락 구간 안의 주마다 낙폭·기간·VIX·VIX 4주 변화·10년 금리 4주 변화·RSI·200일선 이격·4주 수익으로 로지스틱 회귀. '
+                        '하락 구간 판정만 Lunde &amp; Timmermann(2004) 그대로이고, "저점 3% 안" 기준과 변수 6개는 11/21에 정한 것(논문 그대로 아님). '
+                        '2000년부터 해마다 그 전 자료로만 학습.</div>', unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=3 * 3600, show_spinner='분할 매수 판정 계산 중…')
@@ -1110,7 +1127,7 @@ for tab, (label, name) in zip(st.tabs([s[0] for s in SESSIONS]), SESSIONS):
             continue
         head, secs = sections(md)
         if name.startswith('미장전'):   # 11/20 의장: 원고 첫 줄 자료 메모·한 종목 머리말은 보이지 않음, 순서 1 바닥 근접도 · 2 미장전 시황
-            bottom(day, name, '1 바닥 근접도 | 마켓 센터')
+            bottom(day, name, '1 단기 바닥 ±10% 안에 들어왔을 확률 | 마켓 센터')
             secs = order_premarket(secs)
         else:   # 11/21 의장: 머리말(팀Q 자료 메모·오늘의 한 종목)은 국장전도 보이지 않음
             bottom(day, name)
