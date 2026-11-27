@@ -113,7 +113,7 @@ def price_cta(name, price, score, freq):
         st.info(f"{name}: 아직 자료가 없습니다.")
         return
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.55, 0.45],
-                        subplot_titles=(f"{name} 가격 ({freq})", f"CTA 포지션 근사 (σ, {freq})"))
+                        subplot_titles=(f"{name} 가격 ({freq})", f"CTA 근사값 (σ, {freq})"))
     fig.add_trace(go.Scatter(x=price.index, y=price.values, name=f"{name} 가격", mode="lines",
                              line=dict(width=1.5, color="#1d4ed8"),
                              hovertemplate="%{x|%Y-%m-%d}  %{y:,.2f}<extra>가격</extra>"), row=1, col=1)
@@ -181,9 +181,8 @@ with c2:
 # 2. CTA
 cta_d = CTA.cta(pd.DataFrame({k: g(k) for k in ("SPX", "NDX", "RUT")}))
 cta_s = cta_d["CTA σ"]
-head("1-2", "CTA (추세추종 펀드) 포지션 근사", cta_s, unit="σ")
-st.caption("실제 CTA 포지션은 공개되지 않아 가격으로 흉내 낸 근사 값(σ). S&P500 20%·나스닥100 60%·러셀2000 20%, "
-           "2·4·8개월과 1·2·3개월 추세, 2018년 이후 눈금, 시타델 그림 27점에 맞춘 배율. −4σ 바닥·+4σ 고점 기준은 11/23 회의 기준.")
+head("1-2", "CTA 근사값", cta_s, unit="σ")
+st.caption("CTA 포지션 근사값(σ). S&P500 20%·나스닥100 60%·러셀2000 20% 가격 추세로 계산. −4σ 바닥·+4σ 고점 기준(11/23 회의).")
 if rule is not None:
     cta_s = cta_s.resample(rule).last().dropna()
 c1, c2 = st.columns([1, 1])
@@ -194,9 +193,8 @@ with c2:
     t.index = t.index.strftime("%Y-%m-%d")
     t["CTA σ"] = t["CTA σ"].round(2)
     t["CTA σ 5일 변화"] = t["CTA σ 5일 변화"].round(2)
-    t["매수 전환까지(%)"] = t["매수 전환까지(%)"].round(1)
     t["추세 신호 매수 수"] = t["추세 신호 매수 수"].astype(int).astype(str) + "/3"
-    st.caption("최근 12일 (추세 신호 = S&P500이 21·63·100일 전보다 높은 개수, 매수 전환까지 = 다음 신호가 매수로 바뀌려면 오를 %)")
+    st.caption("최근 12일 (추세 신호 = S&P500이 21·63·100일 전보다 높은 개수)")
     st.dataframe(t, use_container_width=True, height=420)
 
 # 3. VIX
