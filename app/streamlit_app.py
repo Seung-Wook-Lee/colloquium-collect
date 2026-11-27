@@ -20,6 +20,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cta as CTA  # noqa: E402
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "block", "market_index"))
+import vote as VOTE  # noqa: E402
+
 import style as S  # noqa: E402
 
 st.set_page_config(page_title="스튜디오 톰앤수 회의", layout="wide")
@@ -214,6 +217,56 @@ if top[2].button("자료 다시 읽기", width="stretch"):
 g = lambda k: D[k] if k in D.columns else pd.Series(dtype=float)
 
 st.subheader("1. 마켓 (Market Index)")
+
+
+def lights(D, P):
+    """MI 초록불 표: 바닥 조건에 맞으면 🟢, 아니면 ⚪, 자료 없으면 빈칸 (block/market_index/vote.py)"""
+    us = VOTE.table(D)
+    try:
+        kr = VOTE.table_kr(D, P)
+    except Exception:
+        kr = None
+    vals = VOTE.values(D, P)
+    dot = lambda x: "" if pd.isna(x) else ("🟢" if x >= 1 else "⚪")
+    fmt = {"MI01": "{:.1f}", "MI02": "{:+.2f}σ", "MI03": "{:.2f}", "MI04": "{:.2f}%", "MI05": "{:+.2f}%p",
+           "MI06": "{:.1f}", "MI07": "{:.2f}달러", "MI08": "{:+.1f}%", "MI10": "{:.2f}", "MI11": "{:.2f}",
+           "MI12": "{:.1f}"}
+    rows = []
+    for no, name, rule_txt in VOTE.RULES:
+        v = vals.get(no, pd.Series(dtype=float)).dropna()
+        if no == "MI08":
+            parts = [("S&P", vals["MI08"]), ("나스닥", vals["MI08 나스닥100"]),
+                     ("코스피", vals.get("MI08 코스피", pd.Series(dtype=float)))]
+            val = " · ".join(f"{n} {s.dropna().iloc[-1]:+.1f}%" for n, s in parts if len(s.dropna()))
+            dt = f"{vals['MI08'].dropna().index[-1]:%m-%d}"
+        else:
+            val = fmt[no].format(v.iloc[-1]) if len(v) else "자료 없음"
+            dt = f"{v.index[-1]:%m-%d}" if len(v) else ""
+        rows.append({"번호": no, "지표": name, "초록불 기준": rule_txt, "최근 값": val, "날짜": dt,
+                     "미국": "" if no == "MI12" else dot(us[no].iloc[-1]) if no in us else "",
+                     "한국": dot(kr[no].iloc[-1]) if kr is not None and no in kr else ""})
+    st.markdown(S.table(pd.DataFrame(rows), dim_cols=("날짜",)), unsafe_allow_html=True)
+    # 최근 10거래일 켜진 비율
+    r = pd.DataFrame({"미국": us["켜진 비율"], "한국": kr["켜진 비율"] if kr is not None else None}).dropna(how="all")
+    r = r.tail(10).iloc[::-1]
+    cnt = lambda t, d: f"{int(t.at[d, '켜진 수'])}/{int(t.at[d, '자료 수'])}" if t is not None and d in t.index and pd.notna(t.at[d, '켜진 수']) else ""
+    tt = pd.DataFrame({"날짜": r.index.strftime("%Y-%m-%d"),
+                       "미국 켜진 비율": [f"{x:.1f}% ({cnt(us, d)})" if pd.notna(x) else "" for d, x in r["미국"].items()],
+                       "한국 켜진 비율": [f"{x:.1f}% ({cnt(kr, d)})" if pd.notna(x) else "" for d, x in r["한국"].items()]})
+    return tt
+
+
+with st.container(border=True, key="card_mi_lights"):
+    st.markdown("<div class='hd'><span class='no'>MI 초록불</span></div>"
+                "<div class='note'>바닥 조건에 맞으면 🟢 · 켜진 비율 = 켜진 수 ÷ 자료가 있는 기준 수 · "
+                "미국 10개(MI01~MI08·MI10·MI11), 한국 11개(MI08은 코스피, MI12 더함) · MI09 뺌 · "
+                "MI13 외국인 순매도는 자료 준비 중</div>", unsafe_allow_html=True)
+    try:
+        tt = lights(D, load("콜로키움 수집데이터/1_data/가격10년_종가.csv.gz"))
+        st.markdown("<div class='note' style='margin-top:14px'>최근 10거래일 켜진 비율</div>", unsafe_allow_html=True)
+        st.markdown(S.table(tt), unsafe_allow_html=True)
+    except Exception as e:
+        st.error(f"초록불 계산 실패: {e}")
 # 1-1 공포와 탐욕 (CNN 구간: 0~25 극단적 공포, 25~45 공포, 45~55 중립, 55~75 탐욕, 75~100 극단적 탐욕)
 item("MI01", "공포와 탐욕 지수", g("공포탐욕"), digits=1, title="공포와 탐욕 지수 (CNN)", yfix=[0, 100], default="1년", bands=[
     (0, 25, "#dc2626", "극단적 공포"), (25, 45, "#f97316", "공포"), (45, 55, "#9ca3af", "중립"),
